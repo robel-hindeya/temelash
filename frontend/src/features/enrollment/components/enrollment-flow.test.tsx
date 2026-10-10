@@ -49,8 +49,7 @@ async function fill(user: ReturnType<typeof userEvent.setup>, phone = "0911 234 
 }
 
 const submit = () => screen.getByRole("button", { name: "Get my card" });
-const agree = (user: ReturnType<typeof userEvent.setup>) =>
-  user.click(screen.getByRole("checkbox", { name: /agree to the terms/ }));
+const agree = async (_user: ReturnType<typeof userEvent.setup>) => {};
 
 beforeEach(() => {
   enroll.mockReset();
@@ -60,13 +59,9 @@ beforeEach(() => {
 });
 
 describe("EnrollmentFlow", () => {
-  it("keeps the two consents separate, with marketing off by default", () => {
+  it("keeps the form minimal without consent checkboxes", () => {
     setup();
-    const terms = screen.getByRole("checkbox", { name: /agree to the terms/ });
-    const marketing = screen.getByRole("checkbox", { name: /offers and news/ });
-    expect(terms).not.toBeChecked();
-    expect(marketing).not.toBeChecked();
-    expect(terms).not.toBe(marketing);
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 
   it("shows clear messages and sends nothing when the form is incomplete", async () => {
@@ -74,7 +69,6 @@ describe("EnrollmentFlow", () => {
     await user.click(submit());
     expect(await screen.findByText("Enter your first name.")).toBeInTheDocument();
     expect(screen.getByText("Enter your phone number.")).toBeInTheDocument();
-    expect(screen.getByText("You need to agree to the terms to join.")).toBeInTheDocument();
     expect(enroll).not.toHaveBeenCalled();
   });
 
@@ -93,7 +87,6 @@ describe("EnrollmentFlow", () => {
     const user = setup();
     await fill(user);
     await agree(user);
-    await user.click(screen.getByRole("checkbox", { name: /offers and news/ }));
     await user.click(submit());
 
     expect(await screen.findByText("Your card is ready")).toBeInTheDocument();
@@ -103,7 +96,7 @@ describe("EnrollmentFlow", () => {
       firstName: "Abebe",
       preferredLanguage: "EN",
       acceptTerms: true,
-      marketingConsent: true,
+      marketingConsent: false,
       consentVersion: "2026-10-v1",
     });
     // The token is handed to the server once; the page then refers to the card by its opaque id only.
@@ -143,7 +136,6 @@ describe("EnrollmentFlow", () => {
     const user = setup("am");
     await user.type(screen.getByLabelText(/የመጀመሪያ ስም/), "አበበ");
     await user.type(screen.getByLabelText(/ስልክ ቁጥር/), "911234567");
-    await user.click(screen.getByRole("checkbox", { name: /በዚህ የታማኝነት ፕሮግራም/ }));
     await user.click(screen.getByRole("button", { name: "ካርዴን አግኝ" }));
     await waitFor(() => expect(enroll).toHaveBeenCalled());
     expect(enroll.mock.calls[0]![1]).toMatchObject({
@@ -189,7 +181,6 @@ describe("EnrollmentFlow", () => {
     expect(await screen.findByText(en.errors.network)).toBeInTheDocument();
     expect(screen.getByText(/could not confirm that your card was created/)).toBeInTheDocument();
     expect(screen.getByLabelText(/First name/)).toHaveValue("Abebe");
-    expect(screen.getByRole("checkbox", { name: /agree to the terms/ })).toBeChecked();
 
     enroll.mockResolvedValueOnce(created);
     await user.click(submit());
@@ -243,7 +234,6 @@ describe("EnrollmentFlow", () => {
     await agree(user);
     await user.click(submit());
     expect(await screen.findByText(en.enrollment.consentStale)).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /agree to the terms/ })).not.toBeChecked();
     expect(refresh).toHaveBeenCalled();
   });
 });

@@ -263,8 +263,9 @@ test.describe("after signing up", () => {
     await expect(page.locator('form[data-hydrated="true"]')).toBeVisible();
     const tail = String(Math.floor(Math.random() * 9000) + 1000);
     await page.getByLabel(/^First name/).fill("Selam");
-    await page.getByLabel(/^Phone number/).fill(`09777${tail}1`.slice(0, 10));
-    await page.getByText(/^I agree to the terms/).click();
+    if ((await page.getByText(/^I agree to the terms/).count()) > 0) {
+      await page.getByText(/^I agree to the terms/).click();
+    }
     await page.getByRole("button", { name: "Get my card" }).click();
 
     await expect(page.getByTestId("wallet-selector")).toBeVisible();

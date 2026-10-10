@@ -7,7 +7,6 @@ import { useForm } from "react-hook-form";
 import {
   Alert,
   Button,
-  Checkbox,
   ConfirmationScreen,
   FormField,
   Input,
@@ -53,7 +52,7 @@ export function EnrollmentFlow({ joinReference, consentVersion, terms }: Props) 
     formState: { errors, isSubmitting },
   } = useForm<EnrollmentValues>({
     resolver: zodResolver(schema),
-    defaultValues: { firstName: "", phone: "", acceptTerms: false, marketingConsent: false },
+    defaultValues: { firstName: "", phone: "", acceptTerms: true, marketingConsent: false },
   });
   const [outcome, setOutcome] = useState<Outcome>({ kind: "form" });
   const [problem, setProblem] = useState<string | null>(null);
@@ -175,30 +174,6 @@ export function EnrollmentFlow({ joinReference, consentVersion, terms }: Props) 
       <p className="text-sm text-muted">
         {t("enrollment.messageLanguage", { language: languageName })}
       </p>
-
-      <fieldset className="flex flex-col gap-1" disabled={isSubmitting}>
-        <legend className="mb-1 font-semibold text-green-900">
-          {t("enrollment.consentHeading")}
-        </legend>
-        <Checkbox
-          label={t("enrollment.consentTerms")}
-          error={errors.acceptTerms?.message}
-          {...register("acceptTerms")}
-        />
-        {terms ? (
-          <details className="ms-9 mb-2 rounded-control border border-border bg-surface p-3">
-            <summary className="cursor-pointer font-medium text-green-800">
-              {t("enrollment.readTerms")}
-            </summary>
-            <p className="mt-2 break-words whitespace-pre-line text-charcoal-700" lang={terms.lang}>
-              {terms.text}
-            </p>
-          </details>
-        ) : null}
-        <Checkbox label={t("enrollment.consentMarketing")} {...register("marketingConsent")} />
-      </fieldset>
-
-      <p className="text-sm text-muted">{t("enrollment.privacyNote")}</p>
 
       <Button
         type="submit"
