@@ -42,7 +42,7 @@ test.describe("operations console", () => {
       await expect(nav.getByRole("link", { name })).toHaveCount(0);
     }
     await expect(page.getByTestId("jobs-PENDING")).toBeVisible();
-    await expect(page.getByText("Approving merchants and changing their status")).toBeVisible();
+    await expect(page.getByText("Not offered by the service yet")).toHaveCount(0);
     await expect(page.locator("main")).not.toContainText(/revenue|billing|subscription|payment/i);
   });
 

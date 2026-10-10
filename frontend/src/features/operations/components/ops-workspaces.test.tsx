@@ -364,19 +364,11 @@ describe("platform audit", () => {
 });
 
 describe("overview and system", () => {
-  it("shows merchant and job counts and the plain list of what is not offered", async () => {
+  it("shows merchant and job counts", async () => {
     show(<OpsOverview health={{ live: true, ready: true }} />);
     expect(await screen.findByTestId("jobs-PENDING")).toHaveTextContent("3");
     expect(screen.getByText("Ready")).toBeInTheDocument();
-    const list = screen.getByText("Not offered by the service yet").closest("section")!;
-    for (const item of [
-      en.ops.capMerchantApproval,
-      en.ops.capFraud,
-      en.ops.capPrivacy,
-      en.ops.capSupport,
-    ]) {
-      expect(within(list).getByText(item)).toBeInTheDocument();
-    }
+    expect(screen.queryByText("Not offered by the service yet")).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(
       /\brevenue\b|\bbilling\b|\bsubscription\b|\bpayment\b/i,
     );
@@ -401,7 +393,7 @@ describe("overview and system", () => {
 
   it("works in Amharic without any English fallback for its own words", async () => {
     show(<OpsOverview health={{ live: true, ready: true }} />, "am");
-    expect(await screen.findByText(am.ops.capabilitiesTitle)).toBeInTheDocument();
+    expect(await screen.findByTestId("jobs-PENDING")).toBeInTheDocument();
     expect(screen.queryByText("Not offered by the service yet")).not.toBeInTheDocument();
   });
 });

@@ -7,7 +7,6 @@ import { DashboardSection } from "@/features/dashboard/components/section";
 import { getBrowserApi } from "@/lib/api/browser";
 import { useI18n } from "@/lib/i18n/client";
 import { JOB_STATUS_LABEL, JOB_STATUS_ORDER } from "../ops-rules";
-import { Unavailable } from "./unavailable";
 
 export interface HealthSnapshot {
   live: boolean;
@@ -94,23 +93,6 @@ export function OpsOverview({ health }: { health: HealthSnapshot }) {
           ) : null}
         </DashboardSection>
       </div>
-
-      <section aria-labelledby="not-offered-h" className="flex flex-col gap-2">
-        <h2 id="not-offered-h" className="text-lg font-bold text-green-900">
-          {t("ops.capabilitiesTitle")}
-        </h2>
-        <p className="text-muted">{t("ops.capabilitiesIntro")}</p>
-        <Unavailable
-          items={[
-            "ops.capMerchantApproval",
-            "ops.capMerchantSummary",
-            "ops.capFraud",
-            "ops.capPrivacy",
-            "ops.capSupport",
-            "ops.capAccounts",
-          ]}
-        />
-      </section>
     </div>
   );
 }
