@@ -43,8 +43,9 @@ function setup(locale: "en" | "am" = "en") {
   return user;
 }
 
-async function fill(user: ReturnType<typeof userEvent.setup>, phone = "0911 234 567") {
+async function fill(user: ReturnType<typeof userEvent.setup>, phone = "0911 234 567", email = "abebe@example.com") {
   await user.type(screen.getByLabelText(/First name/), "Abebe");
+  await user.type(screen.getByLabelText(/Email address/), email);
   await user.type(screen.getByLabelText(/Phone number/), phone);
 }
 
@@ -68,7 +69,17 @@ describe("EnrollmentFlow", () => {
     const user = setup();
     await user.click(submit());
     expect(await screen.findByText("Enter your first name.")).toBeInTheDocument();
+    expect(screen.getByText("Enter your email address.")).toBeInTheDocument();
     expect(screen.getByText("Enter your phone number.")).toBeInTheDocument();
+    expect(enroll).not.toHaveBeenCalled();
+  });
+
+  it("explains an invalid email address", async () => {
+    const user = setup();
+    await fill(user, "0911 234 567", "invalid-email");
+    await agree(user);
+    await user.click(submit());
+    expect(await screen.findByText("Enter a valid email address.")).toBeInTheDocument();
     expect(enroll).not.toHaveBeenCalled();
   });
 
@@ -94,6 +105,7 @@ describe("EnrollmentFlow", () => {
     expect(enroll).toHaveBeenCalledWith("sample-cafe", {
       phone: "+251911234567",
       firstName: "Abebe",
+      email: "abebe@example.com",
       preferredLanguage: "EN",
       acceptTerms: true,
       marketingConsent: false,
@@ -135,6 +147,7 @@ describe("EnrollmentFlow", () => {
     enroll.mockResolvedValue(created);
     const user = setup("am");
     await user.type(screen.getByLabelText(/የመጀመሪያ ስም/), "አበበ");
+    await user.type(screen.getByLabelText(/የኢሜይል አድራሻ/), "abebe@example.com");
     await user.type(screen.getByLabelText(/ስልክ ቁጥር/), "911234567");
     await user.click(screen.getByRole("button", { name: "ካርዴን አግኝ" }));
     await waitFor(() => expect(enroll).toHaveBeenCalled());

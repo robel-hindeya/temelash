@@ -1856,6 +1856,8 @@ export interface components {
             phone: string;
             /** @example Abebe */
             firstName: string;
+            /** @example abebe@example.com */
+            email: string;
             /** @enum {string} */
             preferredLanguage: "EN" | "AM";
             /** @description Must be true: acceptance of the program terms and privacy notice. */

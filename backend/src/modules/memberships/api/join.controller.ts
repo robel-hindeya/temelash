@@ -13,6 +13,7 @@ import {
 import {
   Equals,
   IsBoolean,
+  IsEmail,
   IsIn,
   IsOptional,
   IsString,
@@ -42,6 +43,13 @@ export class EnrollDto {
   @MaxLength(60)
   @Matches(SAFE_NAME, { message: 'firstName contains invalid characters' })
   firstName!: string;
+
+  @ApiProperty({ example: 'abebe@example.com' })
+  @IsString()
+  @MinLength(3)
+  @MaxLength(120)
+  @IsEmail({}, { message: 'email must be an email' })
+  email!: string;
 
   @ApiProperty({ enum: ['EN', 'AM'] }) @IsIn(['EN', 'AM']) preferredLanguage!: 'EN' | 'AM';
 
@@ -90,6 +98,7 @@ class EnrollmentResultDto extends JoinInfoDto {
   @ApiProperty({ enum: ['CREATED', 'EXISTING'] }) status!: string;
   @ApiProperty({ description: 'Echo of the submitted values.' }) customer!: {
     firstName: string;
+    email?: string;
     preferredLanguage: string;
   };
   @ApiProperty({

@@ -7,6 +7,7 @@ import type { ParsedCustomerQuery } from '../domain/customer-query';
 export interface CustomerRecord {
   id: string;
   phoneE164: string | null;
+  email: string | null;
   firstName: string | null;
   preferredLanguage: Language;
   status: CustomerStatus;
@@ -22,6 +23,7 @@ export interface CustomerRecord {
 const select = {
   id: true,
   phoneE164: true,
+  email: true,
   firstName: true,
   preferredLanguage: true,
   status: true,
@@ -73,15 +75,15 @@ export class CustomersRepository {
     return db.customer.findFirst({ where: { id, merchantId }, select });
   }
 
-  /** What a wallet card shows about the customer: first name and language. */
+  /** What a wallet card shows about the customer: first name, email and language. */
   async findDisplay(
     merchantId: string,
     id: string,
     db: DbClient = this.prisma,
-  ): Promise<{ firstName: string | null; preferredLanguage: Language } | null> {
+  ): Promise<{ firstName: string | null; email: string | null; preferredLanguage: Language } | null> {
     return db.customer.findFirst({
       where: { id, merchantId },
-      select: { firstName: true, preferredLanguage: true },
+      select: { firstName: true, email: true, preferredLanguage: true },
     });
   }
 
@@ -108,7 +110,7 @@ export class CustomersRepository {
 
   async create(
     merchantId: string,
-    data: { phoneE164: string; firstName: string; preferredLanguage: Language },
+    data: { phoneE164: string; email?: string | null; firstName: string; preferredLanguage: Language },
     db: DbClient,
   ): Promise<string> {
     const row = await db.customer.create({
@@ -122,13 +124,19 @@ export class CustomersRepository {
   async fillMissing(
     merchantId: string,
     id: string,
-    data: { firstName?: string },
+    data: { firstName?: string; email?: string },
     db: DbClient,
   ): Promise<void> {
     if (data.firstName) {
       await db.customer.updateMany({
         where: { id, merchantId, firstName: null },
         data: { firstName: data.firstName },
+      });
+    }
+    if (data.email) {
+      await db.customer.updateMany({
+        where: { id, merchantId, email: null },
+        data: { email: data.email },
       });
     }
   }

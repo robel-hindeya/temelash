@@ -8,6 +8,7 @@ export interface RawCustomerData {
     id: string;
     firstName: string | null;
     phoneE164: string | null;
+    email?: string | null;
     preferredLanguage: string;
     status: string;
     createdAt: Date;
@@ -51,6 +52,7 @@ export function buildCustomerExport(data: RawCustomerData, exportedAt: Date) {
       id: data.customer.id,
       firstName: data.customer.firstName,
       phone: data.customer.phoneE164,
+      email: data.customer.email ?? null,
       preferredLanguage: data.customer.preferredLanguage,
       status: data.customer.status,
       createdAt: iso(data.customer.createdAt),

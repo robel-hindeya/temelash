@@ -15,8 +15,8 @@ const rgb = (c: [number, number, number]) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
 // Field labels are localized by Apple per device language through .lproj files; the VALUES below follow
 // the customer's preferred language. Amharic wording should be reviewed by a native speaker.
 const LABELS = {
-  en: { STAMPS: 'STAMPS', REWARD: 'REWARD', READY: 'REWARDS READY', TERMS: 'Terms' },
-  am: { STAMPS: 'ስታምፕ', REWARD: 'ሽልማት', READY: 'ዝግጁ ሽልማቶች', TERMS: 'ደንቦች' },
+  en: { STAMPS: 'STAMPS', REWARD: 'REWARD', READY: 'REWARDS READY', TERMS: 'Terms', EMAIL: 'Email' },
+  am: { STAMPS: 'ስታምፕ', REWARD: 'ሽልማት', READY: 'ዝግጁ ሽልማቶች', TERMS: 'ደንቦች', EMAIL: 'ኢሜይል' },
 } as const;
 
 /**
@@ -66,6 +66,9 @@ export function buildPkPass(
   if (state.firstName) {
     pass.headerFields.push({ key: 'name', label: '', value: state.firstName });
   }
+  if (state.email) {
+    pass.backFields.push({ key: 'email', label: 'EMAIL', value: state.email });
+  }
   const terms = pick(state.terms, state.language);
   if (terms) pass.backFields.push({ key: 'terms', label: 'TERMS', value: terms });
 
@@ -88,6 +91,7 @@ export function buildPkPass(
       REWARD: LABELS[lang].REWARD,
       READY: LABELS[lang].READY,
       TERMS: LABELS[lang].TERMS,
+      EMAIL: LABELS[lang].EMAIL,
     });
   }
 

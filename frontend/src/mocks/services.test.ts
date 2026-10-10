@@ -59,6 +59,7 @@ const BRANCH = MOCK_BRANCHES[0]!.id;
 const enrollBody = {
   phone: "0911234567",
   firstName: "Abebe",
+  email: "abebe@example.com",
   preferredLanguage: "AM" as const,
   acceptTerms: true,
   consentVersion: MOCK_CONSENT_VERSION,

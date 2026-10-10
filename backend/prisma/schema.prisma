@@ -438,6 +438,7 @@ model Customer {
   merchantId        String         @map("merchant_id") @db.Uuid
   /// Normalized E.164 (+251XXXXXXXXX). NULL after anonymization.
   phoneE164         String?        @map("phone_e164")
+  email             String?        @map("email")
   firstName         String?        @map("first_name")
   preferredLanguage Language       @default(EN) @map("preferred_language")
   status            CustomerStatus @default(ACTIVE)
@@ -453,6 +454,7 @@ model Customer {
   @@unique([merchantId, phoneE164])
   @@unique([id, merchantId])
   @@index([merchantId, firstName])
+  @@index([merchantId, email])
   @@index([merchantId, createdAt(sort: Desc), id(sort: Desc)])
   @@map("customers")
 }

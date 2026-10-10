@@ -37,6 +37,7 @@ type Outcome =
 const FIELD_MESSAGE = {
   phone: "enrollment.phoneInvalid",
   firstName: "enrollment.nameCharacters",
+  email: "enrollment.emailInvalid",
   acceptTerms: "enrollment.consentRequired",
 } as const;
 
@@ -52,7 +53,7 @@ export function EnrollmentFlow({ joinReference, consentVersion, terms }: Props) 
     formState: { errors, isSubmitting },
   } = useForm<EnrollmentValues>({
     resolver: zodResolver(schema),
-    defaultValues: { firstName: "", phone: "", acceptTerms: true, marketingConsent: false },
+    defaultValues: { firstName: "", email: "", phone: "", acceptTerms: true, marketingConsent: false },
   });
   const [outcome, setOutcome] = useState<Outcome>({ kind: "form" });
   const [problem, setProblem] = useState<string | null>(null);
@@ -68,6 +69,7 @@ export function EnrollmentFlow({ joinReference, consentVersion, terms }: Props) 
       const result = await getBrowserApi().enrollment.enroll(joinReference, {
         phone: toE164(values.phone),
         firstName: values.firstName.trim(),
+        email: values.email.trim().toLowerCase(),
         preferredLanguage: locale === "am" ? "AM" : "EN",
         acceptTerms: true,
         marketingConsent: values.marketingConsent,
@@ -159,6 +161,22 @@ export function EnrollmentFlow({ joinReference, consentVersion, terms }: Props) 
           maxLength={60}
           disabled={isSubmitting}
           {...register("firstName")}
+        />
+      </FormField>
+
+      <FormField
+        label={t("enrollment.email")}
+        hint={t("enrollment.emailHint")}
+        error={errors.email?.message}
+        required
+      >
+        <Input
+          type="email"
+          autoComplete="email"
+          inputMode="email"
+          maxLength={120}
+          disabled={isSubmitting}
+          {...register("email")}
         />
       </FormField>
 

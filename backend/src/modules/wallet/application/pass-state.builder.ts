@@ -69,6 +69,7 @@ export class PassStateBuilder {
       merchantName: { en: merchant.nameEn, am: merchant.nameAm },
       programName: { en: program.nameEn, am: program.nameAm },
       firstName: customer?.firstName ?? null,
+      email: customer?.email ?? null,
       brandColor: program.brandColor,
       stampsRequired: program.stampsRequired,
       currentStamps: progress.current,

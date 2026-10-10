@@ -25,6 +25,7 @@ const STRINGS = {
   stamps: { en: 'Stamps', am: 'ስታምፕ' },
   reward: { en: 'Reward', am: 'ሽልማት' },
   ready: { en: 'Rewards ready', am: 'ዝግጁ ሽልማቶች' },
+  email: { en: 'Email', am: 'ኢሜይል' },
 } as const;
 
 export function buildLoyaltyClass(state: PassState, cfg: GoogleConfig) {
@@ -89,6 +90,16 @@ export function buildObjectPatch(state: PassState): ObjectPatch {
         body: String(state.rewardsAvailable),
         localizedHeader: localized(STRINGS.ready.en, STRINGS.ready.am),
       },
+      ...(state.email
+        ? [
+            {
+              id: 'email',
+              header: STRINGS.email.en,
+              body: state.email,
+              localizedHeader: localized(STRINGS.email.en, STRINGS.email.am),
+            },
+          ]
+        : []),
     ],
     // A PATCH cannot delete a field, so a suspended or invalidated pass swaps its barcode for an
     // obviously void one. (The scanner already refuses the old value; this is for the customer's eyes.)

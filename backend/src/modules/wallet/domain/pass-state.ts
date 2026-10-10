@@ -25,6 +25,8 @@ export interface PassState {
   programName: Bilingual;
   /** Customer's first name, shown on the card; null when unknown. */
   firstName: string | null;
+  /** Customer's email; null when unknown. */
+  email?: string | null;
   brandColor: string | null;
   stampsRequired: number;
   currentStamps: number;

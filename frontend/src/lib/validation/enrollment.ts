@@ -18,6 +18,12 @@ export function createEnrollmentSchema(t: Translate) {
       .min(1, t("enrollment.firstNameRequired"))
       .max(60, t("enrollment.nameTooLong"))
       .regex(SAFE_NAME, t("enrollment.nameCharacters")),
+    email: z
+      .string()
+      .trim()
+      .min(1, t("enrollment.emailRequired"))
+      .max(120, t("enrollment.emailTooLong"))
+      .email(t("enrollment.emailInvalid")),
     phone: z
       .string()
       .trim()

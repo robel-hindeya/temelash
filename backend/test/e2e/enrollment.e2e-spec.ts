@@ -25,6 +25,7 @@ describe('Customer enrollment, consent and cards (e2e, real PostgreSQL)', () => 
   const body = (over: Record<string, unknown> = {}) => ({
     phone: randomPhone(),
     firstName: 'Abebe',
+    email: 'abebe@example.com',
     preferredLanguage: 'AM',
     acceptTerms: true,
     ...over,
@@ -263,6 +264,9 @@ describe('Customer enrollment, consent and cards (e2e, real PostgreSQL)', () => 
       await enroll(ref, { firstName: '' }).expect(400);
       await enroll(ref, { firstName: '<script>alert(1)</script>' }).expect(400);
       await enroll(ref, { firstName: 'x'.repeat(61) }).expect(400);
+      await enroll(ref, { email: 'not-an-email' }).expect(400);
+      await enroll(ref, { email: '' }).expect(400);
+      await enroll(ref, { email: undefined }).expect(400);
       await enroll(ref, { preferredLanguage: 'FR' }).expect(400);
       await enroll(ref, { marketingConsent: 'true' }).expect(400);
       await enroll(ref, { merchantId: w.b.merchantId }).expect(400);

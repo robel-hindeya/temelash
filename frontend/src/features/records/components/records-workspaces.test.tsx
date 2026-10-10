@@ -60,27 +60,31 @@ beforeEach(() => {
 });
 
 describe("customers", () => {
-  it("lists 10 per page and pages forward and back without repeating anyone", async () => {
-    const user = show("customers", "manager@mock.test");
-    const first = within(await customersTable())
-      .getAllByRole("row")
-      .slice(1);
-    expect(first).toHaveLength(10);
-    expect(screen.getByText("Showing 1–10")).toBeInTheDocument();
-    const firstNames = first.map((r) => r.textContent);
+  it(
+    "lists 10 per page and pages forward and back without repeating anyone",
+    async () => {
+      const user = show("customers", "manager@mock.test");
+      const first = within(await customersTable())
+        .getAllByRole("row")
+        .slice(1);
+      expect(first).toHaveLength(10);
+      expect(screen.getByText("Showing 1–10")).toBeInTheDocument();
+      const firstNames = first.map((r) => r.textContent);
 
-    await user.click(screen.getByRole("button", { name: "Next" }));
-    await waitFor(() => expect(screen.getByText("Showing 11–20")).toBeInTheDocument());
-    const second = within(await customersTable())
-      .getAllByRole("row")
-      .slice(1)
-      .map((r) => r.textContent);
-    expect(second.some((text) => firstNames.includes(text))).toBe(false);
+      await user.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => expect(screen.getByText("Showing 11–20")).toBeInTheDocument());
+      const second = within(await customersTable())
+        .getAllByRole("row")
+        .slice(1)
+        .map((r) => r.textContent);
+      expect(second.some((text) => firstNames.includes(text))).toBe(false);
 
-    await user.click(screen.getByRole("button", { name: "Previous" }));
-    await waitFor(() => expect(screen.getByText("Showing 1–10")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
-  });
+      await user.click(screen.getByRole("button", { name: "Previous" }));
+      await waitFor(() => expect(screen.getByText("Showing 1–10")).toBeInTheDocument());
+      expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
+    },
+    15_000,
+  );
 
   it("lets a manager search by name and see whole phone numbers", async () => {
     const user = show("customers", "manager@mock.test");

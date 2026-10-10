@@ -27,6 +27,7 @@ describe('Public enrollment rate limiting (e2e)', () => {
     request(app.getHttpServer()).post(`/api/v1/join/${w.a.joinReference}/enroll`).send({
       phone: randomPhone(),
       firstName: 'Rate',
+      email: 'rate@example.com',
       preferredLanguage: 'EN',
       acceptTerms: true,
     });

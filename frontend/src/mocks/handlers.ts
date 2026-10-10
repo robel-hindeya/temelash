@@ -405,6 +405,9 @@ export function createHandlers(): MockRoute[] {
         const problems: string[] = [];
         const first = typeof body.firstName === "string" ? body.firstName.trim() : "";
         if (!first) problems.push("firstName should not be empty");
+        const email = typeof body.email === "string" ? body.email.trim() : "";
+        if (!email) problems.push("email should not be empty");
+        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) problems.push("email must be an email");
         const digits = typeof body.phone === "string" ? body.phone.replace(/[\s-]/g, "") : "";
         if (!PHONE.test(digits)) problems.push("phone must be a valid Ethiopian mobile number");
         if (body.acceptTerms !== true) problems.push("acceptTerms must be true");
@@ -422,6 +425,7 @@ export function createHandlers(): MockRoute[] {
         }
         const customer = {
           firstName: first,
+          email,
           preferredLanguage: body.preferredLanguage as "EN" | "AM",
         };
         const normalized = digits.replace(/^(?:\+?251|0)/, "");

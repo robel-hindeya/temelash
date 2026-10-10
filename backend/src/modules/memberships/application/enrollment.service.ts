@@ -16,6 +16,7 @@ import { MembershipsRepository } from '../infrastructure/memberships.repository'
 export interface EnrollInput {
   phone: string;
   firstName: string;
+  email: string;
   preferredLanguage: 'EN' | 'AM';
   acceptTerms: boolean;
   marketingConsent?: boolean;
@@ -55,7 +56,7 @@ export interface EnrollmentResult extends JoinInfo {
   /** CREATED: new member (card issued now). EXISTING: already a member (no card is re-sent). */
   status: 'CREATED' | 'EXISTING';
   /** Echo of what the caller submitted, never stored data about an existing customer. */
-  customer: { firstName: string; preferredLanguage: 'EN' | 'AM' };
+  customer: { firstName: string; email: string; preferredLanguage: 'EN' | 'AM' };
   /** The opaque card token (QR / barcode value). Returned once, only for a new membership. */
   card: { token: string } | null;
 }
@@ -111,6 +112,7 @@ export class EnrollmentService {
       );
     }
     const firstName = input.firstName.trim();
+    const email = input.email.trim().toLowerCase();
 
     // Two simultaneous sign-ups for one phone: the loser hits a unique index and simply retries,
     // finding the winner's rows.
@@ -128,11 +130,11 @@ export class EnrollmentService {
           if (!customerId) {
             customerId = await this.customers.create(
               target.id,
-              { phoneE164: phone, firstName, preferredLanguage: input.preferredLanguage },
+              { phoneE164: phone, email, firstName, preferredLanguage: input.preferredLanguage },
               db,
             );
-          } else if (!customer?.firstName) {
-            await this.customers.fillMissing(target.id, customerId, { firstName }, db);
+          } else {
+            await this.customers.fillMissing(target.id, customerId, { firstName, email }, db);
           }
           customer = null;
 
@@ -218,7 +220,7 @@ export class EnrollmentService {
           return {
             ...this.describe(target, program),
             status: existing ? ('EXISTING' as const) : ('CREATED' as const),
-            customer: { firstName, preferredLanguage: input.preferredLanguage },
+            customer: { firstName, email, preferredLanguage: input.preferredLanguage },
             card,
           };
         });

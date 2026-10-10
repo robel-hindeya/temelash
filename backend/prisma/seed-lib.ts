@@ -185,8 +185,8 @@ export async function runSeed(
   }
 
   const customers = [
-    { phone: '+251911000101', firstName: 'Abebe', language: 'AM' as const },
-    { phone: '+251911000102', firstName: 'Sara', language: 'EN' as const },
+    { phone: '+251911000101', firstName: 'Abebe', email: 'abebe@example.com', language: 'AM' as const },
+    { phone: '+251911000102', firstName: 'Sara', email: 'sara@example.com', language: 'EN' as const },
   ];
   for (const c of customers) {
     const customer = await prisma.customer.upsert({
@@ -195,6 +195,7 @@ export async function runSeed(
       create: {
         merchantId: merchant.id,
         phoneE164: c.phone,
+        email: c.email,
         firstName: c.firstName,
         preferredLanguage: c.language,
       },

@@ -6,6 +6,7 @@ import { createEnrollmentSchema, toE164 } from "./enrollment";
 const schema = createEnrollmentSchema(createTranslator({ messages: en, fallback: en }));
 const valid = {
   firstName: "Abebe",
+  email: "abebe@example.com",
   phone: "0911 234 567",
   acceptTerms: true,
   marketingConsent: false,
@@ -55,6 +56,19 @@ describe("enrollment form rules", () => {
     );
     expect(problems({ ...valid, firstName: "አበበ" })).toEqual({});
     expect(problems({ ...valid, firstName: "Mary-Ann O'Neil" })).toEqual({});
+  });
+
+  it("asks for an email and validates its format", () => {
+    expect(problems({ ...valid, email: "   " }).email).toBe(
+      en.enrollment.emailRequired,
+    );
+    expect(problems({ ...valid, email: "invalid-email" }).email).toBe(
+      en.enrollment.emailInvalid,
+    );
+    expect(problems({ ...valid, email: "a".repeat(121) + "@example.com" }).email).toBe(
+      en.enrollment.emailTooLong,
+    );
+    expect(problems({ ...valid, email: "customer@example.com" })).toEqual({});
   });
 
   it("requires the program terms but never the marketing opt-in", () => {

@@ -85,7 +85,7 @@ describe("public customer flows (no session)", () => {
     const r = await call({
       method: "POST",
       path: "/join/sample-cafe/enroll",
-      body: { phone: "0911234567", firstName: "Abebe", preferredLanguage: "AM", acceptTerms: true },
+      body: { phone: "0911234567", firstName: "Abebe", email: "abebe@example.com", preferredLanguage: "AM", acceptTerms: true },
     });
     expect(r.status).toBe(201);
     expect((await r.json()).status).toBe("CREATED");
