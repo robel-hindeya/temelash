@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
@@ -13,7 +14,7 @@ export default defineConfig({
     restoreMocks: true,
     alias: {
       // "server-only" throws outside the Next.js server bundle; in unit tests it is a no-op.
-      "server-only": new URL("./tests/stubs/server-only.ts", import.meta.url).pathname,
+      "server-only": fileURLToPath(new URL("./tests/stubs/server-only.ts", import.meta.url)),
     },
   },
 });

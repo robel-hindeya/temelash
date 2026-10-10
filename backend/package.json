@@ -4,6 +4,7 @@
   "private": true,
   "description": "TemelashCard loyalty-card platform backend",
   "scripts": {
+    "dev": "nest start --watch",
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -62,7 +63,7 @@
     "@types/node": "^26.6.4",
     "@types/node-forge": "^1.3.14",
     "@types/supertest": "^7.2.1",
-    "embedded-postgres": "^18.4.0-beta.17",
+    "embedded-postgres": "^16.14.0-beta.17",
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
     "fflate": "^0.8.3",
