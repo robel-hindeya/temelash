@@ -15,12 +15,19 @@ import { sessionClient } from "../session-client";
  * The sign-in form. Wrong credentials, a deactivated account and a temporary lockout all produce the same
  * message on purpose (the backend answers them identically, so nothing about an account can be learned).
  */
+const DEMO_ACCOUNTS = [
+  { label: "Platform Admin", email: "admin@temelashcard.test" },
+  { label: "Merchant Owner", email: "owner@sample-cafe.test" },
+  { label: "Bole Staff", email: "staff.bole@sample-cafe.test" },
+] as const;
+
 export function LoginForm({ next }: { next?: string }) {
   const { t, locale } = useI18n();
   const schema = useMemo(() => createLoginSchema(t), [t]);
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginValues>({
     resolver: zodResolver(schema),
@@ -64,6 +71,29 @@ export function LoginForm({ next }: { next?: string }) {
       className="flex flex-col gap-5"
     >
       {problem ? <Alert tone="danger">{problem}</Alert> : null}
+
+      <div className="rounded-control border border-border bg-surface/50 p-3 text-sm">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+          Development accounts (password: <code className="font-mono font-bold text-foreground">password123</code>):
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {DEMO_ACCOUNTS.map((acc) => (
+            <button
+              key={acc.email}
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setValue("email", acc.email, { shouldValidate: true });
+                setValue("password", "password123", { shouldValidate: true });
+                setProblem(null);
+              }}
+              className="inline-flex items-center rounded-control border border-border bg-surface px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-foreground-muted hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              {acc.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <FormField label={t("auth.email")} error={errors.email?.message} required>
         <Input

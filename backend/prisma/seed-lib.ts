@@ -71,7 +71,7 @@ export async function runSeed(
     result.accounts[displayName] = email;
     return prisma.platformUser.upsert({
       where: { email },
-      update: { displayName },
+      update: { displayName, passwordHash },
       create: { email, displayName, accountType, passwordHash },
     });
   };
