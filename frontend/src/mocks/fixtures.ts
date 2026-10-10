@@ -164,8 +164,8 @@ export const MOCK_JOIN_INFO: JoinInfo = {
   consent: { version: MOCK_CONSENT_VERSION },
   wallet: [
     { provider: "WEB", available: true, reason: null, addUrl: null },
-    { provider: "APPLE", available: false, reason: "NOT_CONFIGURED", addUrl: null },
-    { provider: "GOOGLE", available: false, reason: "NOT_CONFIGURED", addUrl: null },
+    { provider: "APPLE", available: true, reason: null, addUrl: null },
+    { provider: "GOOGLE", available: true, reason: null, addUrl: null },
   ],
 };
 

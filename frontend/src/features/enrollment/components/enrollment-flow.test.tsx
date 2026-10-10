@@ -124,6 +124,25 @@ describe("EnrollmentFlow", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
+  it("renders enabled wallet buttons when the backend provides available wallets", async () => {
+    enroll.mockResolvedValue({
+      ...created,
+      wallet: [
+        { provider: "WEB", available: true, reason: null, addUrl: null },
+        { provider: "APPLE", available: true, reason: null, addUrl: null },
+        { provider: "GOOGLE", available: true, reason: null, addUrl: null },
+      ],
+    });
+    const user = setup();
+    await fill(user);
+    await agree(user);
+    await user.click(submit());
+
+    expect(await screen.findByText("Your card is ready")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add to Apple Wallet" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add to Google Wallet" })).toBeEnabled();
+  });
+
   it("lets the customer retry when the card could not be saved, without losing it", async () => {
     enroll.mockResolvedValue(created);
     claim.mockRejectedValueOnce(

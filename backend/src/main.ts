@@ -12,5 +12,5 @@ async function bootstrap(): Promise<void> {
   await app.listen(port);
 }
 
-// TemelashCard backend entry point
+// TemelashCard backend entry point.
 void bootstrap();
