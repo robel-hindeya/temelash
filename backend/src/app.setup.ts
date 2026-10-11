@@ -22,6 +22,25 @@ export function configureApp(app: INestApplication): void {
     if (!req.path.startsWith('/api/docs')) res.setHeader('Cache-Control', 'no-store');
     next();
   });
+
+  // Root status endpoint for load balancers, health checks, and deployment verification
+  app.getHttpAdapter().get('/', (_req: any, res: any) => {
+    res.json({
+      name: 'TemelashCard Backend API',
+      status: 'online',
+      version: 'v1',
+      runtime: process.env.VERCEL ? 'Vercel Serverless' : 'Node.js',
+      diagnostics: {
+        databaseConfigured: Boolean(process.env.DATABASE_URL),
+        jwtConfigured: Boolean(process.env.JWT_ACCESS_SECRET),
+      },
+      endpoints: {
+        live: '/api/v1/health',
+        ready: '/api/v1/health/ready',
+        docs: '/api/docs',
+      },
+    });
+  });
   app.enableCors({
     origin: config.get('CORS_ORIGINS', { infer: true }),
     credentials: true,
