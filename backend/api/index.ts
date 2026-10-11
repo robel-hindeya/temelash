@@ -2,61 +2,81 @@ import type { IncomingMessage, ServerResponse } from 'http';
 
 let server: any = null;
 let isReady = false;
-let initPromise: Promise<void> | null = null;
-let initError: Error | null = null;
+let bootstrapPromise: Promise<any> | null = null;
 
 async function bootstrap() {
   if (isReady && server) return server;
-  if (initError) throw initError;
 
-  if (!initPromise) {
-    initPromise = (async () => {
+  if (!bootstrapPromise) {
+    bootstrapPromise = (async () => {
+      require('reflect-metadata');
+      const express = require('express');
+      const { NestFactory } = require('@nestjs/core');
+      const { ExpressAdapter } = require('@nestjs/platform-express');
+
+      const appInstance = express();
+
+      let AppModule: any;
+      let configureApp: any;
+
       try {
-        require('reflect-metadata');
-        const express = require('express');
-        const { NestFactory } = require('@nestjs/core');
-        const { ExpressAdapter } = require('@nestjs/platform-express');
-
-        server = express();
-
-        let AppModule: any;
-        let configureApp: any;
-
-        try {
-          const mod = require('../dist/app.module');
-          const setup = require('../dist/app.setup');
-          AppModule = mod.AppModule;
-          configureApp = setup.configureApp;
-        } catch {
-          const mod = require('../src/app.module');
-          const setup = require('../src/app.setup');
-          AppModule = mod.AppModule;
-          configureApp = setup.configureApp;
-        }
-
-        const app = await NestFactory.create(AppModule, new ExpressAdapter(server), {
-          bufferLogs: true,
-        });
-        configureApp(app);
-        await app.init();
-        isReady = true;
-      } catch (err: unknown) {
-        initError = err instanceof Error ? err : new Error(String(err));
-        initPromise = null;
-        throw initError;
+        const mod = require('../dist/app.module');
+        const setup = require('../dist/app.setup');
+        AppModule = mod.AppModule;
+        configureApp = setup.configureApp;
+      } catch (distErr) {
+        console.warn('Falling back to src modules:', distErr);
+        const mod = require('../src/app.module');
+        const setup = require('../src/app.setup');
+        AppModule = mod.AppModule;
+        configureApp = setup.configureApp;
       }
-    })();
+
+      const app = await NestFactory.create(AppModule, new ExpressAdapter(appInstance), {
+        bufferLogs: true,
+      });
+      configureApp(app);
+      await app.init();
+
+      server = appInstance;
+      isReady = true;
+      return server;
+    })().catch((err: unknown) => {
+      bootstrapPromise = null;
+      throw err instanceof Error ? err : new Error(String(err));
+    });
   }
 
-  await initPromise;
-  return server;
+  return bootstrapPromise;
 }
 
 export default async function handler(req: any, res: any) {
-  const url = req.url || '/';
+  // Always attach CORS headers for serverless callers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-request-id');
 
-  // Fast-path for root health/status: always works even before database is initialized
-  if (url === '/' || url === '') {
+  if (req.method === 'OPTIONS') {
+    res.statusCode = 204;
+    return res.end();
+  }
+
+  const rawUrl = req.url || '/';
+  const matchedPath =
+    (req.headers['x-matched-path'] as string) ||
+    (req.headers['x-forwarded-uri'] as string) ||
+    '';
+
+  const effectivePath = matchedPath || rawUrl;
+
+  const isRoot =
+    effectivePath === '/' ||
+    effectivePath === '' ||
+    effectivePath === '/api' ||
+    effectivePath === '/api/';
+
+  // Instant response for root status check
+  if (isRoot) {
     res.setHeader('Content-Type', 'application/json');
     res.statusCode = 200;
     return res.end(
@@ -70,7 +90,7 @@ export default async function handler(req: any, res: any) {
             nodeVersion: process.version,
             databaseConfigured: Boolean(process.env.DATABASE_URL),
             jwtConfigured: Boolean(process.env.JWT_ACCESS_SECRET),
-            corsOrigins: process.env.CORS_ORIGINS || 'none',
+            corsOrigins: process.env.CORS_ORIGINS || 'all (*)',
           },
           endpoints: {
             live: '/api/v1/health',
@@ -82,6 +102,11 @@ export default async function handler(req: any, res: any) {
         2,
       ),
     );
+  }
+
+  // Restore matched path for NestJS route matching
+  if (matchedPath && !matchedPath.endsWith('index.ts') && !matchedPath.endsWith('/api')) {
+    req.url = matchedPath;
   }
 
   try {
