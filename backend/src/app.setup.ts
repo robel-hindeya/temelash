@@ -14,32 +14,13 @@ export function configureApp(app: INestApplication): void {
   app.useLogger(app.get(Logger));
   // Express only: tell it how many proxies to trust so req.ip (rate limits, logs) is the real client.
   (app as NestExpressApplication).set('trust proxy', config.get('TRUST_PROXY', { infer: true }));
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api', { exclude: ['/'] });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   app.use(helmet());
   // API responses carry personal and per-user data: never let a browser or shared cache keep them.
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (!req.path.startsWith('/api/docs')) res.setHeader('Cache-Control', 'no-store');
     next();
-  });
-
-  // Root status endpoint for load balancers, health checks, and deployment verification
-  app.getHttpAdapter().get('/', (_req: any, res: any) => {
-    res.json({
-      name: 'TemelashCard Backend API',
-      status: 'online',
-      version: 'v1',
-      runtime: process.env.VERCEL ? 'Vercel Serverless' : 'Node.js',
-      diagnostics: {
-        databaseConfigured: Boolean(process.env.DATABASE_URL),
-        jwtConfigured: Boolean(process.env.JWT_ACCESS_SECRET),
-      },
-      endpoints: {
-        live: '/api/v1/health',
-        ready: '/api/v1/health/ready',
-        docs: '/api/docs',
-      },
-    });
   });
   app.enableCors({
     origin: config.get('CORS_ORIGINS', { infer: true }),

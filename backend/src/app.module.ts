@@ -31,6 +31,8 @@ import { WalletModule } from './modules/wallet';
 import { MerchantsModule } from './modules/merchants';
 import { StaffModule } from './modules/staff';
 
+import { AppController } from './app.controller';
+
 @Module({
   imports: [
     AppConfigModule,
@@ -79,6 +81,7 @@ import { StaffModule } from './modules/staff';
     PrivacyModule,
     AnalyticsModule,
   ],
+  controllers: [AppController],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     // Order matters: rate limit, then authenticate, then authorize.
