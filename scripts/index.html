@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TemelashCard · Platform Hub & Developer Services</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Ethiopic:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d1512;
+      --card-bg: rgba(22, 36, 30, 0.7);
+      --card-border: rgba(46, 125, 80, 0.25);
+      --primary: #1e824c;
+      --primary-hover: #26a65b;
+      --accent: #d4af37;
+      --text: #f0f7f4;
+      --text-muted: #8fa89b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', 'Noto Sans Ethiopic', -apple-system, sans-serif;
+      background: radial-gradient(circle at 50% 0%, #152b20 0%, #0d1512 70%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+    .container {
+      max-width: 860px;
+      width: 100%;
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 3rem 2.5rem;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(30, 130, 76, 0.2);
+      border: 1px solid rgba(30, 130, 76, 0.4);
+      color: #55d98d;
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 1.25rem;
+    }
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      background: #55d98d;
+      border-radius: 50%;
+      box-shadow: 0 0 10px #55d98d;
+    }
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #ffffff 30%, #a3e635 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      margin-bottom: 2.5rem;
+      line-height: 1.6;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2.5rem;
+    }
+    .card {
+      background: rgba(13, 21, 18, 0.8);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      transition: all 0.2s ease;
+    }
+    .card:hover {
+      border-color: rgba(74, 222, 128, 0.4);
+      transform: translateY(-2px);
+    }
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .card-desc {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 1rem;
+    }
+    .card-btn {
+      display: inline-block;
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #55d98d;
+      transition: color 0.15s ease;
+    }
+    .card-btn:hover {
+      color: #86efac;
+      text-decoration: underline;
+    }
+    .callout {
+      background: rgba(212, 175, 55, 0.1);
+      border: 1px solid rgba(212, 175, 55, 0.25);
+      border-radius: 14px;
+      padding: 1.25rem 1.5rem;
+      font-size: 0.95rem;
+      color: #fef08a;
+      line-height: 1.6;
+    }
+    .callout strong {
+      color: #fff;
+    }
+    footer {
+      margin-top: 2rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="badge">
+      <span class="badge-dot"></span>
+      TemelashCard Services Online
+    </div>
+    <h1>TemelashCard Platform Hub</h1>
+    <p class="subtitle">
+      Digital loyalty cards & merchant platform for Ethiopian businesses. · ዲጂታል የታማኝነት ካርዶች
+    </p>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">🖥️ Web Application</div>
+        <p class="card-desc">Customer card enrollment, merchant dashboard, operations console and QR scanner.</p>
+        <span class="card-btn">Deploy Root: <code>frontend/</code></span>
+      </div>
+
+      <div class="card">
+        <div class="card-title">⚡ REST API Backend</div>
+        <p class="card-desc">NestJS API with PostgreSQL persistence, authentication and loyalty ledger.</p>
+        <a href="https://backend-six-wine.vercel.app/" class="card-btn" target="_blank" rel="noopener">Open Backend API &rarr;</a>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🛠️ Developer Scripts</div>
+        <p class="card-desc">Local orchestration (<code>scripts/dev.mjs</code>), database migrations and seeding utilities.</p>
+        <span class="card-btn">Local runner active</span>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Vercel Tip:</strong> If you intended this Vercel project (<code>temelash-scripts</code>) to host the actual <strong>Frontend Web App</strong>, change the <strong>Root Directory</strong> to <code>frontend</code> in your <strong>Vercel Project Settings &rarr; General</strong>.
+    </div>
+  </div>
+
+  <footer>
+    TemelashCard Loyalty Platform &copy; 2026 · Addis Ababa, Ethiopia
+  </footer>
+</body>
+</html>
