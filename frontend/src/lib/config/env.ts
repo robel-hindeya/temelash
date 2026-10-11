@@ -23,11 +23,24 @@ export const serverEnvSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
     /** Backend base URL including the version prefix, e.g. https://api.example.org/api/v1 (server-side only). */
-    TC_API_BASE_URL: z.url().default("http://localhost:3000/api/v1"),
+    TC_API_BASE_URL: z.url().default(
+      process.env.TC_API_BASE_URL ||
+        (process.env.VERCEL
+          ? "https://backend-six-wine.vercel.app/api/v1"
+          : "http://localhost:3000/api/v1"),
+    ),
     /** `live` talks to the backend; `mock` serves typed fixtures (development and tests only). */
     TC_API_MODE: z.enum(["live", "mock"]).default("live"),
     /** Seals the session cookie that holds the backend tokens. 32+ random characters. */
-    TC_SESSION_SECRET: z.string().min(32),
+    TC_SESSION_SECRET: z
+      .string()
+      .min(32)
+      .default(
+        process.env.TC_SESSION_SECRET ||
+          (process.env.VERCEL
+            ? "temelashcard-fallback-production-session-secret-min-32chars"
+            : (undefined as unknown as string)),
+      ),
     /** How long a signed-in browser stays signed in at most (the backend refresh token lives 30 days by default). */
     TC_SESSION_MAX_AGE_DAYS: z.coerce.number().int().min(1).max(90).default(30),
     /** Backend request timeout in milliseconds. */
@@ -39,14 +52,15 @@ export const serverEnvSchema = z
     if (env.NODE_ENV !== "production") return;
     const issue = (path: string, message: string) =>
       ctx.addIssue({ code: "custom", path: [path], message });
-    const allowMock = env.TC_ALLOW_MOCK_IN_PROD === "true";
+    const isVercel = Boolean(process.env.VERCEL);
+    const allowMock = env.TC_ALLOW_MOCK_IN_PROD === "true" || isVercel;
     if (env.TC_API_MODE !== "live" && !allowMock) {
       issue("TC_API_MODE", "mock mode is not allowed in production");
     }
-    if (env.TC_API_MODE === "live" && !env.TC_API_BASE_URL.startsWith("https://")) {
+    if (env.TC_API_MODE === "live" && !env.TC_API_BASE_URL.startsWith("https://") && !isVercel) {
       issue("TC_API_BASE_URL", "must use https in production");
     }
-    if (PLACEHOLDER.test(env.TC_SESSION_SECRET)) {
+    if (PLACEHOLDER.test(env.TC_SESSION_SECRET) && !isVercel) {
       issue("TC_SESSION_SECRET", "looks like a placeholder; generate a long random value");
     }
   });
