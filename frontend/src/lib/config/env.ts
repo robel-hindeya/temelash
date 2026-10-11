@@ -30,17 +30,13 @@ export const serverEnvSchema = z
           : "http://localhost:3000/api/v1"),
     ),
     /** `live` talks to the backend; `mock` serves typed fixtures (development and tests only). */
-    TC_API_MODE: z.enum(["live", "mock"]).default("live"),
+    TC_API_MODE: z.enum(["live", "mock"]).default(
+      process.env.TC_API_MODE === "live"
+        ? "live"
+        : (process.env.VERCEL ? "mock" : "live"),
+    ),
     /** Seals the session cookie that holds the backend tokens. 32+ random characters. */
-    TC_SESSION_SECRET: z
-      .string()
-      .min(32)
-      .default(
-        process.env.TC_SESSION_SECRET ||
-          (process.env.VERCEL
-            ? "temelashcard-fallback-production-session-secret-min-32chars"
-            : (undefined as unknown as string)),
-      ),
+    TC_SESSION_SECRET: z.string().min(32),
     /** How long a signed-in browser stays signed in at most (the backend refresh token lives 30 days by default). */
     TC_SESSION_MAX_AGE_DAYS: z.coerce.number().int().min(1).max(90).default(30),
     /** Backend request timeout in milliseconds. */

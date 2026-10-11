@@ -14,8 +14,17 @@ import type {
 import type { Branch } from "@/features/branches/api";
 
 export const MOCK_PASSWORD = "mock-password-1";
+export const MOCK_PASSWORDS = [
+  "mock-password-1",
+  "password123",
+  "Password123!",
+  "Password123",
+  "password123!",
+];
+export const isValidMockPassword = (pw: string) =>
+  pw === MOCK_PASSWORD || MOCK_PASSWORDS.includes(pw);
 export const MOCK_CONSENT_VERSION = "2026-10-v1";
-export const MOCK_MERCHANT_ID = "00000000-0000-4000-8000-00000000a001";
+export const MOCK_MERCHANT_ID = "00000000-0000-4000-8000-0000000a001";
 export const MOCK_BRANCHES: Branch[] = [
   {
     id: "00000000-0000-4000-8000-0000000b0001",
@@ -68,6 +77,14 @@ export const MOCK_ACCOUNTS = {
     permissions: MERCHANT_PERMISSIONS,
     branchScope: "ALL" as Me["branchScope"],
   },
+  "owner@sample-cafe.test": {
+    id: "00000000-0000-4000-8000-0000000c0001",
+    displayName: "Sample Owner",
+    role: "OWNER",
+    kind: "merchant" as const,
+    permissions: MERCHANT_PERMISSIONS,
+    branchScope: "ALL" as Me["branchScope"],
+  },
   "manager@mock.test": {
     id: "00000000-0000-4000-8000-0000000c0002",
     displayName: "Dawit Manager",
@@ -101,9 +118,31 @@ export const MOCK_ACCOUNTS = {
     ],
     branchScope: MOCK_BRANCHES.map((b) => b.id) as Me["branchScope"],
   },
+  "staff.bole@sample-cafe.test": {
+    id: "00000000-0000-4000-8000-0000000c0003",
+    displayName: "Bole Staff",
+    role: "STAFF",
+    kind: "merchant" as const,
+    permissions: [
+      "branch:read",
+      "program:read",
+      "customer:read",
+      "stamp:create",
+      "redemption:create",
+    ],
+    branchScope: MOCK_BRANCHES.map((b) => b.id) as Me["branchScope"],
+  },
   "admin@mock.test": {
     id: "00000000-0000-4000-8000-0000000c0004",
     displayName: "Operations Admin",
+    role: "PLATFORM_ADMIN",
+    kind: "platform" as const,
+    permissions: ["platform:manage", "platform:audit:read"],
+    branchScope: null as Me["branchScope"],
+  },
+  "admin@temelashcard.test": {
+    id: "00000000-0000-4000-8000-0000000c0004",
+    displayName: "Platform Admin",
     role: "PLATFORM_ADMIN",
     kind: "platform" as const,
     permissions: ["platform:manage", "platform:audit:read"],

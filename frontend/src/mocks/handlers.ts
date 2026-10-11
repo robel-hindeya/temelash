@@ -93,6 +93,7 @@ import {
   MOCK_CONSENT_VERSION,
   MOCK_JOIN_INFO,
   MOCK_PASSWORD,
+  isValidMockPassword,
   REJECTION_MESSAGES,
   accessTokenFor,
   meFor,
@@ -316,7 +317,7 @@ export function createHandlers(): MockRoute[] {
             "retry-after": "30",
           });
         }
-        if (!isMockEmail(normalized) || password !== MOCK_PASSWORD) {
+        if (!isMockEmail(normalized) || !isValidMockPassword(String(password))) {
           return error(401, "INVALID_CREDENTIALS", "Invalid email or password.");
         }
         const counter = (ctx.state.refreshCounter.get(normalized) ?? 0) + 1;

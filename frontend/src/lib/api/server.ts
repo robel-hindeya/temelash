@@ -33,13 +33,48 @@ export async function createServerTransport(options: ServerApiOptions = {}): Pro
     });
   }
 
-  return createHttpTransport({
+  const http = createHttpTransport({
     baseUrl: env.TC_API_BASE_URL,
     timeoutMs: env.TC_API_TIMEOUT_MS,
     getAccessToken,
     credentials: "omit",
     logger: consoleApiLogger,
   });
+
+  if (allowMock) {
+    return {
+      async request<T>(spec: any): Promise<T> {
+        try {
+          return await http.request<T>(spec);
+        } catch {
+          const { createMockTransport } = await import("@/mocks/mock-transport");
+          const { sharedMockState } = await import("@/mocks/shared-state");
+          const mock = createMockTransport({
+            state: sharedMockState(),
+            getAccessToken,
+            latencyMs: 0,
+          });
+          return mock.request<T>(spec);
+        }
+      },
+      async requestWithMeta<T>(spec: any): Promise<any> {
+        try {
+          return await http.requestWithMeta<T>(spec);
+        } catch {
+          const { createMockTransport } = await import("@/mocks/mock-transport");
+          const { sharedMockState } = await import("@/mocks/shared-state");
+          const mock = createMockTransport({
+            state: sharedMockState(),
+            getAccessToken,
+            latencyMs: 0,
+          });
+          return mock.requestWithMeta<T>(spec);
+        }
+      },
+    };
+  }
+
+  return http;
 }
 
 export async function getServerApi(options: ServerApiOptions = {}): Promise<Api> {
