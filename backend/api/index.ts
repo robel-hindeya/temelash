@@ -1,36 +1,39 @@
-import 'reflect-metadata';
-import { NestFactory } from '@nestjs/core';
-import { ExpressAdapter } from '@nestjs/platform-express';
-import express, { Request, Response } from 'express';
-import { AppModule } from '../src/app.module';
-import { configureApp } from '../src/app.setup';
+import type { IncomingMessage, ServerResponse } from 'http';
 
-const server = express();
+let server: any = null;
 let isReady = false;
 let initPromise: Promise<void> | null = null;
 let initError: Error | null = null;
 
-server.get('/', (_req: Request, res: Response) => {
-  res.json({
-    name: 'TemelashCard Backend API',
-    status: 'ok',
-    version: 'v1',
-    endpoints: {
-      health: '/api/v1/health',
-      ready: '/api/v1/health/ready',
-      docs: '/api/docs',
-    },
-    documentation: 'https://github.com/robel-hindeya/temelash',
-  });
-});
-
 async function bootstrap() {
-  if (isReady) return;
+  if (isReady && server) return server;
   if (initError) throw initError;
 
   if (!initPromise) {
     initPromise = (async () => {
       try {
+        require('reflect-metadata');
+        const express = require('express');
+        const { NestFactory } = require('@nestjs/core');
+        const { ExpressAdapter } = require('@nestjs/platform-express');
+
+        server = express();
+
+        let AppModule: any;
+        let configureApp: any;
+
+        try {
+          const mod = require('../dist/app.module');
+          const setup = require('../dist/app.setup');
+          AppModule = mod.AppModule;
+          configureApp = setup.configureApp;
+        } catch {
+          const mod = require('../src/app.module');
+          const setup = require('../src/app.setup');
+          AppModule = mod.AppModule;
+          configureApp = setup.configureApp;
+        }
+
         const app = await NestFactory.create(AppModule, new ExpressAdapter(server), {
           bufferLogs: true,
         });
@@ -46,26 +49,67 @@ async function bootstrap() {
   }
 
   await initPromise;
+  return server;
 }
 
-export default async function handler(req: Request, res: Response) {
+export default async function handler(req: any, res: any) {
+  const url = req.url || '/';
+
+  // Fast-path for root health/status: always works even before database is initialized
+  if (url === '/' || url === '') {
+    res.setHeader('Content-Type', 'application/json');
+    res.statusCode = 200;
+    return res.end(
+      JSON.stringify(
+        {
+          name: 'TemelashCard Backend API',
+          status: 'online',
+          version: 'v1',
+          runtime: 'Vercel Serverless',
+          diagnostics: {
+            nodeVersion: process.version,
+            databaseConfigured: Boolean(process.env.DATABASE_URL),
+            jwtConfigured: Boolean(process.env.JWT_ACCESS_SECRET),
+            corsOrigins: process.env.CORS_ORIGINS || 'none',
+          },
+          endpoints: {
+            live: '/api/v1/health',
+            ready: '/api/v1/health/ready',
+            docs: '/api/docs',
+          },
+        },
+        null,
+        2,
+      ),
+    );
+  }
+
   try {
-    await bootstrap();
-    server(req, res);
+    const appServer = await bootstrap();
+    return appServer(req, res);
   } catch (err: unknown) {
     const error = err as Error;
     const missing: string[] = [];
     if (!process.env.DATABASE_URL) missing.push('DATABASE_URL');
     if (!process.env.JWT_ACCESS_SECRET) missing.push('JWT_ACCESS_SECRET');
 
-    res.status(500).json({
-      error: 'BACKEND_STARTUP_FAILED',
-      message: error?.message || 'NestJS backend initialization failed',
-      missingEnvironmentVariables: missing.length > 0 ? missing : undefined,
-      hint:
-        missing.length > 0
-          ? `Please configure ${missing.join(', ')} in your Vercel Project Settings > Environment Variables.`
-          : 'Check your database connection string and Vercel environment variables.',
-    });
+    res.setHeader('Content-Type', 'application/json');
+    res.statusCode = 500;
+    return res.end(
+      JSON.stringify(
+        {
+          error: 'BACKEND_STARTUP_FAILED',
+          message: error?.message || 'NestJS backend initialization failed',
+          missingEnvironmentVariables: missing.length > 0 ? missing : undefined,
+          hint:
+            missing.length > 0
+              ? `Please configure ${missing.join(', ')} in your Vercel Project Settings > Environment Variables.`
+              : 'Check that your hosted PostgreSQL database is accessible and running.',
+          stack: process.env.NODE_ENV !== 'production' ? error?.stack : undefined,
+        },
+        null,
+        2,
+      ),
+    );
   }
 }
