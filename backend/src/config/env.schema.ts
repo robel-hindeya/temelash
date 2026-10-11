@@ -89,10 +89,10 @@ export const envSchema = z
     GOOGLE_OAUTH_TOKEN_URL: z.string().url().default('https://oauth2.googleapis.com/token'),
     // ── Background jobs (transactional outbox worker) ──
     // Periodic jobs (fraud evaluation, retention). Safe on many instances: work is de-duplicated by key.
-    SCHEDULER_ENABLED: boolFromString.default(true),
+    SCHEDULER_ENABLED: boolFromString.default(process.env.VERCEL ? false : true),
     FRAUD_EVALUATION_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
     RETENTION_INTERVAL_HOURS: z.coerce.number().int().min(1).max(168).default(24),
-    OUTBOX_WORKER_ENABLED: boolFromString.default(true),
+    OUTBOX_WORKER_ENABLED: boolFromString.default(process.env.VERCEL ? false : true),
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(300_000).default(5000),
     OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(10),
   })
