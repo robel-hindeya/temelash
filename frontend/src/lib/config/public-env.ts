@@ -5,6 +5,12 @@ import { parsePublicEnv, type PublicEnv } from "./env";
  * never spread process.env here. Safe to import from Server and Client Components.
  */
 export const publicEnv: PublicEnv = parsePublicEnv({
-  NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || undefined,
+  NEXT_PUBLIC_APP_URL:
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.NEXT_PUBLIC_VERCEL_URL
+      ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+      : process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : undefined),
   NEXT_PUBLIC_SUPPORT_URL: process.env.NEXT_PUBLIC_SUPPORT_URL || undefined,
 });

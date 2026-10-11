@@ -52,6 +52,12 @@ describe("server environment", () => {
         }),
       ).toThrow(/placeholder/);
     });
+
+    it("allows mock mode in production when explicitly enabled via TC_ALLOW_MOCK_IN_PROD", () => {
+      expect(() =>
+        parseServerEnv({ ...prod, TC_API_MODE: "mock", TC_ALLOW_MOCK_IN_PROD: "true" }),
+      ).not.toThrow();
+    });
   });
 });
 

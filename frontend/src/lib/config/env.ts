@@ -32,14 +32,20 @@ export const serverEnvSchema = z
     TC_SESSION_MAX_AGE_DAYS: z.coerce.number().int().min(1).max(90).default(30),
     /** Backend request timeout in milliseconds. */
     TC_API_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(10_000),
+    /** Allow mock mode in production (e.g. for Vercel preview/demo deployments). */
+    TC_ALLOW_MOCK_IN_PROD: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV !== "production") return;
     const issue = (path: string, message: string) =>
       ctx.addIssue({ code: "custom", path: [path], message });
-    if (env.TC_API_MODE !== "live") issue("TC_API_MODE", "mock mode is not allowed in production");
-    if (!env.TC_API_BASE_URL.startsWith("https://"))
+    const allowMock = env.TC_ALLOW_MOCK_IN_PROD === "true";
+    if (env.TC_API_MODE !== "live" && !allowMock) {
+      issue("TC_API_MODE", "mock mode is not allowed in production");
+    }
+    if (env.TC_API_MODE === "live" && !env.TC_API_BASE_URL.startsWith("https://")) {
       issue("TC_API_BASE_URL", "must use https in production");
+    }
     if (PLACEHOLDER.test(env.TC_SESSION_SECRET)) {
       issue("TC_SESSION_SECRET", "looks like a placeholder; generate a long random value");
     }
