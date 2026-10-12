@@ -81,11 +81,17 @@ export function JoinMaterials({
               },
             ]}
           />
-          <div>
+          <div className="flex flex-col gap-1">
             <p className="text-sm font-medium">{t("program.qrLink")}</p>
-            <p className="font-mono text-sm break-all text-charcoal-700" data-testid="join-link">
+            <a
+              href={code.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-sm break-all text-green-800 underline hover:text-green-950"
+              data-testid="join-link"
+            >
               {code.url}
-            </p>
+            </a>
           </div>
           <div className="flex flex-wrap gap-3">
             <Button variant="secondary" onClick={() => downloadSvg(code.svg, `${stem}.svg`)}>

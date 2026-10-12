@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { PageHeading } from "@/components/ui";
 import { ProgramWorkspace } from "@/features/program/components/program-workspace";
 import { isJoinReference, joinUrl, type PosterLanguage } from "@/features/program/qr-links";
@@ -20,6 +21,17 @@ export default async function ProgramPage({ params }: { params: Promise<{ locale
   const ctx = await requireRoute(locale, "/dashboard/program");
   const t = await getTranslator(locale);
 
+  const headerList = await headers().catch(() => null);
+  const host = headerList?.get("x-forwarded-host") || headerList?.get("host");
+  const proto =
+    headerList?.get("x-forwarded-proto") ||
+    (host && !host.includes("localhost") && !host.includes("127.0.0.1") ? "https" : "http");
+  const requestOrigin = host ? `${proto}://${host}` : undefined;
+  const appOrigin =
+    requestOrigin && !requestOrigin.includes("localhost") && !requestOrigin.includes("127.0.0.1")
+      ? requestOrigin
+      : (publicEnv.NEXT_PUBLIC_APP_URL || requestOrigin || "http://localhost:3001");
+
   // The business name and public join reference come from the backend. If the profile cannot be read the page
   // still works; only the QR materials say they are unavailable.
   const profile = await (
@@ -33,7 +45,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ locale
       ? (Object.fromEntries(
           await Promise.all(
             LANGUAGES.map(async (language) => {
-              const url = joinUrl(publicEnv.NEXT_PUBLIC_APP_URL, reference, language);
+              const url = joinUrl(appOrigin, reference, language);
               return [language, { url, svg: await qrSvg(url) }] as const;
             }),
           ),

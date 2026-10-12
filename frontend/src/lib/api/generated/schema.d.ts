@@ -1853,7 +1853,7 @@ export interface components {
              * @description Any common Ethiopian format; stored as E.164.
              * @example 0911 234 567
              */
-            phone: string;
+            phone?: string;
             /** @example Abebe */
             firstName: string;
             /** @example abebe@example.com */

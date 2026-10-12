@@ -66,8 +66,9 @@ export function EnrollmentFlow({ joinReference, consentVersion, terms: _terms }:
     setProblem(null);
     setMaybeSent(false);
     try {
+      const phoneE164 = toE164(values.phone);
       const result = await getBrowserApi().enrollment.enroll(joinReference, {
-        phone: toE164(values.phone),
+        ...(phoneE164 ? { phone: phoneE164 } : {}),
         firstName: values.firstName.trim(),
         email: values.email.trim().toLowerCase(),
         preferredLanguage: locale === "am" ? "AM" : "EN",
@@ -184,7 +185,6 @@ export function EnrollmentFlow({ joinReference, consentVersion, terms: _terms }:
         label={t("enrollment.phone")}
         hint={t("enrollment.phoneHint")}
         error={errors.phone?.message}
-        required
       >
         <PhoneInput disabled={isSubmitting} {...register("phone")} />
       </FormField>

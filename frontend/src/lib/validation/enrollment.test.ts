@@ -27,6 +27,7 @@ describe("enrollment form rules", () => {
   });
 
   it.each([
+    "",
     "0911234567",
     "911234567",
     "+251 911 234 567",
@@ -37,7 +38,7 @@ describe("enrollment form rules", () => {
     expect(problems({ ...valid, phone })).toEqual({});
   });
 
-  it.each(["", "abc", "0611234567", "91123456", "+254711234567", "09112345678"])(
+  it.each(["abc", "0611234567", "91123456", "+254711234567", "09112345678"])(
     "rejects the phone number %j",
     (phone) => {
       expect(problems({ ...valid, phone }).phone).toBeTruthy();

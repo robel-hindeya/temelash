@@ -260,7 +260,7 @@ describe('Customer enrollment, consent and cards (e2e, real PostgreSQL)', () => 
       await enroll(ref, { phone: '12345' }).expect(400);
       await enroll(ref, { phone: '+254711000000' }).expect(400);
       await enroll(ref, { phone: '0611234567' }).expect(400);
-      await enroll(ref, { phone: undefined }).expect(400);
+      await enroll(ref, { phone: undefined }).expect(201);
       await enroll(ref, { firstName: '' }).expect(400);
       await enroll(ref, { firstName: '<script>alert(1)</script>' }).expect(400);
       await enroll(ref, { firstName: 'x'.repeat(61) }).expect(400);

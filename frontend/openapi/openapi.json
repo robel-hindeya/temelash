@@ -4872,7 +4872,6 @@
           }
         },
         "required": [
-          "phone",
           "firstName",
           "email",
           "preferredLanguage",

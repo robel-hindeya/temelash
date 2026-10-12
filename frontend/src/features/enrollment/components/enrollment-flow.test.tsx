@@ -70,8 +70,23 @@ describe("EnrollmentFlow", () => {
     await user.click(submit());
     expect(await screen.findByText("Enter your first name.")).toBeInTheDocument();
     expect(screen.getByText("Enter your email address.")).toBeInTheDocument();
-    expect(screen.getByText("Enter your phone number.")).toBeInTheDocument();
     expect(enroll).not.toHaveBeenCalled();
+  });
+
+  it("allows enrolling with just name and email (phone optional)", async () => {
+    enroll.mockResolvedValueOnce(created);
+    const user = setup();
+    await user.type(screen.getByLabelText(/First name/), "Abebe");
+    await user.type(screen.getByLabelText(/Email address/), "abebe@example.com");
+    await user.click(submit());
+    expect(await screen.findByTestId("enrollment-created")).toBeInTheDocument();
+    expect(enroll).toHaveBeenCalledWith(
+      "sample-cafe",
+      expect.objectContaining({
+        firstName: "Abebe",
+        email: "abebe@example.com",
+      }),
+    );
   });
 
   it("explains an invalid email address", async () => {

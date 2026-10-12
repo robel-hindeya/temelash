@@ -29,7 +29,17 @@ interface Props {
 export function WalletSelector({ cardId, availability, webCardHref, platform }: Props) {
   const { t } = useI18n();
   const detected = useWalletPlatform();
-  const providers = walletProvidersFor(platform ?? detected);
+  const availableFor = (provider: WalletProvider) =>
+    availability ? (availability.find((o) => o.provider === provider)?.available ?? false) : true;
+
+  const baseProviders = walletProvidersFor(platform ?? detected);
+  const providers = platform
+    ? baseProviders
+    : [
+        ...baseProviders,
+        ...(availableFor("GOOGLE") && !baseProviders.includes("GOOGLE") ? (["GOOGLE"] as const) : []),
+        ...(availableFor("APPLE") && !baseProviders.includes("APPLE") ? (["APPLE"] as const) : []),
+      ];
   const [opening, setOpening] = useState<WalletProvider | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -37,8 +47,6 @@ export function WalletSelector({ cardId, availability, webCardHref, platform }: 
     APPLE: t("wallet.addApple"),
     GOOGLE: t("wallet.addGoogle"),
   };
-  const availableFor = (provider: WalletProvider) =>
-    availability ? (availability.find((o) => o.provider === provider)?.available ?? false) : true;
 
   async function open(provider: WalletProvider) {
     setProblem(null);

@@ -27,10 +27,13 @@ export function createEnrollmentSchema(t: Translate) {
     phone: z
       .string()
       .trim()
-      .min(1, t("enrollment.phoneRequired"))
-      .refine((v) => v === "" || normalizeEthiopianPhone(`+251${stripCountryCode(v)}`) !== null, {
-        message: t("enrollment.phoneInvalid"),
-      }),
+      .optional()
+      .refine(
+        (v) => !v || v === "" || normalizeEthiopianPhone(`+251${stripCountryCode(v)}`) !== null,
+        {
+          message: t("enrollment.phoneInvalid"),
+        },
+      ),
     acceptTerms: z
       .boolean()
       .refine((v) => v === true, { message: t("enrollment.consentRequired") }),
@@ -46,6 +49,10 @@ function stripCountryCode(raw: string): string {
 }
 
 /** The number to send: always `+251` followed by the nine national digits (or the raw text if unreadable). */
-export function toE164(raw: string): string {
+export function toE164(raw: string): string;
+export function toE164(raw: undefined): undefined;
+export function toE164(raw: string | undefined): string | undefined;
+export function toE164(raw: string | undefined): string | undefined {
+  if (!raw || !raw.trim()) return undefined;
   return normalizeEthiopianPhone(`+251${stripCountryCode(raw)}`) ?? raw;
 }

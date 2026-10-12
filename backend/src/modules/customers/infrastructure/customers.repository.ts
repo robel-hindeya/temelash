@@ -108,9 +108,17 @@ export class CustomersRepository {
     return db.customer.findFirst({ where: { merchantId, phoneE164 }, select });
   }
 
+  findByEmail(
+    merchantId: string,
+    email: string,
+    db: DbClient = this.prisma,
+  ): Promise<CustomerRecord | null> {
+    return db.customer.findFirst({ where: { merchantId, email: { equals: email, mode: 'insensitive' } }, select });
+  }
+
   async create(
     merchantId: string,
-    data: { phoneE164: string; email?: string | null; firstName: string; preferredLanguage: Language },
+    data: { phoneE164?: string | null; email?: string | null; firstName: string; preferredLanguage: Language },
     db: DbClient,
   ): Promise<string> {
     const row = await db.customer.create({

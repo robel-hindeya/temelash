@@ -29,13 +29,14 @@ import { EnrollmentService } from '../application/enrollment.service';
 const SAFE_NAME = /^[\p{L}\p{M}\p{N} .'’/-]+$/u;
 
 export class EnrollDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: '0911 234 567',
-    description: 'Any common Ethiopian format; stored as E.164.',
+    description: 'Any common Ethiopian format; stored as E.164. Optional when enrolling by name and email.',
   })
+  @IsOptional()
   @IsString()
   @MaxLength(32)
-  phone!: string;
+  phone?: string;
 
   @ApiProperty({ example: 'Abebe' })
   @IsString()

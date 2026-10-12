@@ -14,7 +14,7 @@ import { newCardToken } from '../domain/card-token';
 import { MembershipsRepository } from '../infrastructure/memberships.repository';
 
 export interface EnrollInput {
-  phone: string;
+  phone?: string;
   firstName: string;
   email: string;
   preferredLanguage: 'EN' | 'AM';
@@ -103,8 +103,8 @@ export class EnrollmentService {
         409,
       );
     }
-    const phone = normalizeEthiopianPhone(input.phone);
-    if (!phone) {
+    const phone = input.phone ? normalizeEthiopianPhone(input.phone) : null;
+    if (input.phone && !phone) {
       throw new DomainError(
         ErrorCode.VALIDATION_FAILED,
         'Enter a valid Ethiopian phone number.',
@@ -114,7 +114,7 @@ export class EnrollmentService {
     const firstName = input.firstName.trim();
     const email = input.email.trim().toLowerCase();
 
-    // Two simultaneous sign-ups for one phone: the loser hits a unique index and simply retries,
+    // Two simultaneous sign-ups for one phone or email: the loser hits a unique index and simply retries,
     // finding the winner's rows.
     for (let attempt = 0; ; attempt++) {
       try {
@@ -124,13 +124,14 @@ export class EnrollmentService {
           const lock = await this.programs.lockForEnrollment(target.id, program.id, db);
           if (!lock || lock.status !== 'ACTIVE' || !lock.isDefault) throw notJoinable();
 
-          let customer = await this.customers.findByPhone(target.id, phone, db);
+          let customer = (phone ? await this.customers.findByPhone(target.id, phone, db) : null)
+            ?? (email ? await this.customers.findByEmail(target.id, email, db) : null);
           const newCustomer = customer === null;
           let customerId = customer?.id;
           if (!customerId) {
             customerId = await this.customers.create(
               target.id,
-              { phoneE164: phone, email, firstName, preferredLanguage: input.preferredLanguage },
+              { phoneE164: phone ?? null, email, firstName, preferredLanguage: input.preferredLanguage },
               db,
             );
           } else {
