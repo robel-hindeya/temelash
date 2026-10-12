@@ -88,9 +88,13 @@ export class WalletProviders {
         const cfg = loadGoogleConfig({
           environment: config.get('GOOGLE_WALLET_ENV', { infer: true }),
           issuerId: config.get('GOOGLE_WALLET_ISSUER_ID', { infer: true }) as string,
-          keyPath: config.get('GOOGLE_WALLET_SERVICE_ACCOUNT_KEY_PATH', { infer: true }) as string,
+          keyPath: config.get('GOOGLE_WALLET_SERVICE_ACCOUNT_KEY_PATH', { infer: true }) || undefined,
+          privateKey: config.get('GOOGLE_WALLET_PRIVATE_KEY', { infer: true }) || undefined,
+          clientEmail: config.get('GOOGLE_WALLET_CLIENT_EMAIL', { infer: true }) || undefined,
           origins: config.get('GOOGLE_WALLET_ORIGINS', { infer: true }),
-          defaultLogoUrl: config.get('GOOGLE_WALLET_DEFAULT_LOGO_URL', { infer: true }) as string,
+          defaultLogoUrl:
+            config.get('GOOGLE_WALLET_DEFAULT_LOGO_URL', { infer: true }) ||
+            'https://walletobjects.googleapis.com/static/img/wallet_logo.png',
           apiBase: config.get('GOOGLE_WALLET_API_BASE', { infer: true }),
           tokenUrl: config.get('GOOGLE_OAUTH_TOKEN_URL', { infer: true }),
         });

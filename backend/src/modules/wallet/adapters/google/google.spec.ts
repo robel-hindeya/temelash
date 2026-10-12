@@ -134,6 +134,36 @@ describe('Google Wallet adapter (against a local mock of Google)', () => {
         expect((e as Error).message).not.toContain(creds.dir);
       }
     });
+
+    it('correctly supports multiline private keys with escaped newlines and quotes', () => {
+      // Escaped \n in string
+      const escapedKey = `"${creds.privateKey.replace(/\n/g, '\\n')}"`;
+      const loaded = loadGoogleConfig({
+        environment: 'demo',
+        issuerId: ISSUER,
+        privateKey: escapedKey,
+        clientEmail: creds.clientEmail,
+        origins: [],
+        defaultLogoUrl: 'https://cdn.example.test/logo.png',
+        apiBase: google.url,
+        tokenUrl: `${google.url}/token`,
+      });
+      expect(loaded.privateKey).toBe(creds.privateKey.trim());
+      expect(loaded.clientEmail).toBe(creds.clientEmail);
+    });
+
+    it('demands credentials when neither keyPath nor privateKey is provided', () => {
+      expect(() =>
+        loadGoogleConfig({
+          environment: 'demo',
+          issuerId: ISSUER,
+          origins: [],
+          defaultLogoUrl: 'https://cdn.example.test/logo.png',
+          apiBase: google.url,
+          tokenUrl: `${google.url}/token`,
+        }),
+      ).toThrow(/Google Wallet credentials missing/);
+    });
   });
 
   describe('payloads', () => {

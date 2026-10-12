@@ -44,24 +44,20 @@ export const envSchema = z
     TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
     RATE_LIMIT_TTL_SECONDS: z.coerce.number().int().positive().default(60),
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
-    DATABASE_URL: z
-      .string()
-      .default(
-        process.env.VERCEL
-          ? 'postgresql://vercel_preview:vercel_preview@127.0.0.1:5432/temelash'
-          : (undefined as unknown as string),
-      )
-      .refine((v) => v.startsWith('postgresql://') || v.startsWith('postgres://'), {
-        message: 'must be a PostgreSQL URL',
-      }),
-    JWT_ACCESS_SECRET: z
-      .string()
-      .min(32)
-      .default(
-        process.env.VERCEL
-          ? 'temelashcard-vercel-preview-jwt-secret-min-32chars'
-          : (undefined as unknown as string),
-      ),
+    DATABASE_URL: (process.env.VERCEL
+      ? z
+          .string()
+          .default('postgresql://vercel_preview:vercel_preview@127.0.0.1:5432/temelash')
+      : z.string()
+    ).refine((v) => v.startsWith('postgresql://') || v.startsWith('postgres://'), {
+      message: 'must be a PostgreSQL URL',
+    }),
+    JWT_ACCESS_SECRET: process.env.VERCEL
+      ? z
+          .string()
+          .min(32)
+          .default('temelashcard-vercel-preview-jwt-secret-min-32chars')
+      : z.string().min(32),
     JWT_ISSUER: z.string().min(1).default('temelashcard'),
     ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
     REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
@@ -81,15 +77,13 @@ export const envSchema = z
     WALLET_PUBLIC_BASE_URL: z.string().url().default('http://localhost:3000'),
     /** Secret from which each pass's barcode is derived. Required when a provider is enabled. */
     WALLET_BARCODE_SECRET: optionalString.pipe(
-      z
-        .string()
-        .min(32)
-        .optional()
-        .default(
-          process.env.VERCEL
-            ? 'temelashcard-vercel-preview-barcode-secret-min-32chars'
-            : (undefined as unknown as string),
-        ),
+      (process.env.VERCEL
+        ? z
+            .string()
+            .min(32)
+            .default('temelashcard-vercel-preview-barcode-secret-min-32chars')
+        : z.string().min(32)
+      ).optional(),
     ),
     // Apple Wallet (live mode). Certificates and keys are FILE PATHS outside the repository.
     APPLE_PASS_TYPE_ID: optionalString,
@@ -104,8 +98,12 @@ export const envSchema = z
     GOOGLE_WALLET_ENV: z.enum(['demo', 'production']).default('demo'),
     GOOGLE_WALLET_ISSUER_ID: optionalString,
     GOOGLE_WALLET_SERVICE_ACCOUNT_KEY_PATH: optionalString,
+    GOOGLE_WALLET_PRIVATE_KEY: optionalString,
+    GOOGLE_WALLET_CLIENT_EMAIL: optionalString,
     GOOGLE_WALLET_ORIGINS: csv,
-    GOOGLE_WALLET_DEFAULT_LOGO_URL: optionalString,
+    GOOGLE_WALLET_DEFAULT_LOGO_URL: optionalString.default(
+      'https://walletobjects.googleapis.com/static/img/wallet_logo.png',
+    ),
     GOOGLE_WALLET_API_BASE: z.string().url().default('https://walletobjects.googleapis.com'),
     GOOGLE_OAUTH_TOKEN_URL: z.string().url().default('https://oauth2.googleapis.com/token'),
     // ── Background jobs (transactional outbox worker) ──
@@ -161,12 +159,17 @@ export const envSchema = z
         }
       }
       if (env.WALLET_GOOGLE_ENABLED) {
-        for (const key of [
-          'GOOGLE_WALLET_ISSUER_ID',
-          'GOOGLE_WALLET_SERVICE_ACCOUNT_KEY_PATH',
-          'GOOGLE_WALLET_DEFAULT_LOGO_URL',
-        ] as const) {
-          if (!env[key]) issue(key, 'required when Google Wallet is enabled in live mode');
+        if (!env.GOOGLE_WALLET_ISSUER_ID) {
+          issue('GOOGLE_WALLET_ISSUER_ID', 'required when Google Wallet is enabled in live mode');
+        }
+        if (!env.GOOGLE_WALLET_SERVICE_ACCOUNT_KEY_PATH && !env.GOOGLE_WALLET_PRIVATE_KEY) {
+          issue(
+            'GOOGLE_WALLET_SERVICE_ACCOUNT_KEY_PATH',
+            'either GOOGLE_WALLET_SERVICE_ACCOUNT_KEY_PATH or GOOGLE_WALLET_PRIVATE_KEY is required when Google Wallet is enabled in live mode',
+          );
+        }
+        if (!env.GOOGLE_WALLET_DEFAULT_LOGO_URL) {
+          issue('GOOGLE_WALLET_DEFAULT_LOGO_URL', 'required when Google Wallet is enabled in live mode');
         }
       }
     }

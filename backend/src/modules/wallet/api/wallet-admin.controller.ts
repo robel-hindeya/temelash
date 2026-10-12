@@ -1,16 +1,36 @@
-import { Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiProperty,
   ApiTags,
 } from '@nestjs/swagger';
+import { IsIn } from 'class-validator';
 import { Permissions } from '../../../common/decorators/access.decorators';
 import { ReqMeta, type RequestMeta } from '../../../common/decorators/request-context.decorator';
 import { CurrentMerchantActor, type MerchantActor } from '../../tenancy';
 import { WalletService } from '../application/wallet.service';
+
+export class CreateWalletPassLinkDto {
+  @ApiProperty({ enum: ['GOOGLE', 'APPLE'], default: 'GOOGLE' })
+  @IsIn(['GOOGLE', 'APPLE'])
+  provider!: 'GOOGLE' | 'APPLE';
+}
+
+class AdminWalletLinkResultDto {
+  @ApiProperty({ enum: ['GOOGLE', 'APPLE', 'WEB'] }) provider!: string;
+  @ApiProperty({
+    enum: ['DOWNLOAD', 'REDIRECT', 'NONE'],
+    description:
+      'DOWNLOAD: open the URL to get the pass file. REDIRECT: open the URL to add the pass. NONE: web card.',
+  })
+  kind!: string;
+  @ApiProperty({ nullable: true }) url!: string | null;
+  @ApiProperty({ nullable: true, format: 'date-time' }) expiresAt!: string | null;
+}
 
 class PassStatusDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
@@ -51,6 +71,53 @@ export class WalletAdminController {
       lastSyncedAt: p.lastSyncedAt,
       lastError: p.lastError,
     }));
+  }
+
+  @Permissions('customer:read')
+  @Post('memberships/:membershipId/wallet-passes/link')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Generate an Add-to-Wallet link for a customer membership',
+    description:
+      'Provisions the pass if not already present and generates a signed save link (Save to Google Wallet or Apple download). Tenant-isolated.',
+  })
+  @ApiOkResponse({ type: AdminWalletLinkResultDto })
+  @ApiNotFoundResponse({ description: 'Membership not found or inactive' })
+  @ApiConflictResponse({ description: 'PROVIDER_NOT_AVAILABLE: that wallet is not offered' })
+  async getLink(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('membershipId', ParseUUIDPipe) membershipId: string,
+    @Body() dto: CreateWalletPassLinkDto,
+  ) {
+    return this.wallet.addLinkForMembership(actor, membershipId, dto.provider);
+  }
+
+  @Permissions('customer:manage')
+  @Post('memberships/:membershipId/wallet-passes')
+  @HttpCode(201)
+  @ApiOperation({
+    summary: 'Create or ensure a wallet pass for a customer membership',
+    description:
+      'Creates the loyalty pass with the provider (Google Wallet Loyalty Object or Apple serial) if not already created. Prevents duplicate card creation.',
+  })
+  @ApiOkResponse({ type: PassStatusDto })
+  @ApiNotFoundResponse({ description: 'Membership not found or inactive' })
+  async createPass(
+    @CurrentMerchantActor() actor: MerchantActor,
+    @Param('membershipId', ParseUUIDPipe) membershipId: string,
+    @Body() dto: CreateWalletPassLinkDto,
+  ): Promise<PassStatusDto> {
+    const p = await this.wallet.createPassForMembership(actor, membershipId, dto.provider);
+    return {
+      id: p.id,
+      provider: p.provider,
+      status: p.status,
+      syncStatus: p.syncStatus,
+      passVersion: p.passVersion,
+      lastSyncedVersion: p.lastSyncedVersion,
+      lastSyncedAt: p.lastSyncedAt,
+      lastError: p.lastError,
+    };
   }
 
   @Permissions('customer:manage')

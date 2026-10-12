@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { Alert, Button, ButtonLink, ConfirmDialog, useToast } from "@/components/ui";
+import { WalletButton } from "@/features/wallet/wallet-button";
 import { toApiError } from "@/lib/errors/api-error";
 import { describeApiError } from "@/lib/errors/messages";
 import { useI18n } from "@/lib/i18n/client";
@@ -31,6 +32,30 @@ export function CardActions({
   const [refreshing, startRefresh] = useTransition();
   const [confirm, setConfirm] = useState<"marketing" | "remove" | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [savingGoogle, setSavingGoogle] = useState(false);
+  const [googleSuccess, setGoogleSuccess] = useState(false);
+  const [googleProblem, setGoogleProblem] = useState<string | null>(null);
+
+  async function addToGoogleWallet() {
+    setGoogleProblem(null);
+    setGoogleSuccess(false);
+    setSavingGoogle(true);
+    try {
+      const link = await cardClient.walletLink("GOOGLE", cardId);
+      if (link.url && /^https:\/\//.test(link.url)) {
+        setGoogleSuccess(true);
+        window.location.assign(link.url);
+        return;
+      }
+      setGoogleProblem(t("wallet.linkFailed"));
+    } catch (e) {
+      setGoogleProblem(
+        toApiError(e).kind === "conflict" ? t("wallet.notOfferedNow") : t("wallet.linkFailed"),
+      );
+    } finally {
+      setSavingGoogle(false);
+    }
+  }
 
   useEffect(() => {
     let hiddenAt: number | null = null;
@@ -85,9 +110,19 @@ export function CardActions({
         {t("card.refresh")}
       </Button>
       {showWallet ? (
-        <ButtonLink href={walletHref} variant="secondary" fullWidth>
-          {t("card.addToWallet")}
-        </ButtonLink>
+        <div className="flex flex-col gap-2">
+          {googleProblem ? <Alert tone="danger">{googleProblem}</Alert> : null}
+          {googleSuccess ? <Alert tone="success">{t("wallet.statusAdded")}</Alert> : null}
+          <WalletButton
+            provider="GOOGLE"
+            label={t("wallet.addGoogle")}
+            loading={savingGoogle}
+            onClick={() => void addToGoogleWallet()}
+          />
+          <ButtonLink href={walletHref} variant="secondary" fullWidth>
+            {t("card.addToWallet")}
+          </ButtonLink>
+        </div>
       ) : null}
       <div className="flex flex-col gap-1 border-t border-border pt-3">
         <Button variant="ghost" fullWidth onClick={() => setConfirm("marketing")}>

@@ -162,6 +162,37 @@ describe('validateEnv', () => {
       expect(err).not.toContain('GOOGLE_');
     });
 
+    it('requires Google credentials when Google is enabled in live mode', () => {
+      const live = {
+        ...valid,
+        WALLET_MODE: 'live',
+        WALLET_GOOGLE_ENABLED: 'true',
+        WALLET_BARCODE_SECRET: secret,
+        WALLET_PUBLIC_BASE_URL: 'https://api.example.test',
+      };
+      // Missing issuer ID and credentials
+      expect(() => validateEnv(live)).toThrow(/GOOGLE_WALLET_ISSUER_ID/);
+      expect(() => validateEnv(live)).toThrow(/GOOGLE_WALLET_SERVICE_ACCOUNT_KEY_PATH/);
+
+      // Works with key path
+      expect(() =>
+        validateEnv({
+          ...live,
+          GOOGLE_WALLET_ISSUER_ID: '1234567890',
+          GOOGLE_WALLET_SERVICE_ACCOUNT_KEY_PATH: '/path/to/key.json',
+        }),
+      ).not.toThrow();
+
+      // Works with private key directly
+      expect(() =>
+        validateEnv({
+          ...live,
+          GOOGLE_WALLET_ISSUER_ID: '1234567890',
+          GOOGLE_WALLET_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\nMIIE...',
+        }),
+      ).not.toThrow();
+    });
+
     it('requires https links in live mode', () => {
       expect(() =>
         validateEnv({

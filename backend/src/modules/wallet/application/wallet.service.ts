@@ -240,6 +240,50 @@ export class WalletService {
   }
 
   /**
+   * Generates or retrieves an Add-to-Wallet link for a customer membership.
+   * Enforces tenant isolation: the caller must be a staff member of the membership's merchant.
+   */
+  async addLinkForMembership(
+    actor: MerchantActor,
+    membershipId: string,
+    provider: WalletProviderKey,
+  ): Promise<AddLink & { provider: WalletProviderKey }> {
+    const membership = await this.memberships.findById(actor.merchantId, membershipId);
+    if (!membership || membership.status !== 'ACTIVE') {
+      throw new DomainError(ErrorCode.NOT_FOUND, 'Membership not found or inactive.', 404);
+    }
+    const adapter = this.providers.require(provider);
+    try {
+      const pass = await this.ensurePass(membership, provider);
+      const state = await this.states.build(pass, this.secret);
+      const link = await adapter.addLink(
+        { passId: pass.id, providerPassId: pass.providerPassId },
+        state,
+      );
+      return { provider, ...link };
+    } catch (err) {
+      if (err instanceof WalletProviderError) throw providerDown();
+      throw err;
+    }
+  }
+
+  /**
+   * Creates or retrieves a wallet pass row and provisions it at the provider.
+   */
+  async createPassForMembership(
+    actor: MerchantActor,
+    membershipId: string,
+    provider: WalletProviderKey,
+  ): Promise<PassRow> {
+    const membership = await this.memberships.findById(actor.merchantId, membershipId);
+    if (!membership || membership.status !== 'ACTIVE') {
+      throw new DomainError(ErrorCode.NOT_FOUND, 'Membership not found or inactive.', 404);
+    }
+    this.providers.require(provider);
+    return this.ensurePass(membership, provider);
+  }
+
+  /**
    * Revokes every Apple and Google pass of a membership (lost or stolen phone). The pass rows are kept for
    * history, their barcodes stop being accepted at once, and wallets are told to void them. The web card
    * and card token are unaffected; the customer can add a fresh pass afterwards.

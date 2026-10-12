@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.json.key
+secrets/
+node_modules/
+dist/
+.next/

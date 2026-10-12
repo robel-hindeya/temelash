@@ -41,7 +41,7 @@ const FIELD_MESSAGE = {
   acceptTerms: "enrollment.consentRequired",
 } as const;
 
-export function EnrollmentFlow({ joinReference, consentVersion, terms }: Props) {
+export function EnrollmentFlow({ joinReference, consentVersion, terms: _terms }: Props) {
   const { t, locale } = useI18n();
   const router = useRouter();
   const schema = useMemo(() => createEnrollmentSchema(t), [t]);

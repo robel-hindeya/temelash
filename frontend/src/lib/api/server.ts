@@ -1,6 +1,6 @@
 import "server-only";
 import { getServerEnv } from "@/lib/config/server-env";
-import { createHttpTransport, type Transport } from "./http";
+import { createHttpTransport, type RequestSpec, type Transport, type TransportResponse } from "./http";
 import { createApi, type Api } from "./index";
 import { consoleApiLogger } from "./safe-log";
 
@@ -43,7 +43,7 @@ export async function createServerTransport(options: ServerApiOptions = {}): Pro
 
   if (allowMock) {
     return {
-      async request<T>(spec: any): Promise<T> {
+      async request<T>(spec: RequestSpec): Promise<T> {
         try {
           return await http.request<T>(spec);
         } catch {
@@ -57,7 +57,7 @@ export async function createServerTransport(options: ServerApiOptions = {}): Pro
           return mock.request<T>(spec);
         }
       },
-      async requestWithMeta<T>(spec: any): Promise<any> {
+      async requestWithMeta<T>(spec: RequestSpec): Promise<TransportResponse<T>> {
         try {
           return await http.requestWithMeta<T>(spec);
         } catch {

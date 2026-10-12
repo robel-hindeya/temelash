@@ -1,7 +1,8 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/components/ui";
+import { cardClient } from "@/features/card/card-client";
 import type { WebCard } from "@/lib/api/contract";
 import { createFormatter } from "@/lib/i18n/format";
 import { I18nProvider } from "@/lib/i18n/client";
@@ -108,11 +109,45 @@ describe("WebCardView, active card", () => {
       "href",
       "/en/card/wallet?c=card-1",
     );
+    expect(screen.getByRole("button", { name: "Add to Google Wallet" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Stop marketing messages" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Remove this card from this phone" }),
     ).toBeInTheDocument();
+  });
+
+  it("calls backend to obtain signed Google Wallet URL and redirects on click", async () => {
+    const assign = vi.fn();
+    Object.defineProperty(window, "location", {
+      value: { assign, href: "http://localhost:3001" },
+      writable: true,
+    });
+    const spy = vi.spyOn(cardClient, "walletLink").mockResolvedValueOnce({
+      kind: "REDIRECT",
+      url: "https://pay.google.com/gp/v/save/mock-signed-jwt",
+    });
+
+    show(base(3, 0));
+    const googleBtn = screen.getByRole("button", { name: "Add to Google Wallet" });
+    fireEvent.click(googleBtn);
+
+    await waitFor(() => {
+      expect(spy).toHaveBeenCalledWith("GOOGLE", "card-1");
+      expect(assign).toHaveBeenCalledWith("https://pay.google.com/gp/v/save/mock-signed-jwt");
+    });
+  });
+
+  it("shows error feedback when obtaining Google Wallet URL fails", async () => {
+    vi.spyOn(cardClient, "walletLink").mockRejectedValueOnce(new Error("Network failed"));
+
+    show(base(3, 0));
+    const googleBtn = screen.getByRole("button", { name: "Add to Google Wallet" });
+    fireEvent.click(googleBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("We could not open that wallet. Try the web card instead.")).toBeInTheDocument();
+    });
   });
 
   it("offers the support link when one is configured, and always the staff", () => {

@@ -92,7 +92,6 @@ import {
   MOCK_BRANCHES,
   MOCK_CONSENT_VERSION,
   MOCK_JOIN_INFO,
-  MOCK_PASSWORD,
   isValidMockPassword,
   REJECTION_MESSAGES,
   accessTokenFor,

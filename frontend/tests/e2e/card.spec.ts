@@ -261,7 +261,6 @@ test.describe("after signing up", () => {
     });
     await page.goto("/en/join/sample-cafe");
     await expect(page.locator('form[data-hydrated="true"]')).toBeVisible();
-    const tail = String(Math.floor(Math.random() * 9000) + 1000);
     await page.getByLabel(/^First name/).fill("Selam");
     if ((await page.getByText(/^I agree to the terms/).count()) > 0) {
       await page.getByText(/^I agree to the terms/).click();
