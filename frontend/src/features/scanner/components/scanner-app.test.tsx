@@ -87,6 +87,11 @@ async function enterCode(user: ReturnType<typeof userEvent.setup>, code = "mock-
   await user.click(screen.getByRole("button", { name: "Look up" }));
 }
 
+async function enterPassword(user: ReturnType<typeof userEvent.setup>, password = "Password123!") {
+  const input = await screen.findByLabelText(/^Password/);
+  await user.type(input, password);
+}
+
 function setOnline(value: boolean) {
   Object.defineProperty(window.navigator, "onLine", { configurable: true, value });
   act(() => {
@@ -127,10 +132,30 @@ describe("ScannerApp", () => {
     expect(stamp).not.toHaveBeenCalled();
   });
 
+  it("requires a password before adding a stamp and shows an error if empty", async () => {
+    const user = setup();
+    await enterCode(user);
+    await user.click(await screen.findByRole("button", { name: "Add stamp" }));
+    expect(stamp).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enter password to add stamp.");
+  });
+
+  it("toggles password visibility with show/hide button", async () => {
+    const user = setup();
+    await enterCode(user);
+    const input = await screen.findByLabelText(/^Password/);
+    expect(input).toHaveAttribute("type", "password");
+    await user.click(screen.getByRole("button", { name: "Show password" }));
+    expect(input).toHaveAttribute("type", "text");
+    await user.click(screen.getByRole("button", { name: "Hide password" }));
+    expect(input).toHaveAttribute("type", "password");
+  });
+
   it("adds a stamp with a unique idempotency key and shows success only after the backend confirms", async () => {
     stamp.mockResolvedValue(stamped);
     const user = setup();
     await enterCode(user);
+    await enterPassword(user);
     await user.click(await screen.findByRole("button", { name: "Add stamp" }));
 
     const success = await screen.findByTestId("scan-success");
@@ -150,9 +175,11 @@ describe("ScannerApp", () => {
     stamp.mockResolvedValue(stamped);
     const user = setup();
     await enterCode(user);
+    await enterPassword(user);
     await user.click(await screen.findByRole("button", { name: "Add stamp" }));
     await user.click(await screen.findByRole("button", { name: "Scan next card" }));
     await enterCode(user);
+    await enterPassword(user);
     await user.click(await screen.findByRole("button", { name: "Add stamp" }));
     await waitFor(() => expect(stamp).toHaveBeenCalledTimes(2));
     expect(stamp.mock.calls[0]![1]).not.toBe(stamp.mock.calls[1]![1]);
@@ -163,6 +190,7 @@ describe("ScannerApp", () => {
     stamp.mockReturnValue(new Promise((resolve) => (finish = resolve)));
     const user = setup();
     await enterCode(user);
+    await enterPassword(user);
     const button = await screen.findByRole("button", { name: "Add stamp" });
     await user.tripleClick(button);
     expect(stamp).toHaveBeenCalledTimes(1);
@@ -344,6 +372,7 @@ describe("ScannerApp", () => {
       );
       const user = setup();
       await enterCode(user);
+      await enterPassword(user);
       await user.click(await screen.findByRole("button", { name: "Add stamp" }));
       const problem = await screen.findByTestId("scan-problem");
       expect(
@@ -360,6 +389,7 @@ describe("ScannerApp", () => {
       stamp.mockResolvedValueOnce({ ...stamped, replayed: true });
       const user = setup();
       await enterCode(user);
+      await enterPassword(user);
       await user.click(await screen.findByRole("button", { name: "Add stamp" }));
       await user.click(await screen.findByRole("button", { name: "Check again" }));
       expect(await screen.findByTestId("scan-success")).toBeInTheDocument();
@@ -429,6 +459,7 @@ describe("ScannerApp", () => {
       stamp.mockResolvedValue(stamped);
       const user = setup();
       await enterCode(user);
+      await enterPassword(user);
       await user.click(await screen.findByRole("button", { name: "Add stamp" }));
       await user.click(await screen.findByRole("button", { name: "Scan next card" }));
       const list = await screen.findByTestId("recent-list");
