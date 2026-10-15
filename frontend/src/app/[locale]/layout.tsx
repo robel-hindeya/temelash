@@ -35,11 +35,16 @@ export async function generateMetadata({ params }: Pick<Props, "params">): Promi
     title: { default: t("common.appName"), template: `%s | ${t("common.appName")}` },
     description: t("common.tagline"),
     applicationName: t("common.appName"),
+    icons: {
+      icon: "/logo.png",
+      apple: "/logo.png",
+    },
     openGraph: {
       title: t("common.appName"),
       description: t("common.tagline"),
       locale: localeTags[locale].replace("-", "_"),
       type: "website",
+      images: [{ url: "/logo.png" }],
     },
   };
 }
