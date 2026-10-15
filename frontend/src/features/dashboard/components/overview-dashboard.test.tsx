@@ -10,7 +10,6 @@ import { am } from "@/lib/i18n/messages/am";
 import { en } from "@/lib/i18n/messages/en";
 import {
   MOCK_DEFINITIONS,
-  auditFor,
   branchesFor,
   monthlyReturningFor,
   overviewFor,
@@ -25,14 +24,12 @@ const monthlyReturning = vi.fn();
 const branches = vi.fn();
 const wallet = vi.fn();
 const definitions = vi.fn();
-const auditList = vi.fn();
 const replace = vi.fn();
 let search = "";
 
 vi.mock("@/lib/api/browser", () => ({
   getBrowserApi: () => ({
     analytics: { overview, monthlyReturning, branches, wallet, definitions },
-    audit: { list: auditList },
   }),
 }));
 vi.mock("next/navigation", () => ({
@@ -61,14 +58,12 @@ function useBackendDefaults() {
     Promise.resolve(walletFor(rangeOf(range))),
   );
   definitions.mockResolvedValue(MOCK_DEFINITIONS);
-  auditList.mockResolvedValue(auditFor(8, NOW));
 }
 
 function show(
   options: {
     locale?: "en" | "am";
     analytics?: boolean;
-    audit?: boolean;
     timeZone?: string;
   } = {},
 ) {
@@ -83,7 +78,6 @@ function show(
             timeZone={options.timeZone ?? "Africa/Addis_Ababa"}
             today={TODAY}
             canReadAnalytics={options.analytics ?? true}
-            canReadAudit={options.audit ?? true}
           />
         </ToastProvider>
       </I18nProvider>
@@ -101,7 +95,6 @@ beforeEach(() => {
     branches,
     wallet,
     definitions,
-    auditList,
     replace,
   ]) {
     mock.mockReset();
@@ -113,9 +106,8 @@ beforeEach(() => {
 describe("requests", () => {
   it("asks the backend for each section exactly once", async () => {
     show();
-    await screen.findByTestId("events-list");
     await waitFor(() => expect(wallet).toHaveBeenCalled());
-    for (const call of [overview, branches, wallet, definitions, auditList]) {
+    for (const call of [overview, branches, wallet, definitions]) {
       expect(call).toHaveBeenCalledTimes(1);
     }
   });
@@ -130,8 +122,6 @@ describe("OverviewDashboard figures", () => {
       expect(card("New members")).toHaveTextContent(format.format(expected.newMembers)),
     );
     expect(card("All Users")).toHaveTextContent(format.format(expected.totalCustomers!));
-    expect(card("Rewards redeemed")).toHaveTextContent(format.format(expected.rewardsRedeemed));
-    expect(card("Redemption rate")).toHaveTextContent("80%");
   });
 
   it("asks the backend for the chosen days, and for nothing else to be worked out in the browser", async () => {
@@ -141,26 +131,6 @@ describe("OverviewDashboard figures", () => {
     expect(branches.mock.calls[0]![0]).toEqual({ from: "2026-09-09", to: "2026-10-08" });
     expect(wallet.mock.calls[0]![0]).toEqual({ from: "2026-09-09", to: "2026-10-08" });
   });
-
-  it("never shows a missing ratio as 0%", async () => {
-    overview.mockResolvedValue({
-      ...overviewFor(last30),
-      rewardsUnlocked: 0,
-      rewardsRedeemed: 0,
-      redemptionRate: null,
-    });
-    show();
-    await waitFor(() => expect(card("Redemption rate")).toHaveTextContent("—"));
-    expect(card("Redemption rate")).toHaveTextContent("No rewards were unlocked in this period.");
-    expect(card("Redemption rate")).not.toHaveTextContent("0%");
-  });
-
-  it("shows a ratio above 100% as the backend defined it", async () => {
-    overview.mockResolvedValue({ ...overviewFor(last30), redemptionRate: 1.25 });
-    show();
-    await waitFor(() => expect(card("Redemption rate")).toHaveTextContent("125%"));
-  });
-
 
   it("offers the backend's own definitions", async () => {
     const user = show();
@@ -172,7 +142,6 @@ describe("OverviewDashboard figures", () => {
   it("has no money anywhere: no revenue, sales, order value, payments, billing or subscriptions", async () => {
     show();
     await waitFor(() => expect(card("New members")).toHaveTextContent(/\d/));
-    await screen.findByTestId("events-list");
     expect(document.body.textContent).not.toMatch(
       /revenue|sales|order value|average order|payment|billing|subscription|price|\bETB\b|\bbirr\b|\$/i,
     );
@@ -212,7 +181,6 @@ describe("loading, empty, partial and error states", () => {
     expect(screen.getByText("Some information could not be loaded")).toBeInTheDocument();
     // Everything else is still there.
     await waitFor(() => expect(card("New members")).toHaveTextContent(/\d/));
-    expect(await screen.findByTestId("events-list")).toBeInTheDocument();
 
     await user.click(within(section).getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(section).toHaveAttribute("data-state", "ready"));
@@ -234,18 +202,9 @@ describe("permissions", () => {
     show({ analytics: false });
     expect(screen.getByText(/does not include loyalty statistics/)).toBeInTheDocument();
     expect(screen.queryByRole("article", { name: "New members" })).not.toBeInTheDocument();
-    await waitFor(() => expect(auditList).toHaveBeenCalled());
     for (const mock of [overview, branches, wallet, definitions]) {
       expect(mock).not.toHaveBeenCalled();
     }
-  });
-
-  it("asks for no activity history without audit:read", async () => {
-    show({ audit: false });
-    expect(screen.getByText(/does not include the activity history/)).toBeInTheDocument();
-    await waitFor(() => expect(overview).toHaveBeenCalled());
-    expect(auditList).not.toHaveBeenCalled();
-    expect(screen.queryByText("Recent operational events")).not.toBeInTheDocument();
   });
 });
 
@@ -298,44 +257,14 @@ describe("date range and time zone", () => {
     });
   });
 
-  it("states the business time zone and shows event times in it", async () => {
-    // 21:30 UTC on 8 October is already 9 October in Addis Ababa (UTC+3), but still the 8th in Los Angeles.
-    auditList.mockResolvedValue({
-      items: [
-        {
-          id: "e1",
-          occurredAt: "2026-10-08T21:30:00Z",
-          action: "stamp.issued",
-          actor: { type: "USER", userId: "u", displayName: "Selam Cashier" },
-          branchId: null,
-          targetType: null,
-          targetId: null,
-        },
-      ],
-      nextCursor: null,
-    });
+  it("states the business time zone", async () => {
     show({ timeZone: "Africa/Addis_Ababa" });
     expect(screen.getByTestId("range-summary")).toHaveTextContent("time zone: Africa/Addis_Ababa");
-    expect(await screen.findByText(/Oct 9, 2026/)).toBeInTheDocument();
   });
 
   it("uses another business time zone when the business has one", async () => {
-    auditList.mockResolvedValue({
-      items: [
-        {
-          id: "e1",
-          occurredAt: "2026-10-08T21:30:00Z",
-          action: "stamp.issued",
-          actor: { type: "USER", userId: "u", displayName: "Selam Cashier" },
-          branchId: null,
-          targetType: null,
-          targetId: null,
-        },
-      ],
-      nextCursor: null,
-    });
     show({ timeZone: "America/Los_Angeles" });
-    expect(await screen.findByText(/Oct 8, 2026/)).toBeInTheDocument();
+    expect(screen.getByTestId("range-summary")).toHaveTextContent("time zone: America/Los_Angeles");
   });
 });
 
@@ -348,18 +277,7 @@ describe("branch table accessibility", () => {
   });
 });
 
-describe("recent events and wallet health", () => {
-  it("translates known events and shows unknown ones honestly", async () => {
-    show();
-    const list = await screen.findByTestId("events-list");
-    expect(within(list).getByText("Stamp added")).toBeInTheDocument();
-    expect(within(list).getByText("Team role changed")).toBeInTheDocument();
-    expect(within(list).getByText("Other activity (some.future_action)")).toBeInTheDocument();
-    expect(within(list).getAllByText(/System/).length).toBeGreaterThan(0);
-    // No customer details: only an action, who did it, and when.
-    expect(list.textContent).not.toMatch(/\+251|phone|card/i);
-  });
-
+describe("wallet health", () => {
   it("reports wallet update health with the backend's own counts", async () => {
     show();
     const section = await screen.findByTestId("section-wallet");

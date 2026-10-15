@@ -51,7 +51,6 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
         timeZone={timeZone}
         today={todayIn(timeZone)}
         canReadAnalytics={can("analytics:read")}
-        canReadAudit={can("audit:read")}
       />
     </I18nProvider>
   );

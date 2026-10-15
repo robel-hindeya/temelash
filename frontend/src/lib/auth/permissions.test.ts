@@ -26,10 +26,8 @@ const MERCHANT_PATHS = [
   "/dashboard/branches",
   "/dashboard/team",
   "/dashboard/customers",
-  "/dashboard/rewards",
   "/dashboard/campaigns",
   "/dashboard/analytics",
-  "/dashboard/audit",
   "/dashboard/settings",
 ];
 const OPERATIONS_PATHS = [
@@ -137,18 +135,11 @@ describe("navigation by role", () => {
       "branches",
       "team",
       "customers",
-      "rewards",
       "campaigns",
       "analytics",
-      "audit",
-      "fraud",
-      "privacy",
       "settings",
     ]);
-    // Managers read fraud flags but do not manage privacy (owners only).
-    expect(ids("merchant", manager)).toEqual(
-      ids("merchant", owner).filter((id) => id !== "privacy"),
-    );
+    expect(ids("merchant", manager)).toEqual(ids("merchant", owner));
   });
 
   it("shows branch staff nothing of the dashboard and the scanner entries only", () => {
@@ -176,7 +167,7 @@ describe("navigation by role", () => {
       kind: "merchant",
       permissions: ["merchant:read", "customer:read"],
     };
-    expect(ids("merchant", readOnly)).toEqual(["overview", "customers", "rewards"]);
+    expect(ids("merchant", readOnly)).toEqual(["overview", "customers"]);
   });
 
   it("every visible link is also an allowed route (navigation can never offer a forbidden page)", () => {

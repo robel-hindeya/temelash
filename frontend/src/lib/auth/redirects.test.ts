@@ -91,7 +91,7 @@ describe("safeNextPath", () => {
 
   it("refuses a destination the person is not allowed to open", () => {
     expect(safe("/dashboard/analytics", owner)).toBe("/en/dashboard/analytics");
-    expect(safe("/dashboard/audit", owner)).toBeNull();
+    expect(safe("/dashboard/settings", owner)).toBeNull();
     expect(safe("/operations", owner)).toBeNull();
     expect(safe("/staff/scanner", owner)).toBe("/en/staff/scanner");
   });

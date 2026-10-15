@@ -14,7 +14,6 @@ import {
   TR,
   RowHeader,
 } from "@/components/ui";
-import { ACTION_LABEL } from "@/features/org/action-labels";
 import { pickLocalized } from "@/features/enrollment/localized";
 import { createFormatter } from "@/lib/i18n/format";
 import { useI18n } from "@/lib/i18n/client";
@@ -24,7 +23,6 @@ import {
   useBranchActivity,
   useDefinitions,
   useOverview,
-  useRecentEvents,
   useWalletHealth,
 } from "../use-dashboard-data";
 import { DateRangeControl } from "./date-range-control";
@@ -46,13 +44,11 @@ export function OverviewDashboard({
   timeZone,
   today,
   canReadAnalytics,
-  canReadAudit,
 }: {
   timeZone: string;
   /** Today's date in the business time zone, decided on the server so the first render matches it. */
   today: string;
   canReadAnalytics: boolean;
-  canReadAudit: boolean;
 }) {
   const { t, locale } = useI18n();
   const format = useMemo(() => createFormatter(locale, timeZone), [locale, timeZone]);
@@ -65,10 +61,9 @@ export function OverviewDashboard({
   const branches = useBranchActivity(range, canReadAnalytics);
   const wallet = useWalletHealth(range, canReadAnalytics);
   const definitions = useDefinitions(canReadAnalytics);
-  const events = useRecentEvents(canReadAudit);
 
   const go = (query: string) => router.replace(`${pathname}${query}`, { scroll: false });
-  const failedSections = [overview, branches, wallet, events].filter(
+  const failedSections = [overview, branches, wallet].filter(
     (q) => q.isError,
   ).length;
 
@@ -116,11 +111,11 @@ export function OverviewDashboard({
 
           <section
             aria-label={t("dashboard.thisPeriod")}
-            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            className="grid gap-4 sm:grid-cols-2"
           >
             <MetricCard
               emphasis
-              className="sm:col-span-2 lg:col-span-3"
+              className="sm:col-span-2"
               label={t("dashboard.allUsers")}
               loading={
                 (overview.isPending && wallet.isPending) ||
@@ -140,26 +135,6 @@ export function OverviewDashboard({
               loading={overview.isPending}
               value={data ? n(data.newMembers) : "—"}
               hint={t("dashboard.thisPeriod")}
-            />
-            <MetricCard
-              label={t("dashboard.rewardsRedeemed")}
-              loading={overview.isPending}
-              value={data ? n(data.rewardsRedeemed) : "—"}
-              hint={t("dashboard.thisPeriod")}
-            />
-            <MetricCard
-              label={t("dashboard.redemptionRate")}
-              loading={overview.isPending}
-              // The backend's own ratio, shown as a percentage. It can exceed 100% and is null (shown as a dash,
-              // never 0%) when nothing was unlocked.
-              value={
-                data && data.redemptionRate !== null ? format.percent(data.redemptionRate) : "—"
-              }
-              hint={
-                data && data.redemptionRate === null
-                  ? t("dashboard.redemptionRateNone")
-                  : t("dashboard.thisPeriod")
-              }
             />
           </section>
 
@@ -302,44 +277,6 @@ export function OverviewDashboard({
             </DashboardSection>
           </div>
         </>
-      )}
-
-      {canReadAudit ? (
-        <DashboardSection
-          id="events"
-          title={t("dashboard.eventsTitle")}
-          query={events}
-          empty={
-            events.data && events.data.items.length === 0 ? (
-              <EmptyState title={t("dashboard.eventsEmpty")} />
-            ) : undefined
-          }
-        >
-          {events.data ? (
-            <ol className="flex flex-col divide-y divide-border" data-testid="events-list">
-              {events.data.items.map((event) => {
-                const key = ACTION_LABEL[event.action];
-                return (
-                  <li
-                    key={event.id}
-                    className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2"
-                  >
-                    <span className="font-medium">
-                      {key ? t(key) : t("dashboard.actionOther", { code: event.action })}
-                    </span>
-                    <span className="text-sm text-muted">
-                      {event.actor.displayName ?? t("dashboard.actorSystem")}
-                      {" · "}
-                      <time dateTime={event.occurredAt}>{format.dateTime(event.occurredAt)}</time>
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
-          ) : null}
-        </DashboardSection>
-      ) : (
-        <Alert tone="info">{t("dashboard.noAuditAccess")}</Alert>
       )}
     </div>
   );
