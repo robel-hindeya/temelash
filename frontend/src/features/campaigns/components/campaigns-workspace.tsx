@@ -122,12 +122,19 @@ export function CampaignsWorkspace() {
   }
 
   const preview = (
-    <Alert tone="warning" title={t("campaigns.previewTitle")} className="shadow-xs">
-      <div className="flex flex-col gap-1 text-sm">
-        <p>{t("campaigns.previewBody")}</p>
-        <p className="font-medium text-amber-900">{t("campaigns.consentNote")}</p>
-      </div>
-    </Alert>
+    <div className="rounded-2xl border border-gold-300/80 bg-gradient-to-r from-gold-50 via-cream-50 to-gold-50/60 p-4 shadow-2xs">
+      <Alert tone="warning" title={t("campaigns.previewTitle")} className="border-0 bg-transparent p-0 shadow-none">
+        <div className="flex flex-col gap-1 text-sm text-charcoal-800">
+          <p>{t("campaigns.previewBody")}</p>
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-900 bg-gold-200/60 px-2.5 py-0.5 rounded-full border border-gold-300/60">
+              <ShieldCheckIcon size={12} />
+              {t("campaigns.consentNote")}
+            </span>
+          </div>
+        </div>
+      </Alert>
+    </div>
   );
 
   if (list.isPending) {
@@ -223,12 +230,12 @@ export function CampaignsWorkspace() {
 
       {/* Metric Highlights */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="flex flex-col justify-between rounded-2xl border border-border/70 bg-surface p-5 shadow-xs">
+        <div className="flex flex-col justify-between rounded-2xl border border-border/80 bg-surface p-5 shadow-xs hover:border-primary/40 hover:-translate-y-0.5 transition-all duration-200">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">
               {"Total Campaigns"}
             </span>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-50 text-primary">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-50 text-primary border border-green-200/60 shadow-2xs">
               <MegaphoneIcon size={18} />
             </span>
           </div>
@@ -238,12 +245,12 @@ export function CampaignsWorkspace() {
           </div>
         </div>
 
-        <div className="flex flex-col justify-between rounded-2xl border border-border/70 bg-surface p-5 shadow-xs">
+        <div className="flex flex-col justify-between rounded-2xl border border-border/80 bg-surface p-5 shadow-xs hover:border-amber-300 hover:-translate-y-0.5 transition-all duration-200">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">
               {"Drafts in Progress"}
             </span>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700 border border-amber-200/60 shadow-2xs">
               <EditIcon size={18} />
             </span>
           </div>
@@ -253,12 +260,12 @@ export function CampaignsWorkspace() {
           </div>
         </div>
 
-        <div className="flex flex-col justify-between rounded-2xl border border-border/70 bg-surface p-5 shadow-xs">
+        <div className="flex flex-col justify-between rounded-2xl border border-border/80 bg-surface p-5 shadow-xs hover:border-emerald-300 hover:-translate-y-0.5 transition-all duration-200">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">
               {"Sent Campaigns"}
             </span>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-2xs">
               <SendIcon size={18} />
             </span>
           </div>
@@ -268,12 +275,12 @@ export function CampaignsWorkspace() {
           </div>
         </div>
 
-        <div className="flex flex-col justify-between rounded-2xl border border-border/70 bg-surface p-5 shadow-xs">
+        <div className="flex flex-col justify-between rounded-2xl border border-border/80 bg-surface p-5 shadow-xs hover:border-blue-300 hover:-translate-y-0.5 transition-all duration-200">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">
               {"Opt-in Audience"}
             </span>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700 border border-blue-200/60 shadow-2xs">
               <ShieldCheckIcon size={18} />
             </span>
           </div>
@@ -327,16 +334,48 @@ export function CampaignsWorkspace() {
       ) : null}
 
       {items.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-surface p-12 text-center shadow-xs">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-green-50 text-primary shadow-2xs">
-            <MegaphoneIcon size={32} />
+        <div className="rounded-3xl border border-border/80 bg-gradient-to-b from-surface via-cream-50/40 to-surface p-8 sm:p-12 text-center shadow-xs">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-green-50 text-primary shadow-xs ring-8 ring-green-50/50">
+            <MegaphoneIcon size={36} />
           </div>
-          <h3 className="mt-4 text-xl font-bold text-green-950">{t("campaigns.empty")}</h3>
-          <p className="mt-2 text-sm text-muted max-w-md mx-auto">{t("campaigns.emptyHint")}</p>
-          <div className="mt-6">
-            <Button onClick={() => setCreating(true)} className="shadow-sm">
-              {t("campaigns.newCampaign")}
+          <h3 className="mt-6 text-2xl font-bold tracking-tight text-green-950 font-serif">{t("campaigns.empty")}</h3>
+          <p className="mt-2 text-sm text-muted max-w-lg mx-auto leading-relaxed">{t("campaigns.emptyHint")}</p>
+          <div className="mt-6 flex justify-center">
+            <Button size="lg" onClick={() => setCreating(true)} className="shadow-md font-semibold px-6 py-2.5 text-base flex items-center justify-center gap-2">
+              <PlusIcon size={18} />
+              <span>{t("campaigns.newCampaign")}</span>
             </Button>
+          </div>
+
+          {/* Value proposition pillars */}
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-4 text-left border-t border-border/60 pt-8">
+            <div className="p-4 rounded-2xl bg-surface/90 border border-border/70 shadow-2xs hover:border-primary/30 transition-all">
+              <div className="flex items-center gap-2 text-primary font-bold text-sm mb-1.5">
+                <SendIcon size={16} />
+                <span>{"Mobile Pass Updates"}</span>
+              </div>
+              <p className="text-xs text-muted leading-relaxed">
+                {"Broadcast promotional notifications that appear right on customer Apple & Google Wallet passes."}
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl bg-surface/90 border border-border/70 shadow-2xs hover:border-amber-300 transition-all">
+              <div className="flex items-center gap-2 text-amber-700 font-bold text-sm mb-1.5">
+                <EditIcon size={16} />
+                <span>{"Bonus Stamps & Events"}</span>
+              </div>
+              <p className="text-xs text-muted leading-relaxed">
+                {"Incentivize return visits during slow hours with double-stamp specials and seasonal announcements."}
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl bg-surface/90 border border-border/70 shadow-2xs hover:border-emerald-300 transition-all">
+              <div className="flex items-center gap-2 text-emerald-700 font-bold text-sm mb-1.5">
+                <ShieldCheckIcon size={16} />
+                <span>{"100% Consent Protected"}</span>
+              </div>
+              <p className="text-xs text-muted leading-relaxed">
+                {"Automated opt-in verification ensures complete compliance with customer privacy preferences."}
+              </p>
+            </div>
           </div>
         </div>
       ) : (
@@ -519,6 +558,7 @@ function CampaignForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
       dismissible={!create.isPending}
       title={t("campaigns.formTitle")}
       description={t("campaigns.consentNote")}
+      className="w-[min(58rem,calc(100vw-2rem))] max-w-5xl"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={create.isPending}>
@@ -596,7 +636,7 @@ function CampaignForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
           </div>
 
           {/* Live Mobile Simulator Preview Column */}
-          <div className="lg:col-span-5 flex flex-col gap-2.5 bg-cream-50/70 p-4 rounded-2xl border border-border/70">
+          <div className="lg:col-span-5 flex flex-col gap-3 bg-cream-50/70 p-4 rounded-2xl border border-border/80">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-muted uppercase tracking-wider">
                 {"Live Customer Preview"}
@@ -605,8 +645,8 @@ function CampaignForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
                 <button
                   type="button"
                   onClick={() => setPreviewTab("en")}
-                  className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                    previewTab === "en" ? "bg-primary text-white" : "text-muted"
+                  className={`px-2.5 py-0.5 rounded text-xs font-semibold transition-all ${
+                    previewTab === "en" ? "bg-primary text-white shadow-2xs" : "text-muted hover:text-foreground"
                   }`}
                 >
                   EN
@@ -614,8 +654,8 @@ function CampaignForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
                 <button
                   type="button"
                   onClick={() => setPreviewTab("am")}
-                  className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                    previewTab === "am" ? "bg-primary text-white" : "text-muted"
+                  className={`px-2.5 py-0.5 rounded text-xs font-semibold transition-all ${
+                    previewTab === "am" ? "bg-primary text-white shadow-2xs" : "text-muted hover:text-foreground"
                   }`}
                 >
                   AM
@@ -623,15 +663,16 @@ function CampaignForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
               </div>
             </div>
 
-            {/* Smartphone Card Simulator */}
-            <div className="rounded-xl border border-charcoal-800 bg-charcoal-900 p-4 text-white shadow-md flex flex-col gap-3">
-              <div className="flex items-center justify-between border-b border-charcoal-700/60 pb-2 text-[10px] text-charcoal-400">
+            {/* Smartphone Device Simulator */}
+            <div className="rounded-[2rem] border-[4px] border-charcoal-700 bg-charcoal-950 p-4 text-white shadow-xl flex flex-col gap-3">
+              <div className="flex items-center justify-between border-b border-charcoal-800 pb-2 text-[10px] text-charcoal-400">
                 <span className="font-semibold text-charcoal-200">{"9:41"}</span>
+                <span className="h-2 w-14 rounded-full bg-charcoal-800" />
                 <span>{"Temelash Card"}</span>
               </div>
-              <div className="flex items-start gap-2.5 bg-charcoal-800/80 p-3 rounded-lg border border-charcoal-700">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-green-700 text-white shadow-xs">
-                  <CoffeeIcon size={16} />
+              <div className="flex items-start gap-3 bg-charcoal-900/95 p-3.5 rounded-xl border border-charcoal-700/80 shadow-md">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-green-700 text-white shadow-xs">
+                  <CoffeeIcon size={18} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
@@ -645,9 +686,12 @@ function CampaignForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
                   </p>
                 </div>
               </div>
-              <div className="flex items-center justify-between text-[10px] text-charcoal-400 pt-1">
+              <div className="flex items-center justify-between text-[10px] text-charcoal-400 pt-1 border-t border-charcoal-800/80">
                 <span>{"Audience: "}{t(`campaigns.audience${audience}` as MessageKey)}</span>
-                <span className="text-emerald-400 font-semibold">{"100% Opt-in"}</span>
+                <span className="text-emerald-400 font-semibold inline-flex items-center gap-1">
+                  <CheckIcon size={11} />
+                  {"100% Opt-in"}
+                </span>
               </div>
             </div>
 
