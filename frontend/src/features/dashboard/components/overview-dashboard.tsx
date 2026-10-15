@@ -17,22 +17,14 @@ import {
 import { pickLocalized } from "@/features/enrollment/localized";
 import { createFormatter } from "@/lib/i18n/format";
 import { useI18n } from "@/lib/i18n/client";
-import type { MessageKey } from "@/lib/i18n/translator";
 import { paramsFor, rangeFromParams } from "../range";
 import {
   useBranchActivity,
   useDefinitions,
   useOverview,
-  useWalletHealth,
 } from "../use-dashboard-data";
 import { DateRangeControl } from "./date-range-control";
 import { DashboardSection } from "./section";
-
-const PROVIDER_LABEL: Record<string, MessageKey> = {
-  APPLE: "dashboard.walletApple",
-  GOOGLE: "dashboard.walletGoogle",
-  WEB: "dashboard.walletWeb",
-};
 
 /**
  * The merchant overview. Every figure is exactly what the backend returned for the chosen days, using the
@@ -59,17 +51,16 @@ export function OverviewDashboard({
 
   const overview = useOverview(range, canReadAnalytics);
   const branches = useBranchActivity(range, canReadAnalytics);
-  const wallet = useWalletHealth(range, canReadAnalytics);
   const definitions = useDefinitions(canReadAnalytics);
 
   const go = (query: string) => router.replace(`${pathname}${query}`, { scroll: false });
-  const failedSections = [overview, branches, wallet].filter(
+  const failedSections = [overview, branches].filter(
     (q) => q.isError,
   ).length;
 
   const n = (value: number) => format.integer(value);
   const data = overview.data;
-  const totalUsers = overview.data?.totalCustomers ?? wallet.data?.activeMemberships;
+  const totalUsers = overview.data?.totalCustomers;
   const quiet =
     data !== undefined &&
     data.stampsIssued.count === 0 &&
@@ -116,14 +107,11 @@ export function OverviewDashboard({
             <MetricCard
               emphasis
               label={t("dashboard.allUsers")}
-              loading={
-                (overview.isPending && wallet.isPending) ||
-                (totalUsers === undefined && (overview.isPending || wallet.isPending))
-              }
+              loading={overview.isPending}
               value={
                 totalUsers !== undefined
                   ? n(totalUsers)
-                  : overview.isError && wallet.isError
+                  : overview.isError
                     ? "—"
                     : ""
               }
@@ -174,7 +162,8 @@ export function OverviewDashboard({
               </dl>
             </details>
           ) : null}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+
+          <div className="grid grid-cols-1 gap-6">
             <DashboardSection
               id="branches"
               title={t("dashboard.branchesTitle")}
@@ -210,80 +199,6 @@ export function OverviewDashboard({
                     })}
                   </TBody>
                 </Table>
-              ) : null}
-            </DashboardSection>
-
-            <DashboardSection
-              id="wallet"
-              title={t("dashboard.walletTitle")}
-              query={wallet}
-              empty={
-                wallet.data && wallet.data.activeMemberships === 0 ? (
-                  <EmptyState title={t("dashboard.walletEmpty")} />
-                ) : undefined
-              }
-            >
-              {wallet.data ? (
-                <div className="flex flex-col gap-4">
-                  <div>
-                    <h3 className="font-semibold">{t("dashboard.walletAdoption")}</h3>
-                    <ul className="mt-1 flex flex-col gap-1">
-                      {wallet.data.providers.map((p) => (
-                        <li key={p.provider} className="flex flex-wrap justify-between gap-2">
-                          <span>{t(PROVIDER_LABEL[p.provider] ?? "dashboard.walletWeb")}</span>
-                          <span className="font-medium tabular-nums">
-                            {t("dashboard.walletOf", {
-                              count: n(p.memberships),
-                              total: n(wallet.data.activeMemberships),
-                            })}
-                            {p.adoptionRate !== null ? ` (${format.percent(p.adoptionRate)})` : ""}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">{t("dashboard.walletUpdates")}</h3>
-                    <p
-                      className="mt-1 text-2xl font-bold text-green-900 tabular-nums"
-                      data-testid="wallet-rate"
-                    >
-                      {wallet.data.updates.successRate === null
-                        ? "—"
-                        : format.percent(wallet.data.updates.successRate)}
-                    </p>
-                    <p className="text-sm text-muted">
-                      {wallet.data.updates.successRate === null
-                        ? t("dashboard.walletRateNone")
-                        : t("dashboard.walletRate")}
-                    </p>
-                    <ul className="mt-2 flex flex-col gap-0.5 text-charcoal-700">
-                      <li>
-                        {t("dashboard.walletSucceeded", {
-                          count: n(wallet.data.updates.succeeded),
-                        })}
-                      </li>
-                      <li>
-                        {t("dashboard.walletFailed", { count: n(wallet.data.updates.failed) })}
-                      </li>
-                      <li>
-                        {t("dashboard.walletQueued", { count: n(wallet.data.updates.stillQueued) })}
-                      </li>
-                      {wallet.data.updates.succeededAfterRetry > 0 ? (
-                        <li>
-                          {t("dashboard.walletRetried", {
-                            count: n(wallet.data.updates.succeededAfterRetry),
-                          })}
-                        </li>
-                      ) : null}
-                    </ul>
-                    {wallet.data.updates.failed > 0 ? (
-                      <Alert tone="warning" className="mt-3">
-                        {t("dashboard.walletFailedNote")}
-                      </Alert>
-                    ) : null}
-                  </div>
-                </div>
               ) : null}
             </DashboardSection>
           </div>

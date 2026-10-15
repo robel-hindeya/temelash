@@ -14,7 +14,6 @@ import {
   monthlyReturningFor,
   overviewFor,
   resolveMockRange,
-  walletFor,
   type RangeResult,
 } from "@/mocks/analytics-data";
 import { OverviewDashboard } from "./overview-dashboard";
@@ -22,14 +21,13 @@ import { OverviewDashboard } from "./overview-dashboard";
 const overview = vi.fn();
 const monthlyReturning = vi.fn();
 const branches = vi.fn();
-const wallet = vi.fn();
 const definitions = vi.fn();
 const replace = vi.fn();
 let search = "";
 
 vi.mock("@/lib/api/browser", () => ({
   getBrowserApi: () => ({
-    analytics: { overview, monthlyReturning, branches, wallet, definitions },
+    analytics: { overview, monthlyReturning, branches, definitions },
   }),
 }));
 vi.mock("next/navigation", () => ({
@@ -53,9 +51,6 @@ function useBackendDefaults() {
   );
   branches.mockImplementation((range: { from: string; to: string }) =>
     Promise.resolve(branchesFor(rangeOf(range))),
-  );
-  wallet.mockImplementation((range: { from: string; to: string }) =>
-    Promise.resolve(walletFor(rangeOf(range))),
   );
   definitions.mockResolvedValue(MOCK_DEFINITIONS);
 }
@@ -93,7 +88,6 @@ beforeEach(() => {
     overview,
     monthlyReturning,
     branches,
-    wallet,
     definitions,
     replace,
   ]) {
@@ -106,8 +100,8 @@ beforeEach(() => {
 describe("requests", () => {
   it("asks the backend for each section exactly once", async () => {
     show();
-    await waitFor(() => expect(wallet).toHaveBeenCalled());
-    for (const call of [overview, branches, wallet, definitions]) {
+    await waitFor(() => expect(branches).toHaveBeenCalled());
+    for (const call of [overview, branches, definitions]) {
       expect(call).toHaveBeenCalledTimes(1);
     }
   });
@@ -131,7 +125,6 @@ describe("OverviewDashboard figures", () => {
     await waitFor(() => expect(overview).toHaveBeenCalled());
     expect(overview.mock.calls[0]![0]).toEqual({ from: "2026-09-09", to: "2026-10-08" });
     expect(branches.mock.calls[0]![0]).toEqual({ from: "2026-09-09", to: "2026-10-08" });
-    expect(wallet.mock.calls[0]![0]).toEqual({ from: "2026-09-09", to: "2026-10-08" });
   });
 
   it("offers the backend's own definitions", async () => {
@@ -163,11 +156,9 @@ describe("loading, empty, partial and error states", () => {
   it("explains an empty period instead of showing a blank page", async () => {
     overview.mockResolvedValue(overviewFor(rangeOf({ from: "2025-01-01", to: "2025-01-31" })));
     branches.mockResolvedValue(branchesFor(rangeOf({ from: "2025-01-01", to: "2025-01-31" })));
-    wallet.mockResolvedValue(walletFor(rangeOf({ from: "2025-01-01", to: "2025-01-31" })));
     show();
     expect(await screen.findByText("No loyalty activity in this period yet.")).toBeInTheDocument();
     expect(await screen.findByText("No branch activity in this period.")).toBeInTheDocument();
-    expect(await screen.findByText("No wallet activity yet.")).toBeInTheDocument();
     expect(card("New members")).toHaveTextContent("0");
   });
 
@@ -204,7 +195,7 @@ describe("permissions", () => {
     show({ analytics: false });
     expect(screen.getByText(/does not include loyalty statistics/)).toBeInTheDocument();
     expect(screen.queryByRole("article", { name: "New members" })).not.toBeInTheDocument();
-    for (const mock of [overview, branches, wallet, definitions]) {
+    for (const mock of [overview, branches, definitions]) {
       expect(mock).not.toHaveBeenCalled();
     }
   });
@@ -276,32 +267,6 @@ describe("branch table accessibility", () => {
     const table = await screen.findByRole("table", { name: /Branch activity in this period/ });
     expect(within(table).getByRole("rowheader", { name: "Bole" })).toBeInTheDocument();
     expect(within(table).getByRole("columnheader", { name: "Stamps" })).toBeInTheDocument();
-  });
-});
-
-describe("wallet health", () => {
-  it("reports wallet update health with the backend's own counts", async () => {
-    show();
-    const section = await screen.findByTestId("section-wallet");
-    await waitFor(() => expect(within(section).getByTestId("wallet-rate")).toHaveTextContent("%"));
-    expect(within(section).getByText("2 failed after all retries")).toBeInTheDocument();
-    expect(
-      within(section).getByText(/Some updates failed after all retries, so a customer/),
-    ).toBeInTheDocument();
-    expect(within(section).getByText("Apple Wallet")).toBeInTheDocument();
-  });
-
-  it("has no failure warning when every update succeeded", async () => {
-    wallet.mockResolvedValue({
-      ...walletFor(last30),
-      updates: { succeeded: 10, failed: 0, stillQueued: 0, succeededAfterRetry: 0, successRate: 1 },
-    });
-    show();
-    const section = await screen.findByTestId("section-wallet");
-    await waitFor(() =>
-      expect(within(section).getByTestId("wallet-rate")).toHaveTextContent("100%"),
-    );
-    expect(within(section).queryByText(/Some updates failed/)).not.toBeInTheDocument();
   });
 });
 

@@ -36,7 +36,6 @@ test.describe("the overview", () => {
     }
     await expect(card(page, "New members")).toContainText("90"); // 30 days in the mock
     await expect(page.getByRole("heading", { name: "Branch activity" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Wallet update health" })).toBeVisible();
     await expect(page.getByTestId("range-summary")).toContainText("time zone: Africa/Addis_Ababa");
   });
 
@@ -159,7 +158,6 @@ test.describe("states", () => {
     await expect(branches).toContainText("req-e2e-1");
     await expect(page.getByText("Some information could not be loaded")).toBeVisible();
     await expect(card(page, "New members")).toContainText("90");
-    await expect(page.getByTestId("section-wallet")).toHaveAttribute("data-state", "ready");
 
     await page.unroute("**/api/bff/merchant/analytics/branches*");
     await branches.getByRole("button", { name: "Try again" }).click();
