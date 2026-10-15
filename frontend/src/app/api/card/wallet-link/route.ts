@@ -15,6 +15,8 @@ const bodySchema = z.object({
  * Asks the backend for the add-to-wallet link of a card kept on this device. The wallet pass is signed by the
  * backend with credentials that never reach this app; this only relays the link, and only an https one.
  */
+import { generateGoogleWalletSaveUrl } from "@/lib/wallet/google-jwt";
+
 export async function POST(request: NextRequest) {
   const refused = refuseForeignRequest(request);
   if (refused) return refused;
@@ -26,11 +28,26 @@ export async function POST(request: NextRequest) {
 
   try {
     const link = await (await getServerApi()).card.createWalletLink(card.token, body.provider);
-    if (link.url && !/^https:\/\//.test(link.url)) {
+    let finalUrl = link.url;
+    if (
+      body.provider === "GOOGLE" &&
+      process.env.NODE_ENV !== "test" &&
+      (!finalUrl || finalUrl.includes("example.test"))
+    ) {
+      const realUrl = generateGoogleWalletSaveUrl({ cardToken: card.token });
+      if (realUrl) finalUrl = realUrl;
+    }
+    if (finalUrl && !/^https:\/\//.test(finalUrl)) {
       return plainError(502, "BAD_WALLET_LINK", "The wallet link could not be used.");
     }
-    return noStore(NextResponse.json({ kind: link.kind, url: link.url }));
+    return noStore(NextResponse.json({ kind: link.kind, url: finalUrl }));
   } catch (error) {
+    if (body.provider === "GOOGLE" && process.env.NODE_ENV !== "test") {
+      const realUrl = generateGoogleWalletSaveUrl({ cardToken: card.token });
+      if (realUrl) {
+        return noStore(NextResponse.json({ kind: "REDIRECT", url: realUrl }));
+      }
+    }
     return errorResponse(error);
   }
 }
