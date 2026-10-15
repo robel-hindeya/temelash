@@ -59,7 +59,18 @@ export async function createServerTransport(options: ServerApiOptions = {}): Pro
       },
       async requestWithMeta<T>(spec: RequestSpec): Promise<TransportResponse<T>> {
         try {
-          return await http.requestWithMeta<T>(spec);
+          const res = await http.requestWithMeta<T>(spec);
+          if (res.status === 404 && spec.path.startsWith("/merchant/campaigns")) {
+            const { createMockTransport } = await import("@/mocks/mock-transport");
+            const { sharedMockState } = await import("@/mocks/shared-state");
+            const mock = createMockTransport({
+              state: sharedMockState(),
+              getAccessToken,
+              latencyMs: 0,
+            });
+            return mock.requestWithMeta<T>(spec);
+          }
+          return res;
         } catch {
           const { createMockTransport } = await import("@/mocks/mock-transport");
           const { sharedMockState } = await import("@/mocks/shared-state");

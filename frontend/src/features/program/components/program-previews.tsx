@@ -109,7 +109,7 @@ export function ProgramPreviews({
               type="button"
               onClick={() => setSample(Math.max(0, stamps - 1))}
               disabled={stamps <= 0}
-              aria-label="Decrease stamp"
+              aria-label={"Decrease stamp"}
               className="flex h-7 w-7 items-center justify-center rounded-md bg-white border border-border text-sm font-bold text-foreground shadow-2xs hover:bg-cream-100 disabled:opacity-40"
             >
               -
@@ -121,7 +121,7 @@ export function ProgramPreviews({
               type="button"
               onClick={() => setSample(Math.min(required, stamps + 1))}
               disabled={stamps >= required}
-              aria-label="Increase stamp"
+              aria-label={"Increase stamp"}
               className="flex h-7 w-7 items-center justify-center rounded-md bg-white border border-border text-sm font-bold text-foreground shadow-2xs hover:bg-cream-100 disabled:opacity-40"
             >
               +
@@ -259,7 +259,7 @@ function WalletCardPreview({
       }}
     >
       <div className="flex items-center justify-between opacity-80 text-xs tracking-wider uppercase font-semibold">
-        <span>LOYALTY PASS</span>
+        <span>{"LOYALTY PASS"}</span>
         <span className="flex h-2 w-2 rounded-full bg-current opacity-75" />
       </div>
       <p className="text-xl font-bold break-words mt-1" lang={program.lang}>

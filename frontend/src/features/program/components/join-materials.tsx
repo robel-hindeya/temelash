@@ -157,7 +157,7 @@ export function JoinMaterials({
               {t("program.qrPosterPreview")}
             </h3>
             <span className="text-xs text-muted font-medium bg-cream-200/50 px-2 py-0.5 rounded-full">
-              Printable Poster
+              {"Printable Poster"}
             </span>
           </div>
           {program ? (

@@ -427,7 +427,7 @@ export function ProgramEditor({
                     {...register("validForDays")}
                   />
                   <span className="pointer-events-none absolute right-3 text-xs font-semibold text-muted">
-                    days
+                    {"days"}
                   </span>
                 </div>
               </FormField>
@@ -474,7 +474,7 @@ export function ProgramEditor({
                     {...register("stampsRequired")}
                   />
                   <span className="pointer-events-none absolute right-3 text-xs font-semibold text-muted">
-                    stamps
+                    {"stamps"}
                   </span>
                 </div>
               </FormField>
@@ -490,7 +490,7 @@ export function ProgramEditor({
                     {...register("cooldownMinutes")}
                   />
                   <span className="pointer-events-none absolute right-3 text-xs font-semibold text-muted">
-                    mins
+                    {"mins"}
                   </span>
                 </div>
               </FormField>
@@ -738,7 +738,7 @@ export function ProgramEditor({
                   <h3 id="status-title" className="font-bold text-green-950">
                     {t(STATUS_LABEL[program.status])}
                   </h3>
-                  <p className="text-xs text-muted">Manage program publication, pause status, or archiving</p>
+                  <p className="text-xs text-muted">{"Manage program publication, pause status, or archiving"}</p>
                 </div>
               </div>
             </div>
