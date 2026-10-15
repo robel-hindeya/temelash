@@ -65,6 +65,7 @@ export function overviewFor(range: Extract<RangeResult, { ok: true }>): Analytic
       redemptionRate: null,
       averageVisitsPerActiveMember: null,
       timeBetweenVisits: { intervals: 0, averageHours: null, medianHours: null, p90Hours: null },
+      totalCustomers: 0,
     };
   }
   const d = range.days;
@@ -88,6 +89,7 @@ export function overviewFor(range: Extract<RangeResult, { ok: true }>): Analytic
       medianHours: 72,
       p90Hours: 240,
     },
+    totalCustomers: 420,
   };
 }
 

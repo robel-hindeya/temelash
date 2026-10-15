@@ -77,6 +77,7 @@ export function OverviewDashboard({
 
   const n = (value: number) => format.integer(value);
   const data = overview.data;
+  const totalUsers = overview.data?.totalCustomers ?? wallet.data?.activeMemberships;
   const quiet =
     data !== undefined &&
     data.stampsIssued.count === 0 &&
@@ -123,45 +124,24 @@ export function OverviewDashboard({
             <MetricCard
               emphasis
               className="sm:col-span-2 lg:col-span-3"
-              label={t("dashboard.northStar")}
-              loading={monthly.isPending}
-              value={monthly.data ? n(monthly.data.value) : monthly.isError ? "—" : ""}
-              hint={
-                monthly.data
-                  ? t("dashboard.northStarHint", { month: format.month(monthly.data.month) }) +
-                    (monthly.data.series.at(-1)?.partial
-                      ? " " +
-                        t("dashboard.northStarPartial", { month: format.month(monthly.data.month) })
-                      : "")
-                  : undefined
+              label={t("dashboard.allUsers")}
+              loading={
+                (overview.isPending && wallet.isPending) ||
+                (totalUsers === undefined && (overview.isPending || wallet.isPending))
               }
+              value={
+                totalUsers !== undefined
+                  ? n(totalUsers)
+                  : overview.isError && wallet.isError
+                    ? "—"
+                    : ""
+              }
+              hint={t("dashboard.allUsersHint")}
             />
             <MetricCard
               label={t("dashboard.newMembers")}
               loading={overview.isPending}
               value={data ? n(data.newMembers) : "—"}
-              hint={t("dashboard.thisPeriod")}
-            />
-            <MetricCard
-              label={t("dashboard.activeMembers")}
-              loading={overview.isPending}
-              value={data ? n(data.activeMembers) : "—"}
-              hint={t("dashboard.thisPeriod")}
-            />
-            <MetricCard
-              label={t("dashboard.stampsIssued")}
-              loading={overview.isPending}
-              value={data ? n(data.stampsIssued.count) : "—"}
-              hint={
-                data && data.stampsIssued.reversed > 0
-                  ? t("dashboard.stampsReversed", { count: n(data.stampsIssued.reversed) })
-                  : t("dashboard.thisPeriod")
-              }
-            />
-            <MetricCard
-              label={t("dashboard.rewardsUnlocked")}
-              loading={overview.isPending}
-              value={data ? n(data.rewardsUnlocked) : "—"}
               hint={t("dashboard.thisPeriod")}
             />
             <MetricCard

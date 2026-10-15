@@ -413,6 +413,8 @@ export const am: Messages = {
     northStar: "በየወሩ የሚመለሱ የታማኝነት ደንበኞች",
     northStarHint: "በ{month} የመጡና ከዚያ በፊትም የመጡ ደንበኞች።",
     northStarPartial: "{month} ገና አላበቃም፣ ስለዚህ ይህ ቁጥር አሁንም ሊጨምር ይችላል።",
+    allUsers: "ሁሉም ተጠቃሚዎች",
+    allUsersHint: "አጠቃላይ የተመዘገቡ የታማኝነት ደንበኞች",
     newMembers: "አዲስ አባላት",
     activeMembers: "ንቁ አባላት",
     stampsIssued: "የተሰጡ ማህተሞች",

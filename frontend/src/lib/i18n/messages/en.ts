@@ -430,6 +430,8 @@ const source = {
     northStar: "Monthly Returning Loyalty Customers",
     northStarHint: "Customers who visited in {month} and had also visited before it.",
     northStarPartial: "{month} is not over yet, so this number can still grow.",
+    allUsers: "All Users",
+    allUsersHint: "Total registered loyalty customers",
     newMembers: "New members",
     activeMembers: "Active members",
     stampsIssued: "Stamps issued",

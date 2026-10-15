@@ -61,14 +61,16 @@ export class AnalyticsService {
 
   async overview(actor: MerchantActor, q: RangeQuery) {
     const { scope, timeZone } = await this.scope(actor, q);
-    const [newMembers, visits, returning, unlocked, redeemed, gaps] = await Promise.all([
-      this.repository.newMembers(scope),
-      this.repository.visits(scope),
-      this.repository.returningCustomers(scope),
-      this.repository.rewardsUnlocked(scope),
-      this.repository.rewardsRedeemed(scope),
-      this.repository.visitGaps(scope),
-    ]);
+    const [newMembers, visits, returning, unlocked, redeemed, gaps, adoption] =
+      await Promise.all([
+        this.repository.newMembers(scope),
+        this.repository.visits(scope),
+        this.repository.returningCustomers(scope),
+        this.repository.rewardsUnlocked(scope),
+        this.repository.rewardsRedeemed(scope),
+        this.repository.visitGaps(scope),
+        this.repository.walletAdoption(actor.merchantId, q.programId),
+      ]);
     return {
       range: this.describe(scope, timeZone),
       newMembers,
@@ -82,6 +84,7 @@ export class AnalyticsService {
         ? Math.round((visits.stamps / visits.activeMembers) * 100) / 100
         : null,
       timeBetweenVisits: gaps,
+      totalCustomers: adoption.activeMemberships,
     };
   }
 

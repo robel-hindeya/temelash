@@ -28,11 +28,8 @@ test.describe("the overview", () => {
     await expect(page.getByText("Sample Cafe").first()).toBeVisible();
 
     for (const name of [
-      "Monthly Returning Loyalty Customers",
+      "All Users",
       "New members",
-      "Active members",
-      "Stamps issued",
-      "Rewards unlocked",
       "Rewards redeemed",
       "Redemption rate",
     ]) {
@@ -50,7 +47,7 @@ test.describe("the overview", () => {
   test("a manager sees it too", async ({ page }) => {
     await signIn(page, "manager@mock.test");
     await loaded(page);
-    await expect(card(page, "Active members")).toBeVisible();
+    await expect(card(page, "All Users")).toBeVisible();
   });
 
   test("never mentions money", async ({ page }) => {
@@ -243,7 +240,7 @@ test.describe("layout and navigation", () => {
     await signIn(page, OWNER);
     await loaded(page);
     const a = await card(page, "New members").boundingBox();
-    const b = await card(page, "Active members").boundingBox();
+    const b = await card(page, "Rewards redeemed").boundingBox();
     expect(Math.abs(a!.y - b!.y)).toBeLessThan(4); // side by side
   });
 });

@@ -296,6 +296,7 @@ export const analyticsOverviewSchema = z.object({
     medianHours: ratio,
     p90Hours: ratio,
   }),
+  totalCustomers: z.number().optional(),
 });
 export type AnalyticsOverview = z.infer<typeof analyticsOverviewSchema>;
 

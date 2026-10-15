@@ -129,16 +129,9 @@ describe("OverviewDashboard figures", () => {
     await waitFor(() =>
       expect(card("New members")).toHaveTextContent(format.format(expected.newMembers)),
     );
-    expect(card("Active members")).toHaveTextContent(format.format(expected.activeMembers));
-    expect(card("Stamps issued")).toHaveTextContent(format.format(expected.stampsIssued.count));
-    expect(card("Rewards unlocked")).toHaveTextContent(format.format(expected.rewardsUnlocked));
+    expect(card("All Users")).toHaveTextContent(format.format(expected.totalCustomers!));
     expect(card("Rewards redeemed")).toHaveTextContent(format.format(expected.rewardsRedeemed));
     expect(card("Redemption rate")).toHaveTextContent("80%");
-    const northStar = card("Monthly Returning Loyalty Customers");
-    const series = monthlyReturningFor({ months: 6 }, NOW);
-    if ("error" in series) throw new Error("fixture");
-    await waitFor(() => expect(northStar).toHaveTextContent(String(series.value)));
-    expect(northStar).toHaveTextContent("October 2026 is not over yet");
   });
 
   it("asks the backend for the chosen days, and for nothing else to be worked out in the browser", async () => {
@@ -168,10 +161,6 @@ describe("OverviewDashboard figures", () => {
     await waitFor(() => expect(card("Redemption rate")).toHaveTextContent("125%"));
   });
 
-  it("mentions stamps that were later reversed", async () => {
-    show();
-    await waitFor(() => expect(card("Stamps issued")).toHaveTextContent("later reversed"));
-  });
 
   it("offers the backend's own definitions", async () => {
     const user = show();
@@ -425,7 +414,7 @@ describe("recent events and wallet health", () => {
 describe("Amharic", () => {
   it("shows the Amharic labels and the business's own Amharic branch names", async () => {
     show({ locale: "am" });
-    expect(await screen.findByText("በየወሩ የሚመለሱ የታማኝነት ደንበኞች")).toBeInTheDocument();
+    expect(await screen.findByText("ሁሉም ተጠቃሚዎች")).toBeInTheDocument();
     expect(await screen.findByRole("rowheader", { name: "ቦሌ" })).toBeInTheDocument();
     expect(screen.getByRole("article", { name: "አዲስ አባላት" })).toBeInTheDocument();
   });
