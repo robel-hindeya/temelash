@@ -146,21 +146,51 @@ export async function MerchantShell({ locale, data, children }: AuthedShellProps
   return (
     <SessionProvider value={data.session}>
       <SessionWatcher />
-      <div className="flex min-h-dvh flex-col">
+      <div className="flex min-h-dvh flex-col md:flex-row bg-cream-50/40">
         <SkipLink locale={locale} />
-        <header className="border-b border-border bg-surface">
-          <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2">
+
+        {/* ──────── DESKTOP SIDEBAR PINNED TO LEFT CORNER ──────── */}
+        <aside className="hidden md:flex md:w-64 md:shrink-0 md:flex-col md:border-r md:border-border/80 md:bg-surface md:sticky md:top-0 md:h-dvh md:overflow-y-auto z-30 shadow-2xs">
+          {/* Top Corner Brand Block */}
+          <div className="flex flex-col gap-1 p-5 border-b border-border/60 bg-surface">
+            <Brand locale={locale} />
+            <div className="mt-1">
+              <WhoAndWhere data={data} />
+            </div>
+          </div>
+
+          {/* Navigation Items */}
+          <div className="flex-1 p-4">
+            <AreaNav items={data.nav} label={data.navLabel} orientation="vertical" />
+          </div>
+        </aside>
+
+        {/* ──────── MOBILE HEADER (when screen < md) ──────── */}
+        <header className="border-b border-border bg-surface md:hidden">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2.5">
             <div className="min-w-0">
               <Brand locale={locale} />
               <WhoAndWhere data={data} />
             </div>
             <HeaderTools locale={locale} data={data} />
           </div>
+          <div className="px-4 pb-2">
+            <AreaNav items={data.nav} label={data.navLabel} orientation="horizontal" />
+          </div>
         </header>
-        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-4 py-6 md:flex-row md:gap-6">
-          <AreaNav items={data.nav} label={data.navLabel} orientation="vertical" />
-          <main id="main" className="min-w-0 flex-1">
-            {children}
+
+        {/* ──────── MAIN CONTENT COLUMN ──────── */}
+        <div className="flex flex-1 min-w-0 flex-col">
+          {/* Desktop Top Bar (User / Language / Actions) */}
+          <header className="hidden md:flex h-16 items-center justify-end border-b border-border/80 bg-surface/90 px-6 backdrop-blur-xs sticky top-0 z-20 shadow-2xs">
+            <HeaderTools locale={locale} data={data} />
+          </header>
+
+          {/* Main Content Area */}
+          <main id="main" className="min-w-0 flex-1 p-4 sm:p-6 md:p-8">
+            <div className="mx-auto w-full max-w-7xl">
+              {children}
+            </div>
           </main>
         </div>
       </div>

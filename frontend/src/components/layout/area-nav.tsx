@@ -60,7 +60,7 @@ export function AreaNav({
         className={cn(
           "mt-2 flex-col gap-1 md:mt-0 md:flex",
           open ? "flex" : "hidden",
-          orientation === "horizontal" ? "md:flex-row md:flex-wrap" : "md:w-56",
+          orientation === "horizontal" ? "md:flex-row md:flex-wrap" : "md:w-full",
         )}
       >
         {items.map((item) => {
@@ -72,8 +72,10 @@ export function AreaNav({
                 aria-current={current ? "page" : undefined}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  "touch-target flex items-center rounded-control px-3 py-2 font-medium no-underline",
-                  current ? "bg-green-700 text-white" : "text-charcoal-900 hover:bg-cream-200",
+                  "touch-target flex items-center rounded-xl px-3.5 py-2.5 text-sm no-underline transition-all",
+                  current
+                    ? "bg-primary text-white shadow-2xs font-semibold"
+                    : "text-charcoal-800 hover:bg-cream-100/90 hover:text-green-950 font-medium",
                 )}
               >
                 {item.label}
