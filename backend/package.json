@@ -7,7 +7,7 @@
     "dev": "node scripts/start-dev.mjs",
     "dev:nest": "nest start --watch",
     "build": "prisma generate && nest build",
-    "vercel-build": "prisma generate && nest build",
+    "vercel-build": "prisma generate && prisma migrate deploy && nest build",
     "start": "nest start",
     "start:dev": "node scripts/start-dev.mjs",
     "start:prod": "node dist/main.js",

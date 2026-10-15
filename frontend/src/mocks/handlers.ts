@@ -102,6 +102,7 @@ import {
   type MockEmail,
 } from "./fixtures";
 import type { RedeemResult, RejectionReason, ScanResult } from "@/lib/api/contract";
+import { generateGoogleWalletSaveUrl } from "@/lib/wallet/google-jwt";
 
 interface CardState {
   stamps: number;
@@ -437,7 +438,7 @@ export function createHandlers(): MockRoute[] {
           };
         }
         ctx.state.enrolledPhones.add(normalized);
-        const token = `mock-ok-${ctx.state.nextCard++}-${normalized.slice(-4)}`;
+        const token = `mock-ok-google-${ctx.state.nextCard++}-${normalized.slice(-4)}`;
         ctx.state.cards.set(token, {
           stamps: 0,
           rewards: 0,
@@ -481,17 +482,27 @@ export function createHandlers(): MockRoute[] {
       path: "/card/wallet/links",
       handle: (ctx) => {
         const { cardToken, provider } = asRecord(ctx.body);
-        if (!cardFor(ctx.state, cardToken)) return error(404, "NOT_FOUND", "Card not found.");
+        const card = cardFor(ctx.state, cardToken);
+        if (!card) return error(404, "NOT_FOUND", "Card not found.");
         if (provider === "WEB") return ok({ provider, kind: "NONE", url: null, expiresAt: null });
         if (provider === "APPLE" || provider === "GOOGLE") {
           // Wallets are "not configured" in the default backend setup; a token containing the provider enables it.
           if (!String(cardToken).includes(String(provider).toLowerCase())) {
             return error(409, "PROVIDER_NOT_AVAILABLE", "That wallet is not offered.");
           }
+          let url = `https://wallet.example.test/${String(provider).toLowerCase()}/pass`;
+          if (provider === "GOOGLE" && process.env.NODE_ENV !== "test") {
+            const realSaveUrl = generateGoogleWalletSaveUrl({
+              cardToken: String(cardToken),
+              firstName: card.firstName,
+              stamps: card.stamps,
+            });
+            if (realSaveUrl) url = realSaveUrl;
+          }
           return ok({
             provider,
             kind: provider === "APPLE" ? "DOWNLOAD" : "REDIRECT",
-            url: `https://wallet.example.test/${String(provider).toLowerCase()}/pass`,
+            url,
             expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
           });
         }
