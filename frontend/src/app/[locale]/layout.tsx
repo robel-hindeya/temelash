@@ -34,10 +34,14 @@ export async function generateMetadata({ params }: Pick<Props, "params">): Promi
     metadataBase: new URL(publicEnv.NEXT_PUBLIC_APP_URL),
     title: { default: t("common.appName"), template: `%s | ${t("common.appName")}` },
     description: t("common.tagline"),
-    applicationName: t("common.appName"),
     icons: {
-      icon: "/logo.png",
-      apple: "/logo.png",
+      icon: [
+        { url: "/favicon.ico", sizes: "any" },
+        { url: "/icon.png", type: "image/png" },
+        { url: "/logo.png", type: "image/png" },
+      ],
+      shortcut: "/favicon.ico",
+      apple: [{ url: "/icon.png" }, { url: "/logo.png" }],
     },
     openGraph: {
       title: t("common.appName"),
