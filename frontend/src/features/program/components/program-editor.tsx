@@ -123,6 +123,18 @@ export function ProgramEditor({
   const [action, setAction] = useState<Action | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // References to smoothly scroll to each step inside the unified box
+  const step1Ref = useRef<HTMLDivElement>(null);
+  const step2Ref = useRef<HTMLDivElement>(null);
+  const step3Ref = useRef<HTMLDivElement>(null);
+  const step4Ref = useRef<HTMLDivElement>(null);
+  const step5Ref = useRef<HTMLDivElement>(null);
+
+  const stepRefs = [step1Ref, step2Ref, step3Ref, step4Ref, step5Ref];
+  const scrollToStep = (index: number) => {
+    stepRefs[index]?.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   useUnsavedChangesWarning(isDirty, t("program.unsavedLeave"));
 
   const archived = program?.status === "ARCHIVED";
@@ -211,6 +223,14 @@ export function ProgramEditor({
   const publishLabel = program?.status === "PAUSED" ? t("program.resume") : t("program.publish");
   const changedFields = warnPatch ? memberVisibleFields(warnPatch).map((key) => t(key)) : [];
 
+  const stepItems = [
+    { num: 1, title: t("program.secNames"), icon: "🏷️" },
+    { num: 2, title: t("program.secReward"), icon: "🎁" },
+    { num: 3, title: t("program.secStamps"), icon: "🎯" },
+    { num: 4, title: t("program.secLook"), icon: "🎨" },
+    { num: 5, title: t("program.secTerms"), icon: "📜" },
+  ];
+
   return (
     <div
       className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,25rem)]"
@@ -255,13 +275,53 @@ export function ProgramEditor({
           ) : null}
         </div>
 
-        <fieldset disabled={readOnly || isSubmitting} className="flex flex-col gap-6">
-          {/* Section: Names */}
-          <Section
-            title={t("program.secNames")}
-            icon="🏷️"
-            subtitle="The name of your loyalty program shown on customer passes and posters"
-          >
+        {/* ──────── ONE UNIFIED BOX FOR ALL 5 CONFIGURATION SECTIONS ──────── */}
+        <fieldset
+          disabled={readOnly || isSubmitting}
+          className="rounded-2xl border border-border/80 bg-surface p-5 sm:p-7 shadow-xs flex flex-col gap-8"
+        >
+          {/* Stepper Navigation inside the box */}
+          <div className="flex flex-col gap-3 border-b border-border/60 pb-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted">
+                Program Setup Flow
+              </span>
+              <span className="text-xs font-semibold text-green-800 bg-green-50 px-2.5 py-0.5 rounded-full border border-green-200">
+                5 Steps
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {stepItems.map((step, idx) => (
+                <button
+                  key={step.num}
+                  type="button"
+                  onClick={() => scrollToStep(idx)}
+                  className="flex items-center gap-2 p-2 rounded-xl border border-border/60 bg-cream-50/70 hover:bg-white text-left transition-all group"
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white border border-border text-xs font-bold text-charcoal-700 shadow-2xs group-hover:border-primary group-hover:text-primary">
+                    {step.num}
+                  </span>
+                  <span className="text-xs font-semibold text-foreground truncate">
+                    {step.title}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* STEP 1: Name */}
+          <div ref={step1Ref} className="flex flex-col gap-4">
+            <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
+                🏷️
+              </span>
+              <div>
+                <h3 className="text-lg font-bold text-green-950">{t("program.secNames")}</h3>
+                <p className="text-xs text-muted mt-0.5">
+                  The name of your loyalty program shown on customer passes and posters
+                </p>
+              </div>
+            </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FormField label={t("program.nameEn")} error={field("nameEn")} required>
                 <Input
@@ -277,14 +337,28 @@ export function ProgramEditor({
                 />
               </FormField>
             </div>
-          </Section>
+            <div className="flex justify-end pt-2">
+              <Button type="button" variant="secondary" onClick={() => scrollToStep(1)}>
+                Next: {t("program.secReward")} ↓
+              </Button>
+            </div>
+          </div>
 
-          {/* Section: Reward */}
-          <Section
-            title={t("program.secReward")}
-            icon="🎁"
-            subtitle="What customers unlock after collecting all required stamps"
-          >
+          <hr className="border-border/60" />
+
+          {/* STEP 2: Reward */}
+          <div ref={step2Ref} className="flex flex-col gap-4">
+            <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
+                🎁
+              </span>
+              <div>
+                <h3 className="text-lg font-bold text-green-950">{t("program.secReward")}</h3>
+                <p className="text-xs text-muted mt-0.5">
+                  What customers unlock after collecting all required stamps
+                </p>
+              </div>
+            </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FormField label={t("program.rewardNameEn")} error={field("rewardNameEn")} required>
                 <Input
@@ -335,14 +409,31 @@ export function ProgramEditor({
                 </div>
               </FormField>
             </div>
-          </Section>
+            <div className="flex justify-between items-center pt-2">
+              <Button type="button" variant="ghost" onClick={() => scrollToStep(0)}>
+                ↑ {t("program.secNames")}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => scrollToStep(2)}>
+                Next: {t("program.secStamps")} ↓
+              </Button>
+            </div>
+          </div>
 
-          {/* Section: Stamps */}
-          <Section
-            title={t("program.secStamps")}
-            icon="🎯"
-            subtitle="Threshold to complete a card and cooldown between consecutive stamps"
-          >
+          <hr className="border-border/60" />
+
+          {/* STEP 3: Stamps */}
+          <div ref={step3Ref} className="flex flex-col gap-4">
+            <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
+                🎯
+              </span>
+              <div>
+                <h3 className="text-lg font-bold text-green-950">{t("program.secStamps")}</h3>
+                <p className="text-xs text-muted mt-0.5">
+                  Threshold to complete a card and cooldown between consecutive stamps
+                </p>
+              </div>
+            </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField
                 label={t("program.stampsRequired")}
@@ -384,14 +475,32 @@ export function ProgramEditor({
                 </div>
               </FormField>
             </div>
-          </Section>
+            <div className="flex justify-between items-center pt-2">
+              <Button type="button" variant="ghost" onClick={() => scrollToStep(1)}>
+                ↑ {t("program.secReward")}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => scrollToStep(3)}>
+                Next: {t("program.secLook")} ↓
+              </Button>
+            </div>
+          </div>
 
-          {/* Section: Look & Feel */}
-          <Section
-            title={t("program.secLook")}
-            icon="🎨"
-            subtitle="Card brand colors, titles, and stamp icon design"
-          >
+          <hr className="border-border/60" />
+
+          {/* STEP 4: Look & Feel */}
+          <div ref={step4Ref} className="flex flex-col gap-4">
+            <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
+                🎨
+              </span>
+              <div>
+                <h3 className="text-lg font-bold text-green-950">{t("program.secLook")}</h3>
+                <p className="text-xs text-muted mt-0.5">
+                  Card brand colors, titles, and stamp icon design
+                </p>
+              </div>
+            </div>
+
             <FormField
               label={t("program.brandColor")}
               hint={t("program.brandColorHint")}
@@ -465,7 +574,6 @@ export function ProgramEditor({
 
             <FormField label={t("program.stampIcon")}>
               <div className="flex flex-col gap-2">
-                {/* Visual Icon Selection Pills */}
                 <div className="flex flex-wrap gap-2">
                   {STAMP_ICONS.map((icon) => {
                     const active = values.stampIcon === icon;
@@ -491,7 +599,7 @@ export function ProgramEditor({
                     );
                   })}
                 </div>
-                {/* Keep native Select bound for accessibility/testing */}
+                {/* Native select preserved for accessibility & tests */}
                 <Select className="sr-only" tabIndex={-1} {...register("stampIcon")}>
                   {STAMP_ICONS.map((icon) => (
                     <option key={icon} value={icon}>
@@ -505,14 +613,32 @@ export function ProgramEditor({
             <div className="pt-2">
               <Checkbox label={t("program.showProgressText")} {...register("showProgressText")} />
             </div>
-          </Section>
 
-          {/* Section: Terms */}
-          <Section
-            title={t("program.secTerms")}
-            icon="📜"
-            subtitle="Terms, conditions, and rules displayed on the customer enrollment screen"
-          >
+            <div className="flex justify-between items-center pt-2">
+              <Button type="button" variant="ghost" onClick={() => scrollToStep(2)}>
+                ↑ {t("program.secStamps")}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => scrollToStep(4)}>
+                Next: {t("program.secTerms")} ↓
+              </Button>
+            </div>
+          </div>
+
+          <hr className="border-border/60" />
+
+          {/* STEP 5: Terms */}
+          <div ref={step5Ref} className="flex flex-col gap-4">
+            <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
+                📜
+              </span>
+              <div>
+                <h3 className="text-lg font-bold text-green-950">{t("program.secTerms")}</h3>
+                <p className="text-xs text-muted mt-0.5">
+                  Terms, conditions, and rules displayed on the customer enrollment screen
+                </p>
+              </div>
+            </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FormField label={t("program.termsEn")} error={field("termsEn")}>
                 <Textarea rows={3} {...register("termsEn")} className="bg-white shadow-2xs" />
@@ -521,23 +647,43 @@ export function ProgramEditor({
                 <Textarea rows={3} lang="am" {...register("termsAm")} className="bg-white shadow-2xs" />
               </FormField>
             </div>
-          </Section>
+            <div className="flex justify-between items-center pt-2">
+              <Button type="button" variant="ghost" onClick={() => scrollToStep(3)}>
+                ↑ {t("program.secLook")}
+              </Button>
+              <p className="text-xs font-semibold text-green-800">
+                All 5 sections completed! Review & save below ↓
+              </p>
+            </div>
+          </div>
         </fieldset>
 
-        {/* Action Controls */}
+        {/* ──────── UNDER-BOX SAVE BOX ──────── */}
         {!readOnly ? (
-          <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/80 bg-surface/95 p-4 shadow-lg backdrop-blur-md">
-            <div className="flex items-center gap-2 text-xs font-semibold text-muted">
-              {isDirty ? (
-                <span className="flex items-center gap-1.5 text-gold-text">
-                  <span className="h-2 w-2 rounded-full bg-gold-500 animate-pulse" />
-                  Unsaved changes
-                </span>
-              ) : (
-                <span className="text-muted">All changes saved</span>
-              )}
+          <div className="rounded-2xl border border-border/80 bg-surface p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div
+                className={`h-11 w-11 rounded-xl flex items-center justify-center font-bold text-lg shadow-2xs ${
+                  isDirty
+                    ? "bg-gold-100 text-gold-text border border-gold-300"
+                    : "bg-green-50 text-green-800 border border-green-200"
+                }`}
+              >
+                {isDirty ? "!" : "✓"}
+              </div>
+              <div>
+                <h3 className="font-bold text-green-950 text-base">
+                  {isDirty ? "Ready to save your program" : "Program settings saved"}
+                </h3>
+                <p className="text-xs text-muted">
+                  {isDirty
+                    ? "Review your changes in the live preview before saving."
+                    : "All changes are saved and synced."}
+                </p>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
               {program && isDirty ? (
                 <Button variant="ghost" onClick={() => reset(saved)}>
                   {t("program.discard")}
@@ -549,7 +695,7 @@ export function ProgramEditor({
                 loading={isSubmitting}
                 loadingLabel={t("program.saving")}
                 disabled={!hydrated || (Boolean(program) && !isDirty)}
-                className="shadow-sm font-semibold"
+                className="shadow-sm font-semibold px-6"
               >
                 {!program
                   ? t("program.createDraft")
@@ -662,34 +808,5 @@ export function ProgramEditor({
         onConfirm={() => runAction("archive")}
       />
     </div>
-  );
-}
-
-function Section({
-  title,
-  icon,
-  subtitle,
-  children,
-}: {
-  title: string;
-  icon?: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-surface p-5 sm:p-6 shadow-xs hover:border-border transition-all">
-      <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
-        {icon ? (
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
-            {icon}
-          </span>
-        ) : null}
-        <div>
-          <h3 className="text-lg font-bold text-green-950">{title}</h3>
-          {subtitle ? <p className="text-xs text-muted mt-0.5">{subtitle}</p> : null}
-        </div>
-      </div>
-      <div className="flex flex-col gap-4">{children}</div>
-    </section>
   );
 }
