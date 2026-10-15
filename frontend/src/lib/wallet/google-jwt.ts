@@ -69,7 +69,7 @@ export function generateGoogleWalletSaveUrl(params: {
   }
 
   const tokenSafe = params.cardToken.replace(/[^a-zA-Z0-9_]/g, '_');
-  const classId = `${issuerId}.program_sample_cafe`;
+  const classId = `${issuerId}.temelash_cafe_loyalty`;
   const objectId = `${issuerId}.pass_${tokenSafe}`;
 
   const currentStamps = params.stamps ?? 0;
@@ -87,11 +87,11 @@ export function generateGoogleWalletSaveUrl(params: {
       defaultValue: { language: 'en', value: 'Loyalty Rewards' },
     },
     programLogo: {
-      sourceUri: { uri: 'https://walletobjects.googleapis.com/static/img/wallet_logo.png' },
-      contentDescription: { defaultValue: { language: 'en', value: 'Sample Cafe' } },
+      sourceUri: { uri: 'https://img.icons8.com/color/512/coffee-to-go.png' },
+      contentDescription: { defaultValue: { language: 'en', value: 'Sample Cafe Logo' } },
     },
     hexBackgroundColor: '#10b981',
-    reviewStatus: 'UNDER_REVIEW',
+    reviewStatus: 'DRAFT',
     multipleDevicesAndHoldersAllowedStatus: 'ONE_USER_ALL_DEVICES',
   };
 
@@ -103,26 +103,12 @@ export function generateGoogleWalletSaveUrl(params: {
     state: 'ACTIVE',
     loyaltyPoints: {
       label: 'Stamps',
-      localizedLabel: {
-        defaultValue: { language: 'en', value: 'Stamps' },
-        translatedValues: [{ language: 'am', value: 'ስታምፕ' }],
-      },
-      balance: { string: `${currentStamps} / ${stampsRequired}` },
+      balance: { string: `${currentStamps} of ${stampsRequired} stamps` },
     },
-    textModulesData: [
-      {
-        id: 'ready',
-        header: 'Rewards ready',
-        body: '0',
-        localizedHeader: {
-          defaultValue: { language: 'en', value: 'Rewards ready' },
-          translatedValues: [{ language: 'am', value: 'ዝግጁ ሽልማቶች' }],
-        },
-      },
-    ],
     barcode: {
       type: 'QR_CODE',
       value: params.cardToken,
+      alternateText: params.cardToken,
     },
   };
 
