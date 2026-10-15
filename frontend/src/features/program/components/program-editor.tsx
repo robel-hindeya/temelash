@@ -328,19 +328,33 @@ export function ProgramEditor({
               </span>
               <div>
                 <h3 className="text-lg font-bold text-green-950">{t("program.secNames")}</h3>
-                <p className="text-xs text-muted mt-0.5">
-                  The name of your loyalty program shown on customer passes and posters
-                </p>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <FormField label={t("program.nameEn")} error={field("nameEn")} required>
+              <FormField
+                label={
+                  <span>
+                    <span className="sr-only">{t("program.nameEn")}</span>
+                    <span aria-hidden="true">English</span>
+                  </span>
+                }
+                error={field("nameEn")}
+                required
+              >
                 <Input
                   {...register("nameEn")}
                   className="bg-white shadow-2xs focus:ring-2 focus:ring-primary/20"
                 />
               </FormField>
-              <FormField label={t("program.nameAm")} error={field("nameAm")}>
+              <FormField
+                label={
+                  <span>
+                    <span className="sr-only">{t("program.nameAm")}</span>
+                    <span aria-hidden="true">Amharic</span>
+                  </span>
+                }
+                error={field("nameAm")}
+              >
                 <Input
                   lang="am"
                   {...register("nameAm")}
@@ -366,9 +380,6 @@ export function ProgramEditor({
               </span>
               <div>
                 <h3 className="text-lg font-bold text-green-950">{t("program.secReward")}</h3>
-                <p className="text-xs text-muted mt-0.5">
-                  What customers unlock after collecting all required stamps
-                </p>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -442,22 +453,19 @@ export function ProgramEditor({
               </span>
               <div>
                 <h3 className="text-lg font-bold text-green-950">{t("program.secStamps")}</h3>
-                <p className="text-xs text-muted mt-0.5">
-                  Threshold to complete a card and cooldown between consecutive stamps
-                </p>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField
                 label={t("program.stampsRequired")}
-                hint={
-                  locked
-                    ? t("program.stampsLocked", { count: format.integer(program?.memberCount ?? 0) })
-                    : undefined
-                }
                 error={field("stampsRequired")}
                 required
               >
+                {locked ? (
+                  <span className="sr-only">
+                    {t("program.stampsLocked", { count: format.integer(program?.memberCount ?? 0) })}
+                  </span>
+                ) : null}
                 <div className="relative flex items-center">
                   <Input
                     inputMode="numeric"
@@ -472,7 +480,6 @@ export function ProgramEditor({
               </FormField>
               <FormField
                 label={t("program.cooldown")}
-                hint={t("program.cooldownHint")}
                 error={field("cooldownMinutes")}
                 required
               >
@@ -509,15 +516,11 @@ export function ProgramEditor({
               </span>
               <div>
                 <h3 className="text-lg font-bold text-green-950">{t("program.secLook")}</h3>
-                <p className="text-xs text-muted mt-0.5">
-                  Card brand colors, titles, and stamp icon design
-                </p>
               </div>
             </div>
 
             <FormField
               label={t("program.brandColor")}
-              hint={t("program.brandColorHint")}
               error={field("brandColor")}
             >
               <div className="flex flex-col gap-3">
@@ -529,23 +532,24 @@ export function ProgramEditor({
                       <button
                         key={preset.value}
                         type="button"
+                        title={preset.name}
+                        aria-label={preset.name}
                         onClick={() =>
                           setValue("brandColor", preset.value, {
                             shouldDirty: true,
                             shouldValidate: true,
                           })
                         }
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                        className={`flex items-center justify-center h-8 w-8 rounded-full border transition-all ${
                           active
-                            ? "border-primary ring-2 ring-primary/25 bg-white shadow-2xs"
-                            : "border-border bg-white/80 hover:bg-white"
+                            ? "border-primary ring-2 ring-primary/30 scale-110 shadow-xs"
+                            : "border-border bg-white/80 hover:scale-105"
                         }`}
                       >
                         <span
-                          className="h-3.5 w-3.5 rounded-full border border-black/10 shrink-0"
+                          className="h-5 w-5 rounded-full border border-black/10 shrink-0 shadow-2xs"
                           style={{ backgroundColor: preset.value }}
                         />
-                        <span>{preset.name}</span>
                       </button>
                     );
                   })}
@@ -649,9 +653,6 @@ export function ProgramEditor({
               </span>
               <div>
                 <h3 className="text-lg font-bold text-green-950">{t("program.secTerms")}</h3>
-                <p className="text-xs text-muted mt-0.5">
-                  Terms, conditions, and rules displayed on the customer enrollment screen
-                </p>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
