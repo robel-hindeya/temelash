@@ -38,6 +38,7 @@ import {
   type ProgramFormValues,
 } from "../program-form";
 import { ProgramPreviews } from "./program-previews";
+import { StampIcon } from "./stamp-icon";
 
 const STATUS_TONE: Record<Program["status"], Tone> = {
   DRAFT: "neutral",
@@ -65,18 +66,17 @@ const ICON_LABEL: Record<(typeof STAMP_ICONS)[number], MessageKey> = {
   gift: "program.iconGift",
 };
 
+const PRESET_COLORS = [
+  { name: "Forest", value: "#1B5E3A" },
+  { name: "Crimson", value: "#E52131" },
+  { name: "Amber", value: "#FBA919" },
+  { name: "Blue", value: "#2563EB" },
+  { name: "Purple", value: "#7C3AED" },
+  { name: "Charcoal", value: "#1E293B" },
+];
+
 type Action = "publish" | "pause" | "archive";
 
-/**
- * Creates a draft or edits one program. What this screen guarantees:
- *  - it only ever sends what the person changed, and the backend decides whether it is allowed (a refusal is
- *    shown in words, never assumed away);
- *  - the stamp requirement is shown locked once customers have joined, with the reason;
- *  - saving a change that members will see (names, reward, terms, colour, card look, waiting time) asks first;
- *  - Publish, Pause and Archive each ask first (Archive is final and needs a typed word);
- *  - leaving with unsaved changes asks first;
- *  - without `program:manage`, and for an archived program, every field is read-only.
- */
 export function ProgramEditor({
   program,
   canManage,
@@ -109,7 +109,7 @@ export function ProgramEditor({
     getValues,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<ProgramFormValues>({ resolver: zodResolver(schema), defaultValues: saved });
-  // Another program, or fresh data from the server: the form starts again from it.
+
   const loaded = useRef(program?.id ?? "new");
   useEffect(() => {
     const key = program?.id ?? "new";
@@ -171,7 +171,7 @@ export function ProgramEditor({
     const patch = toPatch(formValues, program);
     if (!hasChanges(patch)) return;
     if (program.memberCount > 0 && memberVisibleFields(patch).length > 0) {
-      setWarnPatch(patch); // members will see this: ask first
+      setWarnPatch(patch);
       return;
     }
     await persist(patch);
@@ -213,7 +213,7 @@ export function ProgramEditor({
 
   return (
     <div
-      className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]"
+      className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,25rem)]"
       data-hydrated={hydrated}
     >
       <form
@@ -222,183 +222,373 @@ export function ProgramEditor({
         className="flex min-w-0 flex-col gap-6"
         data-testid="program-form"
       >
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-bold text-green-900">
-            {program ? program.nameEn : t("program.createTitle")}
-          </h2>
+        {/* Header Hero */}
+        <div className="flex flex-col gap-3 rounded-2xl border border-border/80 bg-surface p-5 sm:p-6 shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-2xl font-bold tracking-tight text-green-950">
+              {program ? program.nameEn : t("program.createTitle")}
+            </h2>
+            {program ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={STATUS_TONE[program.status]}>{t(STATUS_LABEL[program.status])}</Badge>
+                {program.isDefault ? <Badge tone="info">{t("program.defaultBadge")}</Badge> : null}
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-cream-200/70 text-charcoal-700">
+                  {memberText}
+                </span>
+              </div>
+            ) : null}
+          </div>
+
           {program ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge tone={STATUS_TONE[program.status]}>{t(STATUS_LABEL[program.status])}</Badge>
-              {program.isDefault ? <Badge tone="info">{t("program.defaultBadge")}</Badge> : null}
-              <span className="text-sm text-muted">{memberText}</span>
-            </div>
+            <p className="text-sm text-charcoal-700 leading-relaxed">
+              {t(STATUS_EXPLAIN[program.status])}
+            </p>
           ) : null}
-        </header>
 
-        {program ? (
-          <p className="-mt-3 text-charcoal-700">{t(STATUS_EXPLAIN[program.status])}</p>
-        ) : null}
-        {!canManage ? <Alert tone="info">{t("program.readOnlyNote")}</Alert> : null}
-        {canManage && archived ? <Alert tone="info">{t("program.archivedNote")}</Alert> : null}
-        {problem ? <Alert tone="danger">{problem}</Alert> : null}
-        {isDirty && !readOnly ? (
-          <Alert tone="warning" data-testid="unsaved">
-            {t("program.unsavedBanner")}
-          </Alert>
-        ) : null}
+          {!canManage ? <Alert tone="info">{t("program.readOnlyNote")}</Alert> : null}
+          {canManage && archived ? <Alert tone="info">{t("program.archivedNote")}</Alert> : null}
+          {problem ? <Alert tone="danger">{problem}</Alert> : null}
+          {isDirty && !readOnly ? (
+            <Alert tone="warning" data-testid="unsaved">
+              {t("program.unsavedBanner")}
+            </Alert>
+          ) : null}
+        </div>
 
-        <fieldset disabled={readOnly || isSubmitting} className="contents">
-          <Section title={t("program.secNames")}>
-            <FormField label={t("program.nameEn")} error={field("nameEn")} required>
-              <Input {...register("nameEn")} />
-            </FormField>
-            <FormField label={t("program.nameAm")} error={field("nameAm")}>
-              <Input lang="am" {...register("nameAm")} />
-            </FormField>
+        <fieldset disabled={readOnly || isSubmitting} className="flex flex-col gap-6">
+          {/* Section: Names */}
+          <Section
+            title={t("program.secNames")}
+            icon="🏷️"
+            subtitle="The name of your loyalty program shown on customer passes and posters"
+          >
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <FormField label={t("program.nameEn")} error={field("nameEn")} required>
+                <Input
+                  {...register("nameEn")}
+                  className="bg-white shadow-2xs focus:ring-2 focus:ring-primary/20"
+                />
+              </FormField>
+              <FormField label={t("program.nameAm")} error={field("nameAm")}>
+                <Input
+                  lang="am"
+                  {...register("nameAm")}
+                  className="bg-white shadow-2xs focus:ring-2 focus:ring-primary/20"
+                />
+              </FormField>
+            </div>
           </Section>
 
-          <Section title={t("program.secReward")}>
-            <FormField label={t("program.rewardNameEn")} error={field("rewardNameEn")} required>
-              <Input {...register("rewardNameEn")} />
-            </FormField>
-            <FormField label={t("program.rewardNameAm")} error={field("rewardNameAm")}>
-              <Input lang="am" {...register("rewardNameAm")} />
-            </FormField>
-            <FormField label={t("program.rewardDescEn")} error={field("rewardDescriptionEn")}>
-              <Textarea rows={2} {...register("rewardDescriptionEn")} />
-            </FormField>
-            <FormField label={t("program.rewardDescAm")} error={field("rewardDescriptionAm")}>
-              <Textarea rows={2} lang="am" {...register("rewardDescriptionAm")} />
-            </FormField>
-            <FormField
-              label={t("program.validForDays")}
-              hint={t("program.validForDaysHint")}
-              error={field("validForDays")}
-            >
-              <Input inputMode="numeric" className="max-w-40" {...register("validForDays")} />
-            </FormField>
+          {/* Section: Reward */}
+          <Section
+            title={t("program.secReward")}
+            icon="🎁"
+            subtitle="What customers unlock after collecting all required stamps"
+          >
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <FormField label={t("program.rewardNameEn")} error={field("rewardNameEn")} required>
+                <Input
+                  {...register("rewardNameEn")}
+                  className="bg-white shadow-2xs focus:ring-2 focus:ring-primary/20"
+                />
+              </FormField>
+              <FormField label={t("program.rewardNameAm")} error={field("rewardNameAm")}>
+                <Input
+                  lang="am"
+                  {...register("rewardNameAm")}
+                  className="bg-white shadow-2xs focus:ring-2 focus:ring-primary/20"
+                />
+              </FormField>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <FormField label={t("program.rewardDescEn")} error={field("rewardDescriptionEn")}>
+                <Textarea
+                  rows={2}
+                  {...register("rewardDescriptionEn")}
+                  className="bg-white shadow-2xs focus:ring-2 focus:ring-primary/20"
+                />
+              </FormField>
+              <FormField label={t("program.rewardDescAm")} error={field("rewardDescriptionAm")}>
+                <Textarea
+                  rows={2}
+                  lang="am"
+                  {...register("rewardDescriptionAm")}
+                  className="bg-white shadow-2xs focus:ring-2 focus:ring-primary/20"
+                />
+              </FormField>
+            </div>
+            <div className="max-w-xs">
+              <FormField
+                label={t("program.validForDays")}
+                hint={t("program.validForDaysHint")}
+                error={field("validForDays")}
+              >
+                <div className="relative flex items-center">
+                  <Input
+                    inputMode="numeric"
+                    className="bg-white shadow-2xs pr-14 focus:ring-2 focus:ring-primary/20"
+                    {...register("validForDays")}
+                  />
+                  <span className="pointer-events-none absolute right-3 text-xs font-semibold text-muted">
+                    days
+                  </span>
+                </div>
+              </FormField>
+            </div>
           </Section>
 
-          <Section title={t("program.secStamps")}>
-            <FormField
-              label={t("program.stampsRequired")}
-              hint={
-                locked
-                  ? t("program.stampsLocked", { count: format.integer(program?.memberCount ?? 0) })
-                  : undefined
-              }
-              error={field("stampsRequired")}
-              required
-            >
-              <Input
-                inputMode="numeric"
-                className="max-w-40"
-                disabled={locked}
-                {...register("stampsRequired")}
-              />
-            </FormField>
-            <FormField
-              label={t("program.cooldown")}
-              hint={t("program.cooldownHint")}
-              error={field("cooldownMinutes")}
-              required
-            >
-              <Input inputMode="numeric" className="max-w-40" {...register("cooldownMinutes")} />
-            </FormField>
+          {/* Section: Stamps */}
+          <Section
+            title={t("program.secStamps")}
+            icon="🎯"
+            subtitle="Threshold to complete a card and cooldown between consecutive stamps"
+          >
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField
+                label={t("program.stampsRequired")}
+                hint={
+                  locked
+                    ? t("program.stampsLocked", { count: format.integer(program?.memberCount ?? 0) })
+                    : undefined
+                }
+                error={field("stampsRequired")}
+                required
+              >
+                <div className="relative flex items-center">
+                  <Input
+                    inputMode="numeric"
+                    disabled={locked}
+                    className="bg-white shadow-2xs pr-16 focus:ring-2 focus:ring-primary/20"
+                    {...register("stampsRequired")}
+                  />
+                  <span className="pointer-events-none absolute right-3 text-xs font-semibold text-muted">
+                    stamps
+                  </span>
+                </div>
+              </FormField>
+              <FormField
+                label={t("program.cooldown")}
+                hint={t("program.cooldownHint")}
+                error={field("cooldownMinutes")}
+                required
+              >
+                <div className="relative flex items-center">
+                  <Input
+                    inputMode="numeric"
+                    className="bg-white shadow-2xs pr-14 focus:ring-2 focus:ring-primary/20"
+                    {...register("cooldownMinutes")}
+                  />
+                  <span className="pointer-events-none absolute right-3 text-xs font-semibold text-muted">
+                    mins
+                  </span>
+                </div>
+              </FormField>
+            </div>
           </Section>
 
-          <Section title={t("program.secTerms")}>
-            <FormField label={t("program.termsEn")} error={field("termsEn")}>
-              <Textarea rows={4} {...register("termsEn")} />
-            </FormField>
-            <FormField label={t("program.termsAm")} error={field("termsAm")}>
-              <Textarea rows={4} lang="am" {...register("termsAm")} />
-            </FormField>
-          </Section>
-
-          <Section title={t("program.secLook")}>
+          {/* Section: Look & Feel */}
+          <Section
+            title={t("program.secLook")}
+            icon="🎨"
+            subtitle="Card brand colors, titles, and stamp icon design"
+          >
             <FormField
               label={t("program.brandColor")}
               hint={t("program.brandColorHint")}
               error={field("brandColor")}
             >
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  aria-label={t("program.brandColor")}
-                  value={
-                    /^#[0-9A-Fa-f]{6}$/.test(values.brandColor ?? "")
-                      ? values.brandColor
-                      : "#1b5e3a"
-                  }
-                  onChange={(event) =>
-                    setValue("brandColor", event.target.value.toUpperCase(), {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    })
-                  }
-                  className="h-11 w-14 cursor-pointer rounded-control border border-charcoal-500 bg-surface p-1"
-                />
-                <Input className="max-w-40 font-mono" maxLength={7} {...register("brandColor")} />
+              <div className="flex flex-col gap-3">
+                {/* Preset swatches */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {PRESET_COLORS.map((preset) => {
+                    const active = values.brandColor?.toUpperCase() === preset.value;
+                    return (
+                      <button
+                        key={preset.value}
+                        type="button"
+                        onClick={() =>
+                          setValue("brandColor", preset.value, {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          })
+                        }
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                          active
+                            ? "border-primary ring-2 ring-primary/25 bg-white shadow-2xs"
+                            : "border-border bg-white/80 hover:bg-white"
+                        }`}
+                      >
+                        <span
+                          className="h-3.5 w-3.5 rounded-full border border-black/10 shrink-0"
+                          style={{ backgroundColor: preset.value }}
+                        />
+                        <span>{preset.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    aria-label={t("program.brandColor")}
+                    value={
+                      /^#[0-9A-Fa-f]{6}$/.test(values.brandColor ?? "")
+                        ? values.brandColor
+                        : "#1b5e3a"
+                    }
+                    onChange={(event) =>
+                      setValue("brandColor", event.target.value.toUpperCase(), {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                    }
+                    className="h-11 w-14 cursor-pointer rounded-xl border border-border bg-white p-1 shadow-2xs"
+                  />
+                  <Input
+                    className="max-w-40 font-mono uppercase bg-white shadow-2xs"
+                    maxLength={7}
+                    {...register("brandColor")}
+                  />
+                </div>
               </div>
             </FormField>
-            <FormField label={t("program.cardTitle")} error={field("cardTitle")}>
-              <Input {...register("cardTitle")} />
-            </FormField>
-            <FormField label={t("program.cardSubtitle")} error={field("cardSubtitle")}>
-              <Input {...register("cardSubtitle")} />
-            </FormField>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <FormField label={t("program.cardTitle")} error={field("cardTitle")}>
+                <Input {...register("cardTitle")} className="bg-white shadow-2xs" />
+              </FormField>
+              <FormField label={t("program.cardSubtitle")} error={field("cardSubtitle")}>
+                <Input {...register("cardSubtitle")} className="bg-white shadow-2xs" />
+              </FormField>
+            </div>
+
             <FormField label={t("program.stampIcon")}>
-              <Select className="max-w-60" {...register("stampIcon")}>
-                {STAMP_ICONS.map((icon) => (
-                  <option key={icon} value={icon}>
-                    {t(ICON_LABEL[icon])}
-                  </option>
-                ))}
-              </Select>
+              <div className="flex flex-col gap-2">
+                {/* Visual Icon Selection Pills */}
+                <div className="flex flex-wrap gap-2">
+                  {STAMP_ICONS.map((icon) => {
+                    const active = values.stampIcon === icon;
+                    return (
+                      <button
+                        key={icon}
+                        type="button"
+                        onClick={() =>
+                          setValue("stampIcon", icon, {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          })
+                        }
+                        className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium border transition-all ${
+                          active
+                            ? "border-primary bg-green-50 text-green-900 shadow-2xs ring-1 ring-primary"
+                            : "border-border bg-white text-charcoal-700 hover:bg-cream-100"
+                        }`}
+                      >
+                        <StampIcon icon={icon} size={18} />
+                        <span>{t(ICON_LABEL[icon])}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* Keep native Select bound for accessibility/testing */}
+                <Select className="sr-only" tabIndex={-1} {...register("stampIcon")}>
+                  {STAMP_ICONS.map((icon) => (
+                    <option key={icon} value={icon}>
+                      {t(ICON_LABEL[icon])}
+                    </option>
+                  ))}
+                </Select>
+              </div>
             </FormField>
-            <Checkbox label={t("program.showProgressText")} {...register("showProgressText")} />
+
+            <div className="pt-2">
+              <Checkbox label={t("program.showProgressText")} {...register("showProgressText")} />
+            </div>
+          </Section>
+
+          {/* Section: Terms */}
+          <Section
+            title={t("program.secTerms")}
+            icon="📜"
+            subtitle="Terms, conditions, and rules displayed on the customer enrollment screen"
+          >
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <FormField label={t("program.termsEn")} error={field("termsEn")}>
+                <Textarea rows={3} {...register("termsEn")} className="bg-white shadow-2xs" />
+              </FormField>
+              <FormField label={t("program.termsAm")} error={field("termsAm")}>
+                <Textarea rows={3} lang="am" {...register("termsAm")} className="bg-white shadow-2xs" />
+              </FormField>
+            </div>
           </Section>
         </fieldset>
 
+        {/* Action Controls */}
         {!readOnly ? (
-          <div className="flex flex-wrap gap-3">
-            <Button
-              type="submit"
-              size="lg"
-              loading={isSubmitting}
-              loadingLabel={t("program.saving")}
-              disabled={!hydrated || (Boolean(program) && !isDirty)}
-            >
-              {!program
-                ? t("program.createDraft")
-                : program.status === "DRAFT"
-                  ? t("program.saveDraft")
-                  : t("program.saveChanges")}
-            </Button>
-            {program && isDirty ? (
-              <Button variant="ghost" onClick={() => reset(saved)}>
-                {t("program.discard")}
+          <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/80 bg-surface/95 p-4 shadow-lg backdrop-blur-md">
+            <div className="flex items-center gap-2 text-xs font-semibold text-muted">
+              {isDirty ? (
+                <span className="flex items-center gap-1.5 text-gold-text">
+                  <span className="h-2 w-2 rounded-full bg-gold-500 animate-pulse" />
+                  Unsaved changes
+                </span>
+              ) : (
+                <span className="text-muted">All changes saved</span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {program && isDirty ? (
+                <Button variant="ghost" onClick={() => reset(saved)}>
+                  {t("program.discard")}
+                </Button>
+              ) : null}
+              <Button
+                type="submit"
+                size="lg"
+                loading={isSubmitting}
+                loadingLabel={t("program.saving")}
+                disabled={!hydrated || (Boolean(program) && !isDirty)}
+                className="shadow-sm font-semibold"
+              >
+                {!program
+                  ? t("program.createDraft")
+                  : program.status === "DRAFT"
+                    ? t("program.saveDraft")
+                    : t("program.saveChanges")}
               </Button>
-            ) : null}
+            </div>
           </div>
         ) : null}
 
+        {/* Program Lifecycle Card */}
         {program && canManage && program.status !== "ARCHIVED" ? (
           <section
             aria-labelledby="status-title"
-            className="flex flex-col gap-3 rounded-card border border-border bg-surface p-4"
+            className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-surface p-5 sm:p-6 shadow-xs"
           >
-            <h3 id="status-title" className="font-bold text-green-900">
-              {t(STATUS_LABEL[program.status])}
-            </h3>
+            <div className="flex items-center justify-between border-b border-border/50 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-cream-200/60 text-sm">
+                  ⚡
+                </span>
+                <div>
+                  <h3 id="status-title" className="font-bold text-green-950">
+                    {t(STATUS_LABEL[program.status])}
+                  </h3>
+                  <p className="text-xs text-muted">Manage program publication, pause status, or archiving</p>
+                </div>
+              </div>
+            </div>
+
             {otherActive && program.status !== "ACTIVE" ? (
               <Alert tone="warning">{t("program.otherActive")}</Alert>
             ) : null}
             {isDirty && program.status !== "ACTIVE" ? (
-              <p className="text-sm text-muted">{t("program.saveBeforePublish")}</p>
+              <p className="text-xs text-muted">{t("program.saveBeforePublish")}</p>
             ) : null}
-            <div className="flex flex-wrap gap-3">
+
+            <div className="flex flex-wrap gap-3 pt-1">
               {program.status === "DRAFT" || program.status === "PAUSED" ? (
                 <Button disabled={isDirty || busy} onClick={() => setAction("publish")}>
                   {publishLabel}
@@ -417,6 +607,7 @@ export function ProgramEditor({
         ) : null}
       </form>
 
+      {/* Sticky Right Preview Column */}
       <aside className="min-w-0 lg:sticky lg:top-4 lg:self-start">
         <ProgramPreviews
           values={values?.nameEn === undefined ? getValues() : values}
@@ -425,6 +616,7 @@ export function ProgramEditor({
         />
       </aside>
 
+      {/* Confirm Dialogs */}
       <ConfirmDialog
         open={warnPatch !== null}
         title={t("program.warnTitle", { count: format.integer(program?.memberCount ?? 0) })}
@@ -473,11 +665,31 @@ export function ProgramEditor({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  icon,
+  subtitle,
+  children,
+}: {
+  title: string;
+  icon?: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="flex flex-col gap-4 rounded-card border border-border bg-surface p-4">
-      <h3 className="text-lg font-bold text-green-900">{title}</h3>
-      {children}
+    <section className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-surface p-5 sm:p-6 shadow-xs hover:border-border transition-all">
+      <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
+        {icon ? (
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
+            {icon}
+          </span>
+        ) : null}
+        <div>
+          <h3 className="text-lg font-bold text-green-950">{title}</h3>
+          {subtitle ? <p className="text-xs text-muted mt-0.5">{subtitle}</p> : null}
+        </div>
+      </div>
+      <div className="flex flex-col gap-4">{children}</div>
     </section>
   );
 }

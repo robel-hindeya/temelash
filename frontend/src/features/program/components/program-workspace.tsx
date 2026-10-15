@@ -40,7 +40,7 @@ const STATUS_TONE: Record<Program["status"], Tone> = {
 };
 
 /**
- * The program builder: pick a program (or start a new one), edit it with live previews, and print the join
+ * The modern program builder: pick a program (or start a new one), edit it with live previews, and print the join
  * materials. The list comes from the backend, and every change is saved there before it is shown as saved.
  */
 export function ProgramWorkspace({
@@ -64,9 +64,12 @@ export function ProgramWorkspace({
 
   if (query.isPending) {
     return (
-      <SkeletonGroup className="flex flex-col gap-4">
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-64 w-full" />
+      <SkeletonGroup className="flex flex-col gap-6">
+        <Skeleton className="h-16 w-full rounded-2xl" />
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
+          <Skeleton className="h-96 w-full rounded-2xl" />
+          <Skeleton className="h-96 w-full rounded-2xl" />
+        </div>
       </SkeletonGroup>
     );
   }
@@ -101,7 +104,6 @@ export function ProgramWorkspace({
         : [...current, program],
     );
     setChoice(program.id);
-    // Activating one program does not change the others in this list; ask again for the truth.
     void client.invalidateQueries({ queryKey: ["programs"] });
   }
 
@@ -114,26 +116,42 @@ export function ProgramWorkspace({
   return (
     <div className="flex flex-col gap-6">
       {programs.length > 0 ? (
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="max-w-sm min-w-0 flex-1">
-            <FormField label={t("program.listLabel")}>
-              <Select value={selectedId ?? ""} onChange={(event) => setChoice(event.target.value)}>
-                {programs.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {label(p)}
-                  </option>
-                ))}
-                {selectedId === NEW ? (
-                  <option value={NEW}>{t("program.createTitle")}</option>
-                ) : null}
-              </Select>
-            </FormField>
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border/80 bg-surface p-4 shadow-xs">
+          <div className="flex flex-wrap items-center gap-3 min-w-0 flex-1">
+            <div className="w-full sm:max-w-xs min-w-0">
+              <FormField label={t("program.listLabel")}>
+                <Select
+                  value={selectedId ?? ""}
+                  onChange={(event) => setChoice(event.target.value)}
+                  className="font-medium text-foreground bg-white shadow-xs focus:ring-2 focus:ring-primary/20"
+                >
+                  {programs.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {label(p)}
+                    </option>
+                  ))}
+                  {selectedId === NEW ? (
+                    <option value={NEW}>{t("program.createTitle")}</option>
+                  ) : null}
+                </Select>
+              </FormField>
+            </div>
+            {selected ? (
+              <div className="flex items-center gap-2 pt-5">
+                <Badge tone={STATUS_TONE[selected.status]}>
+                  {t(STATUS_LABEL[selected.status])}
+                </Badge>
+              </div>
+            ) : null}
           </div>
-          {selected ? (
-            <Badge tone={STATUS_TONE[selected.status]}>{t(STATUS_LABEL[selected.status])}</Badge>
-          ) : null}
+
           {canManage && selectedId !== NEW ? (
-            <Button variant="secondary" onClick={() => setChoice(NEW)}>
+            <Button
+              variant="secondary"
+              onClick={() => setChoice(NEW)}
+              className="shadow-xs hover:border-primary/50 transition-all"
+            >
+              <span className="mr-1.5 font-bold text-base leading-none">+</span>
               {t("program.newProgram")}
             </Button>
           ) : null}

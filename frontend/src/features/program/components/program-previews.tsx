@@ -44,9 +44,9 @@ export function draftJoinInfo(
 }
 
 /**
- * Three live previews of the program as it is in the form, saved or not: the join page, the web card and a
- * wallet-card sketch. Everything shown is sample data (no real customer, no real QR code), and the previews only
- * draw what the form holds: they never decide anything.
+ * Three live interactive previews of the program as it is in the form, saved or not: the join page, the web card and a
+ * wallet-card sketch. Everything shown is sample data (no real customer, no real QR code), and the previews dynamically
+ * react to form input in real time.
  */
 export function ProgramPreviews({
   values,
@@ -68,39 +68,76 @@ export function ProgramPreviews({
   const stamps = Math.min(sample ?? Math.min(3, required - 1), required);
 
   return (
-    <section aria-labelledby="preview-title" className="flex flex-col gap-4" data-testid="previews">
-      <div>
-        <h2 id="preview-title" className="text-lg font-bold text-green-900">
-          {t("program.previewTitle")}
-        </h2>
-        <p className="text-sm text-muted">{t("program.previewNote")}</p>
+    <section
+      aria-labelledby="preview-title"
+      className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-surface p-5 shadow-xs transition-all"
+      data-testid="previews"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-3">
+        <div>
+          <h2 id="preview-title" className="text-base font-bold text-green-950 flex items-center gap-2">
+            <span>{t("program.previewTitle")}</span>
+          </h2>
+          <p className="text-xs text-muted">{t("program.previewNote")}</p>
+        </div>
         {dirty ? (
-          <p className="mt-1 text-sm font-medium text-gold-text" data-testid="preview-draft">
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full bg-gold-100 px-2.5 py-0.5 text-xs font-semibold text-gold-text border border-gold-300"
+            data-testid="preview-draft"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-gold-500 animate-pulse" />
             {t("program.previewDraft")}
-          </p>
+          </span>
         ) : null}
       </div>
 
-      <div className="flex flex-wrap items-end gap-6">
-        <RadioGroup
-          name="preview-language"
-          legend={t("program.previewLanguage")}
-          value={language}
-          onValueChange={(v) => setLanguage(v as Locale)}
-          options={[
-            { value: "en", label: t("program.qrEnglish") },
-            { value: "am", label: t("program.qrAmharic") },
-          ]}
-        />
-        <label className="flex flex-col gap-1.5 font-medium">
-          {t("program.previewStamps")}
+      {/* Simulator controls */}
+      <div className="flex flex-col gap-3 rounded-xl bg-cream-100/70 p-3.5 border border-border/60">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <RadioGroup
+            name="preview-language"
+            legend={t("program.previewLanguage")}
+            value={language}
+            onValueChange={(v) => setLanguage(v as Locale)}
+            options={[
+              { value: "en", label: t("program.qrEnglish") },
+              { value: "am", label: t("program.qrAmharic") },
+            ]}
+          />
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setSample(Math.max(0, stamps - 1))}
+              disabled={stamps <= 0}
+              aria-label="Decrease stamp"
+              className="flex h-7 w-7 items-center justify-center rounded-md bg-white border border-border text-sm font-bold text-foreground shadow-2xs hover:bg-cream-100 disabled:opacity-40"
+            >
+              -
+            </button>
+            <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-white border border-border tabular-nums">
+              {stamps}/{required}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSample(Math.min(required, stamps + 1))}
+              disabled={stamps >= required}
+              aria-label="Increase stamp"
+              className="flex h-7 w-7 items-center justify-center rounded-md bg-white border border-border text-sm font-bold text-foreground shadow-2xs hover:bg-cream-100 disabled:opacity-40"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        <label className="flex flex-col gap-1 text-xs font-medium text-charcoal-700">
+          <span>{t("program.previewStamps")}: <strong className="text-foreground">{stamps} of {required}</strong></span>
           <input
             type="range"
             min={0}
             max={required}
             value={stamps}
             onChange={(event) => setSample(Number(event.target.value))}
-            className="w-48 accent-green-700"
+            className="w-full accent-green-700 cursor-pointer h-1.5 bg-border rounded-lg"
           />
         </label>
       </div>
@@ -113,7 +150,7 @@ export function ProgramPreviews({
             label: t("program.previewJoin"),
             content: (
               <div
-                className="rounded-card border border-border bg-cream-100 p-4"
+                className="rounded-2xl border border-border/80 bg-white p-4 shadow-xs"
                 data-testid="preview-join"
               >
                 <MerchantSummary info={info} locale={language} t={t} />
@@ -155,33 +192,37 @@ function WebCardPreview({
     : null;
   const color = safeBrandColor(info.program.brandColor);
   return (
-    <article data-testid="preview-web" aria-label={t("program.previewWeb")} className="max-w-sm">
+    <article
+      data-testid="preview-web"
+      aria-label={t("program.previewWeb")}
+      className="w-full max-w-sm rounded-2xl overflow-hidden shadow-sm border border-border/80 bg-white mx-auto"
+    >
       <header
-        className="rounded-t-card p-4"
+        className="p-4 transition-colors"
         style={{ backgroundColor: color, color: readableOn(color) }}
       >
-        <p className="text-lg font-bold break-words" lang={business.lang}>
+        <p className="text-xs uppercase tracking-wider opacity-85 font-semibold" lang={business.lang}>
           {business.text}
         </p>
-        <p className="break-words opacity-90" lang={program.lang}>
+        <p className="text-xl font-bold break-words mt-0.5" lang={program.lang}>
           {program.text}
         </p>
-        <p className="mt-3 font-semibold">
+        <p className="mt-2 text-sm font-medium opacity-90">
           {t("card.greeting", { name: t("program.previewSampleName") })}
         </p>
       </header>
-      <div className="flex flex-col gap-3 rounded-b-card border border-t-0 border-border bg-surface p-4">
+      <div className="flex flex-col gap-3 p-4 bg-surface">
         <StampProgress
           current={stamps}
           required={info.program.stampsRequired}
           rewardReady={stamps >= info.program.stampsRequired}
         />
         {reward ? (
-          <p className="break-words text-charcoal-700" lang={reward.lang}>
-            {t("card.rewardTarget", { count: info.program.stampsRequired, reward: reward.text })}
+          <p className="break-words text-sm text-charcoal-700 bg-cream-50 p-2.5 rounded-xl border border-border/60" lang={reward.lang}>
+            🎁 {t("card.rewardTarget", { count: info.program.stampsRequired, reward: reward.text })}
           </p>
         ) : null}
-        <div className="flex h-32 items-center justify-center rounded-card border border-dashed border-charcoal-500 bg-white text-sm text-muted">
+        <div className="flex h-28 items-center justify-center rounded-xl border-2 border-dashed border-border bg-white text-xs font-mono text-muted">
           {t("program.previewQr")}
         </div>
       </div>
@@ -210,17 +251,26 @@ function WalletCardPreview({
     <article
       data-testid="preview-wallet"
       aria-label={t("program.previewWallet")}
-      className="w-full max-w-sm rounded-2xl p-5 shadow-md"
-      style={{ backgroundColor: color, color: ink }}
+      className="w-full max-w-sm rounded-3xl p-5 shadow-md border border-white/20 mx-auto transition-all"
+      style={{
+        backgroundColor: color,
+        color: ink,
+        backgroundImage: "linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(0,0,0,0.08) 100%)",
+      }}
     >
-      <p className="text-xl font-bold break-words" lang={program.lang}>
+      <div className="flex items-center justify-between opacity-80 text-xs tracking-wider uppercase font-semibold">
+        <span>LOYALTY PASS</span>
+        <span className="flex h-2 w-2 rounded-full bg-current opacity-75" />
+      </div>
+      <p className="text-xl font-bold break-words mt-1" lang={program.lang}>
         {title}
       </p>
       {values.cardSubtitle.trim() ? (
-        <p className="break-words opacity-90">{values.cardSubtitle}</p>
+        <p className="break-words text-sm opacity-90">{values.cardSubtitle}</p>
       ) : null}
+
       <div
-        className="mt-4 flex flex-wrap gap-2"
+        className="mt-4 flex flex-wrap gap-2.5"
         role="img"
         aria-label={t("ui.stampProgress", {
           current: Math.min(stamps, total),
@@ -230,12 +280,12 @@ function WalletCardPreview({
         {Array.from({ length: total }, (_, i) => (
           <span
             key={i}
-            className="flex h-9 w-9 items-center justify-center rounded-full border-2"
+            className="flex h-9 w-9 items-center justify-center rounded-full border-2 transition-transform"
             style={{
               borderColor: ink,
               backgroundColor: i < stamps ? ink : "transparent",
               color: i < stamps ? color : ink,
-              opacity: i < stamps ? 1 : 0.6,
+              opacity: i < stamps ? 1 : 0.45,
             }}
           >
             <StampIcon icon={values.stampIcon} size={18} />
@@ -243,7 +293,7 @@ function WalletCardPreview({
         ))}
       </div>
       {values.showProgressText ? (
-        <p className="mt-3 font-semibold" data-testid="wallet-progress-text">
+        <p className="mt-4 text-xs font-semibold tracking-wide uppercase opacity-90" data-testid="wallet-progress-text">
           {t("ui.stampProgress", {
             current: Math.min(stamps, info.program.stampsRequired),
             required: info.program.stampsRequired,
