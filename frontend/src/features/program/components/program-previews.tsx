@@ -7,6 +7,8 @@ import { pickLocalized, readableOn, safeBrandColor } from "@/features/enrollment
 import type { JoinInfo } from "@/lib/api/contract";
 import type { Locale } from "@/lib/i18n/config";
 import { useI18n } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/translator";
+import { GiftIcon } from "@/components/ui/icons";
 import type { ProgramFormValues } from "../program-form";
 import { StampIcon } from "./stamp-icon";
 
@@ -218,8 +220,9 @@ function WebCardPreview({
           rewardReady={stamps >= info.program.stampsRequired}
         />
         {reward ? (
-          <p className="break-words text-sm text-charcoal-700 bg-cream-50 p-2.5 rounded-xl border border-border/60" lang={reward.lang}>
-            🎁 {t("card.rewardTarget", { count: info.program.stampsRequired, reward: reward.text })}
+          <p className="inline-flex items-start gap-1.5 break-words text-sm text-charcoal-700 bg-cream-50 p-2.5 rounded-xl border border-border/60" lang={reward.lang}>
+            <GiftIcon size={16} className="shrink-0 mt-0.5 text-primary" />
+            <span>{t("card.rewardTarget", { count: info.program.stampsRequired, reward: reward.text })}</span>
           </p>
         ) : null}
         <div className="flex h-28 items-center justify-center rounded-xl border-2 border-dashed border-border bg-white text-xs font-mono text-muted">

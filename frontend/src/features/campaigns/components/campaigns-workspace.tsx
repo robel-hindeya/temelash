@@ -19,6 +19,16 @@ import {
   Textarea,
   useToast,
 } from "@/components/ui";
+import {
+  CheckIcon,
+  CoffeeIcon,
+  EditIcon,
+  MegaphoneIcon,
+  PlusIcon,
+  SendIcon,
+  ShieldCheckIcon,
+  UsersIcon,
+} from "@/components/ui/icons";
 import type { Tone } from "@/components/ui";
 import { ResponsiveTable } from "@/features/org/responsive-table";
 import { useCursorPages } from "@/features/records/use-cursor-pages";
@@ -183,8 +193,8 @@ export function CampaignsWorkspace() {
     </div>
   );
   const reach = (c: Campaign) => (
-    <span className="inline-flex items-center gap-1 font-semibold text-charcoal-900 bg-cream-100 px-2.5 py-1 rounded-full text-xs">
-      <span>👥</span>
+    <span className="inline-flex items-center gap-1.5 font-semibold text-charcoal-900 bg-cream-100 px-2.5 py-1 rounded-full text-xs">
+      <UsersIcon size={13} className="text-charcoal-700" />
       {t("campaigns.reach", { count: format.integer(c.audienceSize) })}
     </span>
   );
@@ -201,8 +211,8 @@ export function CampaignsWorkspace() {
         </Button>
       </span>
     ) : c.sentAt ? (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-        <span>✓</span>
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+        <CheckIcon size={13} />
         {t("campaigns.sentOn", { date: format.date(c.sentAt) })}
       </span>
     ) : null;
@@ -218,8 +228,8 @@ export function CampaignsWorkspace() {
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">
               {"Total Campaigns"}
             </span>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-50 text-base">
-              📢
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-50 text-primary">
+              <MegaphoneIcon size={18} />
             </span>
           </div>
           <div className="mt-3">
@@ -233,8 +243,8 @@ export function CampaignsWorkspace() {
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">
               {"Drafts in Progress"}
             </span>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-base">
-              📝
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+              <EditIcon size={18} />
             </span>
           </div>
           <div className="mt-3">
@@ -248,8 +258,8 @@ export function CampaignsWorkspace() {
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">
               {"Sent Campaigns"}
             </span>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-base">
-              🚀
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+              <SendIcon size={18} />
             </span>
           </div>
           <div className="mt-3">
@@ -263,8 +273,8 @@ export function CampaignsWorkspace() {
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">
               {"Opt-in Audience"}
             </span>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-base">
-              🛡️
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+              <ShieldCheckIcon size={18} />
             </span>
           </div>
           <div className="mt-3">
@@ -277,47 +287,49 @@ export function CampaignsWorkspace() {
       </div>
 
       {/* Action Header & Filter Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-surface p-4 rounded-2xl border border-border/70 shadow-xs">
-        <div className="flex flex-wrap items-center gap-1.5 bg-cream-100/70 p-1 rounded-xl">
-          {(
-            [
-              { id: "ALL", label: `All (${items.length})` },
-              { id: "DRAFT", label: `Drafts (${draftCount})` },
-              { id: "SENT", label: `Sent (${sentCount})` },
-              { id: "CANCELLED", label: `Cancelled` },
-            ] as const
-          ).map((filter) => {
-            const active = statusFilter === filter.id;
-            return (
-              <button
-                key={filter.id}
-                type="button"
-                onClick={() => setStatusFilter(filter.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  active
-                    ? "bg-white text-primary shadow-xs"
-                    : "text-muted hover:text-foreground"
-                }`}
-              >
-                {filter.label}
-              </button>
-            );
-          })}
-        </div>
+      {items.length > 0 ? (
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-surface p-4 rounded-2xl border border-border/70 shadow-xs">
+          <div className="flex flex-wrap items-center gap-1.5 bg-cream-100/70 p-1 rounded-xl">
+            {(
+              [
+                { id: "ALL", label: `All (${items.length})` },
+                { id: "DRAFT", label: `Drafts (${draftCount})` },
+                { id: "SENT", label: `Sent (${sentCount})` },
+                { id: "CANCELLED", label: `Cancelled` },
+              ] as const
+            ).map((filter) => {
+              const active = statusFilter === filter.id;
+              return (
+                <button
+                  key={filter.id}
+                  type="button"
+                  onClick={() => setStatusFilter(filter.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    active
+                      ? "bg-white text-primary shadow-xs"
+                      : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              );
+            })}
+          </div>
 
-        <Button
-          onClick={() => setCreating(true)}
-          className="shadow-sm font-semibold flex items-center justify-center gap-2"
-        >
-          <span>＋</span>
-          <span>{t("campaigns.newCampaign")}</span>
-        </Button>
-      </div>
+          <Button
+            onClick={() => setCreating(true)}
+            className="shadow-sm font-semibold flex items-center justify-center gap-2"
+          >
+            <PlusIcon size={16} />
+            <span>{t("campaigns.newCampaign")}</span>
+          </Button>
+        </div>
+      ) : null}
 
       {items.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-surface p-12 text-center shadow-xs">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-green-50 text-3xl shadow-2xs">
-            📢
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-green-50 text-primary shadow-2xs">
+            <MegaphoneIcon size={32} />
           </div>
           <h3 className="mt-4 text-xl font-bold text-green-950">{t("campaigns.empty")}</h3>
           <p className="mt-2 text-sm text-muted max-w-md mx-auto">{t("campaigns.emptyHint")}</p>
@@ -618,8 +630,8 @@ function CampaignForm({ onClose, onCreated }: { onClose: () => void; onCreated: 
                 <span>{"Temelash Card"}</span>
               </div>
               <div className="flex items-start gap-2.5 bg-charcoal-800/80 p-3 rounded-lg border border-charcoal-700">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-green-700 text-base shadow-xs">
-                  ☕
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-green-700 text-white shadow-xs">
+                  <CoffeeIcon size={16} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Alert, Button, RadioGroup } from "@/components/ui";
+import { CheckIcon } from "@/components/ui/icons";
 import type { Program } from "@/lib/api/contract";
 import { useI18n } from "@/lib/i18n/client";
 import { downloadBlob, downloadSvg, svgToPng } from "../qr-download";
@@ -94,7 +95,14 @@ export function JoinMaterials({
                   onClick={copyUrl}
                   className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-white border border-border shadow-2xs hover:bg-cream-200 transition-all shrink-0"
                 >
-                  {copied ? "Copied! ✓" : "Copy"}
+                  {copied ? (
+                    <span className="inline-flex items-center gap-1 text-emerald-700">
+                      <CheckIcon size={12} />
+                      {"Copied!"}
+                    </span>
+                  ) : (
+                    "Copy"
+                  )}
                 </button>
               </div>
             </div>

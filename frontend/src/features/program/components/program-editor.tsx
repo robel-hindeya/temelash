@@ -15,6 +15,16 @@ import {
   Textarea,
   useToast,
 } from "@/components/ui";
+import {
+  CheckIcon,
+  FileTextIcon,
+  GiftIcon,
+  PaletteIcon,
+  TagIcon,
+  TargetIcon,
+  WarningIcon,
+  ZapIcon,
+} from "@/components/ui/icons";
 import type { Tone } from "@/components/ui";
 import { getBrowserApi } from "@/lib/api/browser";
 import type { Program } from "@/lib/api/contract";
@@ -214,11 +224,11 @@ export function ProgramEditor({
   const changedFields = warnPatch ? memberVisibleFields(warnPatch).map((key) => t(key)) : [];
 
   const stepItems = [
-    { num: 1, title: t("program.secNames"), icon: "🏷️" },
-    { num: 2, title: t("program.secReward"), icon: "🎁" },
-    { num: 3, title: t("program.secStamps"), icon: "🎯" },
-    { num: 4, title: t("program.secLook"), icon: "🎨" },
-    { num: 5, title: t("program.secTerms"), icon: "📜" },
+    { num: 1, title: t("program.secNames"), Icon: TagIcon },
+    { num: 2, title: t("program.secReward"), Icon: GiftIcon },
+    { num: 3, title: t("program.secStamps"), Icon: TargetIcon },
+    { num: 4, title: t("program.secLook"), Icon: PaletteIcon },
+    { num: 5, title: t("program.secTerms"), Icon: FileTextIcon },
   ];
 
   return (
@@ -306,7 +316,7 @@ export function ProgramEditor({
                             : "bg-white border border-border text-charcoal-700"
                       }`}
                     >
-                      {isPast ? "✓" : step.num}
+                      {isPast ? <CheckIcon size={12} /> : step.num}
                     </span>
                     <span className="text-xs font-semibold truncate">
                       {step.title}
@@ -323,8 +333,8 @@ export function ProgramEditor({
             className={currentStep === 0 ? "flex flex-col gap-4" : "hidden"}
           >
             <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
-                🏷️
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-primary">
+                <TagIcon size={16} />
               </span>
               <div>
                 <h3 className="text-lg font-bold text-green-950">{t("program.secNames")}</h3>
@@ -375,8 +385,8 @@ export function ProgramEditor({
             className={currentStep === 1 ? "flex flex-col gap-4" : "hidden"}
           >
             <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
-                🎁
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-primary">
+                <GiftIcon size={16} />
               </span>
               <div>
                 <h3 className="text-lg font-bold text-green-950">{t("program.secReward")}</h3>
@@ -448,8 +458,8 @@ export function ProgramEditor({
             className={currentStep === 2 ? "flex flex-col gap-4" : "hidden"}
           >
             <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
-                🎯
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-primary">
+                <TargetIcon size={16} />
               </span>
               <div>
                 <h3 className="text-lg font-bold text-green-950">{t("program.secStamps")}</h3>
@@ -511,8 +521,8 @@ export function ProgramEditor({
             className={currentStep === 3 ? "flex flex-col gap-4" : "hidden"}
           >
             <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
-                🎨
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-primary">
+                <PaletteIcon size={16} />
               </span>
               <div>
                 <h3 className="text-lg font-bold text-green-950">{t("program.secLook")}</h3>
@@ -648,8 +658,8 @@ export function ProgramEditor({
             className={currentStep === 4 ? "flex flex-col gap-4" : "hidden"}
           >
             <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
-                📜
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-primary">
+                <FileTextIcon size={16} />
               </span>
               <div>
                 <h3 className="text-lg font-bold text-green-950">{t("program.secTerms")}</h3>
@@ -667,8 +677,9 @@ export function ProgramEditor({
               <Button type="button" variant="ghost" onClick={() => setCurrentStep(3)}>
                 &lt; {t("program.secLook")}
               </Button>
-              <span className="text-xs font-semibold text-green-800 bg-green-50 px-3 py-1.5 rounded-full border border-green-200">
-                ✓ All sections complete
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-800 bg-green-50 px-3 py-1.5 rounded-full border border-green-200">
+                <CheckIcon size={13} />
+                {"All sections complete"}
               </span>
             </div>
           </div>
@@ -685,7 +696,7 @@ export function ProgramEditor({
                     : "bg-green-50 text-green-800 border border-green-200"
                 }`}
               >
-                {isDirty ? "!" : "✓"}
+                {isDirty ? <WarningIcon size={20} /> : <CheckIcon size={20} />}
               </div>
               <div>
                 <h3 className="font-bold text-green-950 text-base">
@@ -731,8 +742,8 @@ export function ProgramEditor({
           >
             <div className="flex items-center justify-between border-b border-border/50 pb-3">
               <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-cream-200/60 text-sm">
-                  ⚡
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-cream-200/60 text-primary">
+                  <ZapIcon size={16} />
                 </span>
                 <div>
                   <h3 id="status-title" className="font-bold text-green-950">
