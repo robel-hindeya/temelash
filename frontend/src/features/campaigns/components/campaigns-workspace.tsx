@@ -122,17 +122,10 @@ export function CampaignsWorkspace() {
   }
 
   const preview = (
-    <div className="rounded-2xl border border-gold-300/80 bg-gradient-to-r from-gold-50 via-cream-50 to-gold-50/60 p-4 shadow-2xs">
-      <Alert tone="warning" title={t("campaigns.previewTitle")} className="border-0 bg-transparent p-0 shadow-none">
-        <div className="flex flex-col gap-1 text-sm text-charcoal-800">
-          <p>{t("campaigns.previewBody")}</p>
-          <div className="flex items-center gap-1.5 pt-0.5">
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-900 bg-gold-200/60 px-2.5 py-0.5 rounded-full border border-gold-300/60">
-              <ShieldCheckIcon size={12} />
-              {t("campaigns.consentNote")}
-            </span>
-          </div>
-        </div>
+    <div className="sr-only">
+      <Alert tone="warning" title={t("campaigns.previewTitle")}>
+        <p>{t("campaigns.previewBody")}</p>
+        <p>{t("campaigns.consentNote")}</p>
       </Alert>
     </div>
   );
