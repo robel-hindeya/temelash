@@ -115,7 +115,7 @@ describe("requests", () => {
     show();
     await screen.findByTestId("events-list");
     await waitFor(() => expect(wallet).toHaveBeenCalled());
-    for (const call of [overview, monthlyReturning, branches, wallet, definitions, auditList]) {
+    for (const call of [overview, branches, wallet, definitions, auditList]) {
       expect(call).toHaveBeenCalledTimes(1);
     }
   });
@@ -235,7 +235,7 @@ describe("permissions", () => {
     expect(screen.getByText(/does not include loyalty statistics/)).toBeInTheDocument();
     expect(screen.queryByRole("article", { name: "New members" })).not.toBeInTheDocument();
     await waitFor(() => expect(auditList).toHaveBeenCalled());
-    for (const mock of [overview, monthlyReturning, branches, wallet, definitions]) {
+    for (const mock of [overview, branches, wallet, definitions]) {
       expect(mock).not.toHaveBeenCalled();
     }
   });
@@ -339,33 +339,7 @@ describe("date range and time zone", () => {
   });
 });
 
-describe("charts have text alternatives", () => {
-  it("describes the chart for screen readers and offers the same numbers as a table", async () => {
-    const user = show();
-    const chart = await screen.findByRole("img", {
-      name: /Bar chart of returning loyalty customers/,
-    });
-    expect(chart).toHaveAccessibleDescription(/October 2026 \(so far\): \d+/);
-    expect(chart).toHaveAccessibleDescription(/May 2026: \d+/);
-
-    const section = screen.getByTestId("section-trend");
-    await user.click(within(section).getByRole("button", { name: "Show as a table" }));
-    const table = within(section).getByRole("table", { name: "Returning customers by month" });
-    expect(within(table).getAllByRole("row")).toHaveLength(7); // header + six months
-    expect(within(table).getByText("October 2026 (so far)")).toBeInTheDocument();
-    expect(within(section).getByRole("button", { name: "Hide the table" })).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
-  });
-
-  it("prints each bar's value, so the picture is never the only source", async () => {
-    show();
-    const bars = await screen.findAllByTestId("bar");
-    expect(bars).toHaveLength(6);
-    for (const bar of bars) expect(bar.textContent).toMatch(/\d/);
-  });
-
+describe("branch table accessibility", () => {
   it("gives the branch table a real caption and row headers", async () => {
     show();
     const table = await screen.findByRole("table", { name: /Branch activity in this period/ });

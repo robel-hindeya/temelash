@@ -16,7 +16,6 @@ const OWNER = "owner@mock.test";
 
 async function loaded(page: Page) {
   await expect(card(page, "New members")).not.toHaveAttribute("aria-busy", "true");
-  await expect(page.getByTestId("section-trend")).toHaveAttribute("data-state", "ready");
   await expect(page.getByTestId("section-events")).toHaveAttribute("data-state", "ready");
 }
 
@@ -37,7 +36,6 @@ test.describe("the overview", () => {
     }
     await expect(card(page, "New members")).toContainText("90"); // 30 days in the mock
     await expect(card(page, "Redemption rate")).toContainText("%");
-    await expect(page.getByRole("heading", { name: "Returning customers by month" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Branch activity" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Wallet update health" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Recent operational events" })).toBeVisible();

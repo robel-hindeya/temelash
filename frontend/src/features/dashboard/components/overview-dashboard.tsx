@@ -4,7 +4,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 import {
   Alert,
-  BarChart,
   EmptyState,
   MetricCard,
   Table,
@@ -24,7 +23,6 @@ import { paramsFor, rangeFromParams } from "../range";
 import {
   useBranchActivity,
   useDefinitions,
-  useMonthlyReturning,
   useOverview,
   useRecentEvents,
   useWalletHealth,
@@ -64,14 +62,13 @@ export function OverviewDashboard({
   const { range, preset } = rangeFromParams(params, today);
 
   const overview = useOverview(range, canReadAnalytics);
-  const monthly = useMonthlyReturning(canReadAnalytics);
   const branches = useBranchActivity(range, canReadAnalytics);
   const wallet = useWalletHealth(range, canReadAnalytics);
   const definitions = useDefinitions(canReadAnalytics);
   const events = useRecentEvents(canReadAudit);
 
   const go = (query: string) => router.replace(`${pathname}${query}`, { scroll: false });
-  const failedSections = [overview, monthly, branches, wallet, events].filter(
+  const failedSections = [overview, branches, wallet, events].filter(
     (q) => q.isError,
   ).length;
 
@@ -191,58 +188,6 @@ export function OverviewDashboard({
               </dl>
             </details>
           ) : null}
-
-          <DashboardSection id="trend" title={t("dashboard.trendTitle")} query={monthly}>
-            {monthly.data ? (
-              <BarChart
-                label={t("dashboard.trendChart")}
-                summary={monthly.data.series
-                  .map(
-                    (m) =>
-                      `${m.partial ? t("dashboard.monthSoFar", { month: format.month(m.month) }) : format.month(m.month)}: ${n(m.returningCustomers)}`,
-                  )
-                  .join("; ")}
-                data={monthly.data.series.map((m) => ({
-                  id: m.month,
-                  label: format.month(m.month).split(" ")[0] ?? m.month,
-                  value: m.returningCustomers,
-                  display: n(m.returningCustomers),
-                  provisional: m.partial,
-                }))}
-                showTableLabel={t("dashboard.showTable")}
-                hideTableLabel={t("dashboard.hideTable")}
-                table={
-                  <Table label={t("dashboard.trendTitle")}>
-                    <THead>
-                      <TR>
-                        <TH>{t("dashboard.colMonth")}</TH>
-                        <TH>{t("dashboard.colReturning")}</TH>
-                        <TH>{t("dashboard.colActive")}</TH>
-                        <TH>{t("dashboard.colShare")}</TH>
-                      </TR>
-                    </THead>
-                    <TBody>
-                      {monthly.data.series.map((m) => (
-                        <TR key={m.month}>
-                          <RowHeader>
-                            {m.partial
-                              ? t("dashboard.monthSoFar", { month: format.month(m.month) })
-                              : format.month(m.month)}
-                          </RowHeader>
-                          <TD>{n(m.returningCustomers)}</TD>
-                          <TD>{n(m.activeMembers)}</TD>
-                          <TD>
-                            {m.returningShare === null ? "—" : format.percent(m.returningShare)}
-                          </TD>
-                        </TR>
-                      ))}
-                    </TBody>
-                  </Table>
-                }
-              />
-            ) : null}
-          </DashboardSection>
-
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <DashboardSection
               id="branches"
