@@ -123,17 +123,7 @@ export function ProgramEditor({
   const [action, setAction] = useState<Action | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // References to smoothly scroll to each step inside the unified box
-  const step1Ref = useRef<HTMLDivElement>(null);
-  const step2Ref = useRef<HTMLDivElement>(null);
-  const step3Ref = useRef<HTMLDivElement>(null);
-  const step4Ref = useRef<HTMLDivElement>(null);
-  const step5Ref = useRef<HTMLDivElement>(null);
-
-  const stepRefs = [step1Ref, step2Ref, step3Ref, step4Ref, step5Ref];
-  const scrollToStep = (index: number) => {
-    stepRefs[index]?.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
+  const [currentStep, setCurrentStep] = useState(0);
 
   useUnsavedChangesWarning(isDirty, t("program.unsavedLeave"));
 
@@ -284,33 +274,54 @@ export function ProgramEditor({
           <div className="flex flex-col gap-3 border-b border-border/60 pb-5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-muted">
-                Program Setup Flow
+                Step {currentStep + 1} of 5: {stepItems[currentStep]?.title}
               </span>
               <span className="text-xs font-semibold text-green-800 bg-green-50 px-2.5 py-0.5 rounded-full border border-green-200">
-                5 Steps
+                {currentStep === 4 ? "Final step" : "Next: " + stepItems[currentStep + 1]?.title}
               </span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              {stepItems.map((step, idx) => (
-                <button
-                  key={step.num}
-                  type="button"
-                  onClick={() => scrollToStep(idx)}
-                  className="flex items-center gap-2 p-2 rounded-xl border border-border/60 bg-cream-50/70 hover:bg-white text-left transition-all group"
-                >
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white border border-border text-xs font-bold text-charcoal-700 shadow-2xs group-hover:border-primary group-hover:text-primary">
-                    {step.num}
-                  </span>
-                  <span className="text-xs font-semibold text-foreground truncate">
-                    {step.title}
-                  </span>
-                </button>
-              ))}
+              {stepItems.map((step, idx) => {
+                const isActive = currentStep === idx;
+                const isPast = currentStep > idx;
+                return (
+                  <button
+                    key={step.num}
+                    type="button"
+                    onClick={() => setCurrentStep(idx)}
+                    className={`flex items-center gap-2 p-2.5 rounded-xl border text-left transition-all ${
+                      isActive
+                        ? "border-primary bg-primary text-white shadow-xs"
+                        : isPast
+                          ? "border-green-300 bg-green-50/80 text-green-950 hover:bg-green-100"
+                          : "border-border/60 bg-cream-50/70 text-charcoal-700 hover:bg-white"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                        isActive
+                          ? "bg-white text-primary"
+                          : isPast
+                            ? "bg-green-700 text-white"
+                            : "bg-white border border-border text-charcoal-700"
+                      }`}
+                    >
+                      {isPast ? "✓" : step.num}
+                    </span>
+                    <span className="text-xs font-semibold truncate">
+                      {step.title}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* STEP 1: Name */}
-          <div ref={step1Ref} className="flex flex-col gap-4">
+          <div
+            onFocusCapture={() => setCurrentStep(0)}
+            className={currentStep === 0 ? "flex flex-col gap-4" : "hidden"}
+          >
             <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
                 🏷️
@@ -337,17 +348,18 @@ export function ProgramEditor({
                 />
               </FormField>
             </div>
-            <div className="flex justify-end pt-2">
-              <Button type="button" variant="secondary" onClick={() => scrollToStep(1)}>
-                Next: {t("program.secReward")} ↓
+            <div className="flex justify-end pt-3">
+              <Button type="button" variant="primary" onClick={() => setCurrentStep(1)}>
+                Next: {t("program.secReward")} &gt;
               </Button>
             </div>
           </div>
 
-          <hr className="border-border/60" />
-
           {/* STEP 2: Reward */}
-          <div ref={step2Ref} className="flex flex-col gap-4">
+          <div
+            onFocusCapture={() => setCurrentStep(1)}
+            className={currentStep === 1 ? "flex flex-col gap-4" : "hidden"}
+          >
             <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
                 🎁
@@ -409,20 +421,21 @@ export function ProgramEditor({
                 </div>
               </FormField>
             </div>
-            <div className="flex justify-between items-center pt-2">
-              <Button type="button" variant="ghost" onClick={() => scrollToStep(0)}>
-                ↑ {t("program.secNames")}
+            <div className="flex justify-between items-center pt-3">
+              <Button type="button" variant="ghost" onClick={() => setCurrentStep(0)}>
+                &lt; {t("program.secNames")}
               </Button>
-              <Button type="button" variant="secondary" onClick={() => scrollToStep(2)}>
-                Next: {t("program.secStamps")} ↓
+              <Button type="button" variant="primary" onClick={() => setCurrentStep(2)}>
+                Next: {t("program.secStamps")} &gt;
               </Button>
             </div>
           </div>
 
-          <hr className="border-border/60" />
-
           {/* STEP 3: Stamps */}
-          <div ref={step3Ref} className="flex flex-col gap-4">
+          <div
+            onFocusCapture={() => setCurrentStep(2)}
+            className={currentStep === 2 ? "flex flex-col gap-4" : "hidden"}
+          >
             <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
                 🎯
@@ -475,20 +488,21 @@ export function ProgramEditor({
                 </div>
               </FormField>
             </div>
-            <div className="flex justify-between items-center pt-2">
-              <Button type="button" variant="ghost" onClick={() => scrollToStep(1)}>
-                ↑ {t("program.secReward")}
+            <div className="flex justify-between items-center pt-3">
+              <Button type="button" variant="ghost" onClick={() => setCurrentStep(1)}>
+                &lt; {t("program.secReward")}
               </Button>
-              <Button type="button" variant="secondary" onClick={() => scrollToStep(3)}>
-                Next: {t("program.secLook")} ↓
+              <Button type="button" variant="primary" onClick={() => setCurrentStep(3)}>
+                Next: {t("program.secLook")} &gt;
               </Button>
             </div>
           </div>
 
-          <hr className="border-border/60" />
-
           {/* STEP 4: Look & Feel */}
-          <div ref={step4Ref} className="flex flex-col gap-4">
+          <div
+            onFocusCapture={() => setCurrentStep(3)}
+            className={currentStep === 3 ? "flex flex-col gap-4" : "hidden"}
+          >
             <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
                 🎨
@@ -614,20 +628,21 @@ export function ProgramEditor({
               <Checkbox label={t("program.showProgressText")} {...register("showProgressText")} />
             </div>
 
-            <div className="flex justify-between items-center pt-2">
-              <Button type="button" variant="ghost" onClick={() => scrollToStep(2)}>
-                ↑ {t("program.secStamps")}
+            <div className="flex justify-between items-center pt-3">
+              <Button type="button" variant="ghost" onClick={() => setCurrentStep(2)}>
+                &lt; {t("program.secStamps")}
               </Button>
-              <Button type="button" variant="secondary" onClick={() => scrollToStep(4)}>
-                Next: {t("program.secTerms")} ↓
+              <Button type="button" variant="primary" onClick={() => setCurrentStep(4)}>
+                Next: {t("program.secTerms")} &gt;
               </Button>
             </div>
           </div>
 
-          <hr className="border-border/60" />
-
           {/* STEP 5: Terms */}
-          <div ref={step5Ref} className="flex flex-col gap-4">
+          <div
+            onFocusCapture={() => setCurrentStep(4)}
+            className={currentStep === 4 ? "flex flex-col gap-4" : "hidden"}
+          >
             <div className="flex items-center gap-2.5 border-b border-border/50 pb-3">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-sm">
                 📜
@@ -647,13 +662,13 @@ export function ProgramEditor({
                 <Textarea rows={3} lang="am" {...register("termsAm")} className="bg-white shadow-2xs" />
               </FormField>
             </div>
-            <div className="flex justify-between items-center pt-2">
-              <Button type="button" variant="ghost" onClick={() => scrollToStep(3)}>
-                ↑ {t("program.secLook")}
+            <div className="flex justify-between items-center pt-3">
+              <Button type="button" variant="ghost" onClick={() => setCurrentStep(3)}>
+                &lt; {t("program.secLook")}
               </Button>
-              <p className="text-xs font-semibold text-green-800">
-                All 5 sections completed! Review & save below ↓
-              </p>
+              <span className="text-xs font-semibold text-green-800 bg-green-50 px-3 py-1.5 rounded-full border border-green-200">
+                ✓ All sections complete
+              </span>
             </div>
           </div>
         </fieldset>
