@@ -29,6 +29,8 @@ test.describe("the overview", () => {
     for (const name of [
       "All Users",
       "New members",
+      "In progress",
+      "Done",
     ]) {
       await expect(card(page, name)).toBeVisible();
     }

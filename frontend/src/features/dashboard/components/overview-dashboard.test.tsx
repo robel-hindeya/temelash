@@ -122,6 +122,8 @@ describe("OverviewDashboard figures", () => {
       expect(card("New members")).toHaveTextContent(format.format(expected.newMembers)),
     );
     expect(card("All Users")).toHaveTextContent(format.format(expected.totalCustomers!));
+    expect(card("In progress")).toHaveTextContent(format.format(expected.activeMembers));
+    expect(card("Done")).toHaveTextContent(format.format(expected.rewardsUnlocked));
   });
 
   it("asks the backend for the chosen days, and for nothing else to be worked out in the browser", async () => {

@@ -111,11 +111,10 @@ export function OverviewDashboard({
 
           <section
             aria-label={t("dashboard.thisPeriod")}
-            className="grid gap-4 sm:grid-cols-2"
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
           >
             <MetricCard
               emphasis
-              className="sm:col-span-2"
               label={t("dashboard.allUsers")}
               loading={
                 (overview.isPending && wallet.isPending) ||
@@ -135,6 +134,18 @@ export function OverviewDashboard({
               loading={overview.isPending}
               value={data ? n(data.newMembers) : "—"}
               hint={t("dashboard.thisPeriod")}
+            />
+            <MetricCard
+              label={t("dashboard.inProgress")}
+              loading={overview.isPending}
+              value={data ? n(data.activeMembers) : "—"}
+              hint={t("dashboard.inProgressHint")}
+            />
+            <MetricCard
+              label={t("dashboard.done")}
+              loading={overview.isPending}
+              value={data ? n(data.rewardsUnlocked) : "—"}
+              hint={t("dashboard.doneHint")}
             />
           </section>
 
