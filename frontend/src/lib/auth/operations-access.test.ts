@@ -74,7 +74,6 @@ describe("operations access", () => {
     expect(ids(principal("admin@mock.test"))).toEqual([
       "overview",
       "merchants",
-      "fraud",
       "wallet-health",
       "privacy",
       "audit",

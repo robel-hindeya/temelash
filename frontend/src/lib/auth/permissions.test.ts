@@ -152,7 +152,6 @@ describe("navigation by role", () => {
     expect(ids("operations", admin)).toEqual([
       "overview",
       "merchants",
-      "fraud",
       "wallet-health",
       "privacy",
       "audit",
