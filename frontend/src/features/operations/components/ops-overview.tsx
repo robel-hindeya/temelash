@@ -2,16 +2,36 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { Badge, MetricCard } from "@/components/ui";
-import { DashboardSection } from "@/features/dashboard/components/section";
+import { useMemo, useState } from "react";
+import {
+  Badge,
+  EmptyState,
+  FormField,
+  MetricCard,
+  Pagination,
+  SearchField,
+  Select,
+} from "@/components/ui";
+import { TagIcon, UsersIcon } from "@/components/ui/icons";
+import type { Tone } from "@/components/ui/tone";
+import { pickLocalized } from "@/features/enrollment/localized";
+import { ResponsiveTable } from "@/features/org/responsive-table";
+import { usePaged } from "@/features/org/use-paged";
 import { getBrowserApi } from "@/lib/api/browser";
+import type { PlatformMerchant } from "@/lib/api/contract";
 import { useI18n } from "@/lib/i18n/client";
 import {
+  filterMerchants,
   JOB_STATUS_LABEL,
   JOB_STATUS_ORDER,
   MERCHANT_STATUS_LABEL,
   MERCHANT_STATUS_TONE,
 } from "../ops-rules";
+import {
+  filterPlatformUsers,
+  PLATFORM_USERS,
+  type PlatformUserItem,
+} from "../ops-users";
 
 export interface HealthSnapshot {
   live: boolean;
@@ -19,12 +39,40 @@ export interface HealthSnapshot {
   ready: boolean | null;
 }
 
+const ROLE_LABEL: Record<PlatformUserItem["role"], "ops.rolePlatformAdmin" | "ops.roleOwner" | "ops.roleManager" | "ops.roleStaff"> = {
+  PLATFORM_ADMIN: "ops.rolePlatformAdmin",
+  OWNER: "ops.roleOwner",
+  MANAGER: "ops.roleManager",
+  STAFF: "ops.roleStaff",
+};
+
+const ROLE_TONE: Record<PlatformUserItem["role"], Tone> = {
+  PLATFORM_ADMIN: "info",
+  OWNER: "success",
+  MANAGER: "warning",
+  STAFF: "neutral",
+};
+
+const USER_STATUS_TONE: Record<PlatformUserItem["status"], "success" | "warning" | "neutral"> = {
+  ACTIVE: "success",
+  INVITED: "warning",
+  DEACTIVATED: "neutral",
+};
+
+const USER_STATUS_LABEL: Record<PlatformUserItem["status"], "ops.statusActive" | "ops.statusInvited" | "ops.statusDeactivated"> = {
+  ACTIVE: "ops.statusActive",
+  INVITED: "ops.statusInvited",
+  DEACTIVATED: "ops.statusDeactivated",
+};
+
 /**
- * The operations home: platform status, merchant counts, outbox job processing,
+ * The operations home: platform status, all merchants, all users, outbox job processing,
  * and quick-access consoles for administrative operations.
  */
 export function OpsOverview({ health }: { health: HealthSnapshot }) {
   const { t, locale, format } = useI18n();
+  const [activeTab, setActiveTab] = useState<"merchants" | "users">("merchants");
+
   const merchants = useQuery({
     queryKey: ["ops", "merchants"],
     queryFn: ({ signal }) => getBrowserApi().operations.merchants(signal),
@@ -33,18 +81,50 @@ export function OpsOverview({ health }: { health: HealthSnapshot }) {
     queryKey: ["ops", "outbox-stats"],
     queryFn: ({ signal }) => getBrowserApi().operations.outboxStats(signal),
   });
+
   const n = (value: number) => format.integer(value);
   const count = (status: string) => merchants.data?.filter((m) => m.status === status).length ?? 0;
 
   const totalMerchants = merchants.data?.length ?? 0;
+  const totalUsers = PLATFORM_USERS.length;
   const totalJobs = stats.data
     ? Object.values(stats.data).reduce((acc, val) => acc + (val ?? 0), 0)
     : 0;
 
+  // Merchant filtering and pagination
+  const [merchantFilter, setMerchantFilter] = useState({ search: "", status: "" });
+  const shownMerchants = useMemo(
+    () => filterMerchants(merchants.data ?? [], merchantFilter),
+    [merchants.data, merchantFilter],
+  );
+  const merchantPaged = usePaged(shownMerchants);
+
+  // User filtering and pagination
+  const [userFilter, setUserFilter] = useState({ search: "", role: "", status: "" });
+  const shownUsers = useMemo(
+    () => filterPlatformUsers(PLATFORM_USERS, userFilter),
+    [userFilter],
+  );
+  const userPaged = usePaged(shownUsers);
+
+  const nameOf = (m: PlatformMerchant) => pickLocalized(locale, m.nameEn, m.nameAm);
+  const merchantStatus = (m: PlatformMerchant) => (
+    <Badge tone={MERCHANT_STATUS_TONE[m.status]}>{t(MERCHANT_STATUS_LABEL[m.status])}</Badge>
+  );
+  const openMerchant = (m: PlatformMerchant) => (
+    <Link
+      className="touch-target inline-flex items-center rounded-control border border-green-700 px-3.5 py-1 text-sm font-semibold text-green-800 hover:bg-green-50 transition-colors"
+      href={`/${locale}/operations/merchants/${m.id}`}
+    >
+      {t("ops.view")}
+      <span className="sr-only"> — {nameOf(m).text}</span>
+    </Link>
+  );
+
   return (
     <div className="flex flex-col gap-8">
-      {/* Top Headline Metric Strip: 3 balanced KPI cards */}
-      <section aria-label={t("ops.tileSystem")} className="grid gap-4 sm:grid-cols-3">
+      {/* Top Headline Metric Strip: 4 KPI cards */}
+      <section aria-label={t("ops.tileSystem")} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           label={t("ops.tileSystem")}
           value={
@@ -68,6 +148,13 @@ export function OpsOverview({ health }: { health: HealthSnapshot }) {
         />
 
         <MetricCard
+          label={t("ops.allUsers")}
+          value={n(totalUsers)}
+          hint={t("ops.allUsersSubtitle")}
+          className="border-border/80 hover:border-primary/40 transition-colors"
+        />
+
+        <MetricCard
           label={t("ops.tileJobs")}
           value={stats.isPending ? "…" : n(totalJobs)}
           hint={
@@ -79,151 +166,376 @@ export function OpsOverview({ health }: { health: HealthSnapshot }) {
         />
       </section>
 
-      {/* Main 2-column Operational Cards */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Merchants Card */}
-        <DashboardSection
-          id="merchants"
-          title={t("ops.tileMerchants")}
-          query={merchants}
-          className="flex flex-col justify-between"
-        >
-          {merchants.data ? (
-            <div className="flex flex-col gap-5">
-              <dl className="grid grid-cols-3 gap-3">
-                {(["ACTIVE", "SUSPENDED", "DEACTIVATED"] as const).map((status) => {
-                  const c = count(status);
-                  return (
-                    <div
-                      key={status}
-                      className="rounded-control border border-border/70 bg-surface/50 p-3.5 transition-all hover:bg-surface hover:shadow-xs"
-                    >
-                      <dt className="text-xs font-semibold tracking-wider uppercase text-muted">
-                        {t(
-                          status === "ACTIVE"
-                            ? "ops.statusActive"
-                            : status === "SUSPENDED"
-                              ? "ops.statusSuspended"
-                              : "ops.statusDeactivated",
-                        )}
-                      </dt>
-                      <dd className="mt-1 text-2xl font-bold tabular-nums text-foreground">
-                        {n(c)}
-                      </dd>
-                    </div>
-                  );
-                })}
-              </dl>
+      {/* Main Interactive Management Hub: All Merchants & All Users Tabs */}
+      <section className="flex flex-col gap-5 rounded-2xl border border-border/80 bg-surface p-6 shadow-sm">
+        {/* Tab Navigation Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/70 pb-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="tab-merchants"
+              onClick={() => setActiveTab("merchants")}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition-all ${
+                activeTab === "merchants"
+                  ? "bg-green-800 text-white shadow-xs"
+                  : "bg-surface-elevated text-charcoal-700 hover:bg-cream-200"
+              }`}
+            >
+              <TagIcon size={18} />
+              <span>{t("ops.allMerchants")}</span>
+              <span
+                className={`ml-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                  activeTab === "merchants" ? "bg-green-700 text-white" : "bg-muted/20 text-muted"
+                }`}
+              >
+                {totalMerchants}
+              </span>
+            </button>
 
-              {/* Preview list of sample merchants */}
-              {merchants.data.length > 0 ? (
-                <div className="rounded-control border border-border/60 bg-surface/40 p-3">
-                  <p className="mb-2 text-xs font-semibold tracking-wider uppercase text-muted">
-                    {t("ops.merchantsTableLabel")}
-                  </p>
-                  <ul className="divide-y divide-border/50 text-sm">
-                    {merchants.data.slice(0, 3).map((m) => (
-                      <li key={m.id} className="flex items-center justify-between py-2">
-                        <div className="min-w-0 pr-2">
-                          <p className="font-medium text-foreground truncate">
-                            {locale === "am" && m.nameAm ? m.nameAm : m.nameEn}
-                          </p>
-                          <p className="text-xs text-muted font-mono">{m.slug}</p>
+            <button
+              type="button"
+              data-testid="tab-users"
+              onClick={() => setActiveTab("users")}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition-all ${
+                activeTab === "users"
+                  ? "bg-green-800 text-white shadow-xs"
+                  : "bg-surface-elevated text-charcoal-700 hover:bg-cream-200"
+              }`}
+            >
+              <UsersIcon size={18} />
+              <span>{t("ops.allUsers")}</span>
+              <span
+                className={`ml-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                  activeTab === "users" ? "bg-green-700 text-white" : "bg-muted/20 text-muted"
+                }`}
+              >
+                {totalUsers}
+              </span>
+            </button>
+          </div>
+
+          <p className="text-xs text-muted">
+            {activeTab === "merchants"
+              ? `${n(shownMerchants.length)} ${t("ops.merchantsTableLabel").toLowerCase()}`
+              : `${n(shownUsers.length)} ${t("ops.usersTableLabel").toLowerCase()}`}
+          </p>
+        </div>
+
+        {/* Tab 1: All Merchants */}
+        {activeTab === "merchants" ? (
+          <div className="flex flex-col gap-4">
+            {/* Search & Filters */}
+            <div className="grid gap-3 sm:grid-cols-[1fr_16rem]">
+              <SearchField
+                label={t("ops.searchLabel")}
+                placeholder={t("ops.searchPlaceholder")}
+                onSearch={(search) => {
+                  setMerchantFilter((f) => ({ ...f, search }));
+                  merchantPaged.reset();
+                }}
+              />
+              <FormField label={t("ops.filterStatus")}>
+                <Select
+                  value={merchantFilter.status}
+                  onChange={(event) => {
+                    setMerchantFilter((f) => ({ ...f, status: event.target.value }));
+                    merchantPaged.reset();
+                  }}
+                >
+                  <option value="">{t("ops.anyStatus")}</option>
+                  <option value="ACTIVE">{t("ops.statusActive")}</option>
+                  <option value="SUSPENDED">{t("ops.statusSuspended")}</option>
+                  <option value="DEACTIVATED">{t("ops.statusDeactivated")}</option>
+                </Select>
+              </FormField>
+            </div>
+
+            {/* Merchant Content */}
+            {(merchants.data ?? []).length === 0 ? (
+              <EmptyState title={t("ops.merchantsEmpty")} />
+            ) : shownMerchants.length === 0 ? (
+              <EmptyState title={t("ops.merchantsNoMatch")} />
+            ) : (
+              <>
+                <ResponsiveTable
+                  label={t("ops.merchantsTableLabel")}
+                  items={merchantPaged.slice}
+                  rowKey={(m) => m.id}
+                  columns={[
+                    {
+                      id: "name",
+                      header: t("ops.colName"),
+                      rowHeader: true,
+                      cell: (m) => (
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-foreground" lang={nameOf(m).lang}>
+                            {nameOf(m).text}
+                          </span>
+                          {locale === "en" && m.nameAm ? (
+                            <span className="text-xs text-muted" lang="am">
+                              {m.nameAm}
+                            </span>
+                          ) : null}
                         </div>
-                        <Badge tone={MERCHANT_STATUS_TONE[m.status]}>
-                          {t(MERCHANT_STATUS_LABEL[m.status])}
-                        </Badge>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              <div className="pt-1">
-                <Link
-                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary-hover hover:underline transition-colors"
-                  href={`/${locale}/operations/merchants`}
-                >
-                  <span>{t("ops.seeAll")}</span>
-                  <span aria-hidden="true">→</span>
-                </Link>
-              </div>
-            </div>
-          ) : null}
-        </DashboardSection>
-
-        {/* Background Jobs Card */}
-        <DashboardSection
-          id="jobs"
-          title={t("ops.tileJobs")}
-          query={stats}
-          className="flex flex-col justify-between"
-        >
-          {stats.data ? (
-            <div className="flex flex-col gap-5">
-              <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {JOB_STATUS_ORDER.map((status) => {
-                  const val = stats.data[status] ?? 0;
-                  const isDead = status === "DEAD" && val > 0;
-                  return (
-                    <div
-                      key={status}
-                      className={`rounded-control border p-3.5 transition-all hover:shadow-xs ${
-                        isDead
-                          ? "border-danger/40 bg-red-50/30"
-                          : "border-border/70 bg-surface/50 hover:bg-surface"
-                      }`}
-                    >
-                      <dt className="text-xs font-semibold tracking-wider uppercase text-muted">
-                        {t(JOB_STATUS_LABEL[status]!)}
-                      </dt>
-                      <dd
-                        className={`mt-1 text-2xl font-bold tabular-nums ${
-                          isDead ? "text-danger" : "text-foreground"
-                        }`}
-                        data-testid={`jobs-${status}`}
-                      >
-                        {n(val)}
-                      </dd>
+                      ),
+                    },
+                    {
+                      id: "slug",
+                      header: t("ops.colSlug"),
+                      cell: (m) => <span className="font-mono text-xs">{m.slug}</span>,
+                    },
+                    { id: "status", header: t("ops.colStatus"), cell: merchantStatus },
+                    { id: "actions", header: t("ops.colActions"), cell: openMerchant },
+                  ]}
+                  card={(m) => (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-lg font-semibold text-green-900" lang={nameOf(m).lang}>
+                        {nameOf(m).text}
+                      </p>
+                      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                        <dt className="text-muted">{t("ops.colSlug")}</dt>
+                        <dd className="font-mono">{m.slug}</dd>
+                        <dt className="text-muted">{t("ops.colStatus")}</dt>
+                        <dd>{merchantStatus(m)}</dd>
+                      </dl>
+                      {openMerchant(m)}
                     </div>
-                  );
-                })}
-              </dl>
+                  )}
+                />
+                <Pagination
+                  hasPrevious={merchantPaged.hasPrevious}
+                  hasNext={merchantPaged.hasNext}
+                  onPrevious={merchantPaged.previous}
+                  onNext={merchantPaged.next}
+                  from={merchantPaged.from}
+                  to={merchantPaged.to}
+                  total={merchantPaged.total}
+                />
+              </>
+            )}
+          </div>
+        ) : null}
 
-              {/* Progress/Health Bar */}
-              <div className="rounded-control border border-border/60 bg-surface/40 p-3">
-                <div className="flex items-center justify-between text-xs text-muted mb-1.5">
-                  <span className="font-medium">{t("ops.walletSubtitle")}</span>
-                  <span className="font-mono font-semibold text-foreground">
-                    {stats.data["COMPLETED"] ?? 0} / {totalJobs}
-                  </span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-border/60">
-                  <div
-                    className="h-full bg-primary transition-all duration-500 rounded-full"
-                    style={{
-                      width:
-                        totalJobs > 0
-                          ? `${Math.round(((stats.data["COMPLETED"] ?? 0) / totalJobs) * 100)}%`
-                          : "100%",
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="pt-1">
-                <Link
-                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary-hover hover:underline transition-colors"
-                  href={`/${locale}/operations/wallet-health`}
+        {/* Tab 2: All Users */}
+        {activeTab === "users" ? (
+          <div className="flex flex-col gap-4">
+            {/* Search & Filters */}
+            <div className="grid gap-3 sm:grid-cols-[1fr_12rem_12rem]">
+              <SearchField
+                label={t("ops.searchUsers")}
+                placeholder={t("ops.searchUsersPlaceholder")}
+                onSearch={(search) => {
+                  setUserFilter((f) => ({ ...f, search }));
+                  userPaged.reset();
+                }}
+              />
+              <FormField label={t("ops.filterRole")}>
+                <Select
+                  value={userFilter.role}
+                  onChange={(event) => {
+                    setUserFilter((f) => ({ ...f, role: event.target.value }));
+                    userPaged.reset();
+                  }}
                 >
-                  <span>{t("ops.seeAll")}</span>
-                  <span aria-hidden="true">→</span>
-                </Link>
+                  <option value="">{t("ops.anyRole")}</option>
+                  <option value="PLATFORM_ADMIN">{t("ops.rolePlatformAdmin")}</option>
+                  <option value="OWNER">{t("ops.roleOwner")}</option>
+                  <option value="MANAGER">{t("ops.roleManager")}</option>
+                  <option value="STAFF">{t("ops.roleStaff")}</option>
+                </Select>
+              </FormField>
+
+              <FormField label={t("ops.filterStatus")}>
+                <Select
+                  value={userFilter.status}
+                  onChange={(event) => {
+                    setUserFilter((f) => ({ ...f, status: event.target.value }));
+                    userPaged.reset();
+                  }}
+                >
+                  <option value="">{t("ops.anyStatus")}</option>
+                  <option value="ACTIVE">{t("ops.statusActive")}</option>
+                  <option value="INVITED">{t("ops.statusInvited")}</option>
+                  <option value="DEACTIVATED">{t("ops.statusDeactivated")}</option>
+                </Select>
+              </FormField>
+            </div>
+
+            {/* User Content */}
+            {shownUsers.length === 0 ? (
+              <EmptyState title={t("ops.usersNoMatch")} />
+            ) : (
+              <>
+                <ResponsiveTable
+                  label={t("ops.usersTableLabel")}
+                  items={userPaged.slice}
+                  rowKey={(u) => u.id}
+                  columns={[
+                    {
+                      id: "name",
+                      header: t("ops.colName"),
+                      rowHeader: true,
+                      cell: (u) => (
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-800 text-sm">
+                            {u.displayName.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-foreground truncate">
+                              {u.displayName}
+                            </p>
+                            <p className="text-xs text-muted truncate">{u.email}</p>
+                          </div>
+                        </div>
+                      ),
+                    },
+                    {
+                      id: "role",
+                      header: t("ops.colRole"),
+                      cell: (u) => <Badge tone={ROLE_TONE[u.role]}>{t(ROLE_LABEL[u.role])}</Badge>,
+                    },
+                    {
+                      id: "organization",
+                      header: t("ops.colOrganization"),
+                      cell: (u) => (
+                        <span className="text-sm font-medium text-charcoal-800">
+                          {u.organization}
+                        </span>
+                      ),
+                    },
+                    {
+                      id: "status",
+                      header: t("ops.colStatus"),
+                      cell: (u) => (
+                        <Badge tone={USER_STATUS_TONE[u.status]}>
+                          {t(USER_STATUS_LABEL[u.status])}
+                        </Badge>
+                      ),
+                    },
+                    {
+                      id: "lastActive",
+                      header: t("ops.colLastActive"),
+                      cell: (u) => (
+                        <span className="text-xs text-muted">
+                          {u.lastActive ?? "—"}
+                        </span>
+                      ),
+                    },
+                  ]}
+                  card={(u) => (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-800 text-xs">
+                          {u.displayName.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-foreground">{u.displayName}</p>
+                          <p className="text-xs text-muted">{u.email}</p>
+                        </div>
+                      </div>
+                      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm mt-1">
+                        <dt className="text-muted">{t("ops.colRole")}</dt>
+                        <dd>
+                          <Badge tone={ROLE_TONE[u.role]}>{t(ROLE_LABEL[u.role])}</Badge>
+                        </dd>
+                        <dt className="text-muted">{t("ops.colOrganization")}</dt>
+                        <dd className="font-medium">{u.organization}</dd>
+                        <dt className="text-muted">{t("ops.colStatus")}</dt>
+                        <dd>
+                          <Badge tone={USER_STATUS_TONE[u.status]}>
+                            {t(USER_STATUS_LABEL[u.status])}
+                          </Badge>
+                        </dd>
+                      </dl>
+                    </div>
+                  )}
+                />
+                <Pagination
+                  hasPrevious={userPaged.hasPrevious}
+                  hasNext={userPaged.hasNext}
+                  onPrevious={userPaged.previous}
+                  onNext={userPaged.next}
+                  from={userPaged.from}
+                  to={userPaged.to}
+                  total={userPaged.total}
+                />
+              </>
+            )}
+          </div>
+        ) : null}
+      </section>
+
+      {/* Background Jobs Section */}
+      <section aria-labelledby="jobs-heading" className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-surface p-6 shadow-sm">
+        <div className="flex items-center justify-between border-b border-border/60 pb-3">
+          <div>
+            <h2 id="jobs-heading" className="text-lg font-bold text-foreground">
+              {t("ops.tileJobs")}
+            </h2>
+            <p className="text-xs text-muted">{t("ops.walletSubtitle")}</p>
+          </div>
+          <Link
+            className="text-sm font-semibold text-primary hover:underline"
+            href={`/${locale}/operations/wallet-health`}
+          >
+            {t("ops.seeAll")} →
+          </Link>
+        </div>
+
+        {stats.data ? (
+          <div className="flex flex-col gap-5">
+            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+              {JOB_STATUS_ORDER.map((status) => {
+                const val = stats.data[status] ?? 0;
+                const isDead = status === "DEAD" && val > 0;
+                return (
+                  <div
+                    key={status}
+                    className={`rounded-control border p-3.5 transition-all hover:shadow-xs ${
+                      isDead
+                        ? "border-danger/40 bg-red-50/30"
+                        : "border-border/70 bg-surface/50 hover:bg-surface"
+                    }`}
+                  >
+                    <dt className="text-xs font-semibold tracking-wider uppercase text-muted">
+                      {t(JOB_STATUS_LABEL[status]!)}
+                    </dt>
+                    <dd
+                      className={`mt-1 text-2xl font-bold tabular-nums ${
+                        isDead ? "text-danger" : "text-foreground"
+                      }`}
+                      data-testid={`jobs-${status}`}
+                    >
+                      {n(val)}
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+
+            {/* Progress/Health Bar */}
+            <div className="rounded-control border border-border/60 bg-surface/40 p-3">
+              <div className="flex items-center justify-between text-xs text-muted mb-1.5">
+                <span className="font-medium">{t("ops.walletSubtitle")}</span>
+                <span className="font-mono font-semibold text-foreground">
+                  {stats.data["COMPLETED"] ?? 0} / {totalJobs}
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-border/60">
+                <div
+                  className="h-full bg-primary transition-all duration-500 rounded-full"
+                  style={{
+                    width:
+                      totalJobs > 0
+                        ? `${Math.round(((stats.data["COMPLETED"] ?? 0) / totalJobs) * 100)}%`
+                        : "100%",
+                  }}
+                />
               </div>
             </div>
-          ) : null}
-        </DashboardSection>
-      </div>
+          </div>
+        ) : null}
+      </section>
 
       {/* Quick Launch Operations Consoles Navigation Grid */}
       <section aria-labelledby="ops-modules-title" className="flex flex-col gap-4">
@@ -237,13 +549,7 @@ export function OpsOverview({ health }: { health: HealthSnapshot }) {
           >
             <div>
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-control bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-on-primary">
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                  />
-                </svg>
+                <TagIcon size={20} />
               </div>
               <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
                 {t("nav.merchants")}

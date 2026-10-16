@@ -36,6 +36,7 @@ export async function OpsFrame({
     "dashboard",
     "records",
     "ops",
+    "auth",
   ]);
   return (
     <I18nProvider locale={locale} messages={messages}>

@@ -396,4 +396,26 @@ describe("overview and system", () => {
     expect(await screen.findByTestId("jobs-PENDING")).toBeInTheDocument();
     expect(screen.queryByText("Not offered by the service yet")).not.toBeInTheDocument();
   });
+
+  it("shows all merchants and allows switching to all users", async () => {
+    const user = show(<OpsOverview health={{ live: true, ready: true }} />);
+    expect(screen.getByTestId("tab-merchants")).toBeInTheDocument();
+    expect(screen.getByTestId("tab-users")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("tab-users"));
+    const table = await screen.findByRole("table", { name: "Platform and merchant users" });
+    expect(table).toBeInTheDocument();
+    expect(within(table).getByText("Operations Admin")).toBeInTheDocument();
+    expect(within(table).getByText("admin@mock.test")).toBeInTheDocument();
+  });
+
+  it("filters users by role and search query in overview", async () => {
+    const user = show(<OpsOverview health={{ live: true, ready: true }} />);
+    await user.click(screen.getByTestId("tab-users"));
+    const table = await screen.findByRole("table", { name: "Platform and merchant users" });
+    await user.type(screen.getByRole("searchbox", { name: "Search users" }), "Hana{Enter}");
+    expect(within(table).getByText("Hana Owner")).toBeInTheDocument();
+    expect(within(table).queryByText("Operations Admin")).not.toBeInTheDocument();
+  });
 });
+
