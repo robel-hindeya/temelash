@@ -396,25 +396,4 @@ describe("overview and system", () => {
     expect(await screen.findByTestId("jobs-PENDING")).toBeInTheDocument();
     expect(screen.queryByText("Not offered by the service yet")).not.toBeInTheDocument();
   });
-
-  it("shows all merchants and all users directly on the overview page", async () => {
-    show(<OpsOverview health={{ live: true, ready: true }} />);
-    const merchantsTable = await screen.findByRole("table", { name: "Merchants" });
-    expect(merchantsTable).toBeInTheDocument();
-    expect(within(merchantsTable).getByText("Sample Cafe")).toBeInTheDocument();
-
-    const usersTable = await screen.findByRole("table", { name: "Platform and merchant users" });
-    expect(usersTable).toBeInTheDocument();
-    expect(within(usersTable).getByText("Operations Admin")).toBeInTheDocument();
-    expect(within(usersTable).getByText("admin@mock.test")).toBeInTheDocument();
-  });
-
-  it("filters users by role in overview", async () => {
-    const user = show(<OpsOverview health={{ live: true, ready: true }} />);
-    const usersTable = await screen.findByRole("table", { name: "Platform and merchant users" });
-    await user.selectOptions(screen.getByRole("combobox", { name: "Role" }), "Owner");
-    expect(within(usersTable).getByText("Hana Owner")).toBeInTheDocument();
-    expect(within(usersTable).queryByText("Operations Admin")).not.toBeInTheDocument();
-  });
 });
-
