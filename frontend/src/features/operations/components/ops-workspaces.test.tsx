@@ -409,10 +409,10 @@ describe("overview and system", () => {
     expect(within(usersTable).getByText("admin@mock.test")).toBeInTheDocument();
   });
 
-  it("filters users by role and search query in overview", async () => {
+  it("filters users by role in overview", async () => {
     const user = show(<OpsOverview health={{ live: true, ready: true }} />);
     const usersTable = await screen.findByRole("table", { name: "Platform and merchant users" });
-    await user.type(screen.getByRole("searchbox", { name: "Search users" }), "Hana{Enter}");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Role" }), "Owner");
     expect(within(usersTable).getByText("Hana Owner")).toBeInTheDocument();
     expect(within(usersTable).queryByText("Operations Admin")).not.toBeInTheDocument();
   });

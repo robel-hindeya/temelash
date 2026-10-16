@@ -115,8 +115,8 @@ export function OpsOverview({ health }: { health: HealthSnapshot }) {
 
   return (
     <div className="flex flex-col gap-8">
-      {/* Top Headline Metric Strip: 4 KPI cards */}
-      <section aria-label={t("ops.tileSystem")} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Top Headline Metric Strip: 3 KPI cards */}
+      <section aria-label={t("ops.tileSystem")} className="grid gap-4 sm:grid-cols-3">
         <MetricCard
           label={t("ops.tileSystem")}
           value={
@@ -136,13 +136,6 @@ export function OpsOverview({ health }: { health: HealthSnapshot }) {
               ? `${n(count("ACTIVE"))} ${t("ops.statusActive")}`
               : undefined
           }
-          className="border-border/80 hover:border-primary/40 transition-colors"
-        />
-
-        <MetricCard
-          label={t("ops.allUsers")}
-          value={n(totalUsers)}
-          hint={t("ops.allUsersSubtitle")}
           className="border-border/80 hover:border-primary/40 transition-colors"
         />
 
@@ -172,12 +165,9 @@ export function OpsOverview({ health }: { health: HealthSnapshot }) {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <TagIcon size={20} />
             </div>
-            <div>
-              <h2 id="all-merchants-title" className="text-lg font-bold text-foreground">
-                {t("ops.allMerchants")}
-              </h2>
-              <p className="text-xs text-muted">{t("ops.merchantsSubtitle")}</p>
-            </div>
+            <h2 id="all-merchants-title" className="text-lg font-bold text-foreground">
+              {t("ops.allMerchants")}
+            </h2>
           </div>
           <Badge tone="neutral">{n(shownMerchants.length)}</Badge>
         </div>
@@ -285,41 +275,32 @@ export function OpsOverview({ health }: { health: HealthSnapshot }) {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <UsersIcon size={20} />
             </div>
-            <div>
-              <h2 id="all-users-title" className="text-lg font-bold text-foreground">
-                {t("ops.allUsers")}
-              </h2>
-              <p className="text-xs text-muted">{t("ops.allUsersSubtitle")}</p>
-            </div>
+            <h2 id="all-users-title" className="text-lg font-bold text-foreground">
+              {t("ops.allUsers")}
+            </h2>
           </div>
           <Badge tone="neutral">{n(shownUsers.length)}</Badge>
         </div>
 
-        {/* Search & Role Filter */}
-        <div className="grid gap-3 sm:grid-cols-[1fr_16rem]">
-          <SearchField
-            label={t("ops.searchUsers")}
-            placeholder={t("ops.searchUsersPlaceholder")}
-            onSearch={(search) => {
-              setUserFilter((f) => ({ ...f, search }));
-              userPaged.reset();
-            }}
-          />
-          <FormField label={t("ops.filterRole")}>
-            <Select
-              value={userFilter.role}
-              onChange={(event) => {
-                setUserFilter((f) => ({ ...f, role: event.target.value }));
-                userPaged.reset();
-              }}
-            >
-              <option value="">{t("ops.anyRole")}</option>
-              <option value="PLATFORM_ADMIN">{t("ops.rolePlatformAdmin")}</option>
-              <option value="OWNER">{t("ops.roleOwner")}</option>
-              <option value="MANAGER">{t("ops.roleManager")}</option>
-              <option value="STAFF">{t("ops.roleStaff")}</option>
-            </Select>
-          </FormField>
+        {/* Role Filter */}
+        <div className="flex justify-end">
+          <div className="w-full sm:w-64">
+            <FormField label={t("ops.filterRole")}>
+              <Select
+                value={userFilter.role}
+                onChange={(event) => {
+                  setUserFilter((f) => ({ ...f, role: event.target.value }));
+                  userPaged.reset();
+                }}
+              >
+                <option value="">{t("ops.anyRole")}</option>
+                <option value="PLATFORM_ADMIN">{t("ops.rolePlatformAdmin")}</option>
+                <option value="OWNER">{t("ops.roleOwner")}</option>
+                <option value="MANAGER">{t("ops.roleManager")}</option>
+                <option value="STAFF">{t("ops.roleStaff")}</option>
+              </Select>
+            </FormField>
+          </div>
         </div>
 
         {/* Users Table */}
