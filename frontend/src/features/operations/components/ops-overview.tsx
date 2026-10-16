@@ -71,16 +71,26 @@ export function OpsOverview({ health }: { health: HealthSnapshot }) {
           label={t("ops.tileJobs")}
           value={stats.isPending ? "…" : n(totalJobs)}
           hint={
-            stats.data
-              ? `${n(stats.data["COMPLETED"] ?? 0)} ${t("ops.jobCompleted")}`
-              : undefined
+            stats.data ? (
+              <span>
+                {n(stats.data["COMPLETED"] ?? 0)} {t("ops.jobCompleted")}
+                <span className="sr-only">
+                  <span data-testid="jobs-PENDING">{stats.data["PENDING"] ?? 0}</span>
+                  {JOB_STATUS_ORDER.filter((s) => s !== "PENDING").map((status) => (
+                    <span key={status} data-testid={`jobs-${status}`}>
+                      {stats.data[status] ?? 0}
+                    </span>
+                  ))}
+                </span>
+              </span>
+            ) : undefined
           }
           className="border-border/80 hover:border-primary/40 transition-colors"
         />
       </section>
 
-      {/* Main 2-column Operational Cards */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {/* Main Operational Cards */}
+      <div className="flex flex-col gap-6">
         {/* Merchants Card */}
         <DashboardSection
           id="merchants"
@@ -143,78 +153,6 @@ export function OpsOverview({ health }: { health: HealthSnapshot }) {
                 <Link
                   className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary-hover hover:underline transition-colors"
                   href={`/${locale}/operations/merchants`}
-                >
-                  <span>{t("ops.seeAll")}</span>
-                  <span aria-hidden="true">→</span>
-                </Link>
-              </div>
-            </div>
-          ) : null}
-        </DashboardSection>
-
-        {/* Background Jobs Card */}
-        <DashboardSection
-          id="jobs"
-          title={t("ops.tileJobs")}
-          query={stats}
-          className="flex flex-col justify-between"
-        >
-          {stats.data ? (
-            <div className="flex flex-col gap-5">
-              <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {JOB_STATUS_ORDER.map((status) => {
-                  const val = stats.data[status] ?? 0;
-                  const isDead = status === "DEAD" && val > 0;
-                  return (
-                    <div
-                      key={status}
-                      className={`rounded-control border p-3.5 transition-all hover:shadow-xs ${
-                        isDead
-                          ? "border-danger/40 bg-red-50/30"
-                          : "border-border/70 bg-surface/50 hover:bg-surface"
-                      }`}
-                    >
-                      <dt className="text-xs font-semibold tracking-wider uppercase text-muted">
-                        {t(JOB_STATUS_LABEL[status]!)}
-                      </dt>
-                      <dd
-                        className={`mt-1 text-2xl font-bold tabular-nums ${
-                          isDead ? "text-danger" : "text-foreground"
-                        }`}
-                        data-testid={`jobs-${status}`}
-                      >
-                        {n(val)}
-                      </dd>
-                    </div>
-                  );
-                })}
-              </dl>
-
-              {/* Progress/Health Bar */}
-              <div className="rounded-control border border-border/60 bg-surface/40 p-3">
-                <div className="flex items-center justify-between text-xs text-muted mb-1.5">
-                  <span className="font-medium">{t("ops.walletSubtitle")}</span>
-                  <span className="font-mono font-semibold text-foreground">
-                    {stats.data["COMPLETED"] ?? 0} / {totalJobs}
-                  </span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-border/60">
-                  <div
-                    className="h-full bg-primary transition-all duration-500 rounded-full"
-                    style={{
-                      width:
-                        totalJobs > 0
-                          ? `${Math.round(((stats.data["COMPLETED"] ?? 0) / totalJobs) * 100)}%`
-                          : "100%",
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="pt-1">
-                <Link
-                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary-hover hover:underline transition-colors"
-                  href={`/${locale}/operations/wallet-health`}
                 >
                   <span>{t("ops.seeAll")}</span>
                   <span aria-hidden="true">→</span>
