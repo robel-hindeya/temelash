@@ -195,7 +195,14 @@ function authenticate(
   const email = ctx.token?.startsWith(prefix) ? ctx.token.slice(prefix.length) : undefined;
   if (!isMockEmail(email))
     return { reply: error(401, "UNAUTHENTICATED", "Authentication required.") };
-  if (permission && !(MOCK_ACCOUNTS[email].permissions as readonly string[]).includes(permission)) {
+  const user = MOCK_ACCOUNTS[email];
+  const isPlatformAdmin =
+    user.kind === "platform" && (user.permissions as readonly string[]).includes("platform:manage");
+  if (
+    permission &&
+    !(isPlatformAdmin && !permission.startsWith("platform:audit")) &&
+    !(user.permissions as readonly string[]).includes(permission)
+  ) {
     return { reply: error(403, "FORBIDDEN", "You do not have permission to do this.") };
   }
   return { email };

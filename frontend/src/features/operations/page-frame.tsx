@@ -38,6 +38,7 @@ export async function OpsFrame({
     "records",
     "ops",
     "auth",
+    "fraud",
   ]);
   return (
     <I18nProvider locale={locale} messages={messages}>

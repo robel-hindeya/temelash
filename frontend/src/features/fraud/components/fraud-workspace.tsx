@@ -141,44 +141,47 @@ function FlagsTab({ canManage }: { canManage: boolean }) {
     ) : null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <FormField label={t("fraud.filterStatus")}>
-          <Select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
-              paging.reset();
-            }}
-          >
-            <option value="">{t("fraud.anyStatus")}</option>
-            {FLAG_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {t(STATUS_LABEL[s])}
-              </option>
-            ))}
-          </Select>
-        </FormField>
-        <FormField label={t("fraud.filterIndicator")}>
-          <Select
-            value={indicator}
-            onChange={(e) => {
-              setIndicator(e.target.value);
-              paging.reset();
-            }}
-          >
-            <option value="">{t("fraud.anyIndicator")}</option>
-            {FRAUD_INDICATORS.map((i) => (
-              <option key={i} value={i}>
-                {t(`fraud.ind_${i}` as MessageKey)}
-              </option>
-            ))}
-          </Select>
-        </FormField>
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-end justify-between rounded-xl bg-cream-50/60 p-4 border border-border/60 shadow-2xs">
+        <div className="grid gap-3 sm:grid-cols-2 flex-1">
+          <FormField label={t("fraud.filterStatus")}>
+            <Select
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                paging.reset();
+              }}
+            >
+              <option value="">{t("fraud.anyStatus")}</option>
+              {FLAG_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {t(STATUS_LABEL[s])}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField label={t("fraud.filterIndicator")}>
+            <Select
+              value={indicator}
+              onChange={(e) => {
+                setIndicator(e.target.value);
+                paging.reset();
+              }}
+            >
+              <option value="">{t("fraud.anyIndicator")}</option>
+              {FRAUD_INDICATORS.map((i) => (
+                <option key={i} value={i}>
+                  {t(`fraud.ind_${i}` as MessageKey)}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+        </div>
         {canManage ? (
           <div className="flex items-end">
             <Button
               variant="secondary"
+              className="w-full sm:w-auto shadow-2xs"
               onClick={() => void runChecks()}
               loading={check.isPending}
               loadingLabel={t("fraud.checking")}
