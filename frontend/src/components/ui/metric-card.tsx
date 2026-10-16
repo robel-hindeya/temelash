@@ -29,27 +29,27 @@ export function MetricCard({
       aria-labelledby={labelId}
       aria-busy={loading || undefined}
       className={cn(
-        "rounded-card border bg-surface p-5 shadow-sm",
+        "rounded-card border bg-surface p-4 sm:p-5 shadow-sm transition-shadow",
         emphasis ? "border-gold-500 ring-2 ring-gold-300" : "border-border",
         className,
       )}
     >
-      <p id={labelId} className="text-sm font-medium text-charcoal-700">
+      <p id={labelId} className="text-xs sm:text-sm font-medium text-charcoal-700 line-clamp-1">
         {label}
       </p>
       {loading ? (
-        <Skeleton className="mt-3 h-9 w-24" />
+        <Skeleton className="mt-2.5 h-8 sm:h-9 w-20 sm:w-24" />
       ) : (
         <p
           className={cn(
-            "mt-2 font-bold text-green-900 tabular-nums",
-            emphasis ? "text-4xl" : "text-3xl",
+            "mt-1.5 font-bold text-green-900 tabular-nums tracking-tight",
+            emphasis ? "text-2xl sm:text-4xl" : "text-xl sm:text-3xl",
           )}
         >
           {value}
         </p>
       )}
-      {hint ? <p className="mt-1 text-sm text-muted">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-xs sm:text-sm text-muted line-clamp-1">{hint}</p> : null}
     </article>
   );
 }

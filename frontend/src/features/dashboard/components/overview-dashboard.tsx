@@ -102,7 +102,7 @@ export function OverviewDashboard({
 
           <section
             aria-label={t("dashboard.thisPeriod")}
-            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+            className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
           >
             <MetricCard
               emphasis
@@ -176,29 +176,83 @@ export function OverviewDashboard({
               }
             >
               {branches.data ? (
-                <Table label={t("dashboard.branchesCaption")}>
-                  <THead>
-                    <TR>
-                      <TH>{t("dashboard.colBranch")}</TH>
-                      <TH>{t("dashboard.colStamps")}</TH>
-                      <TH>{t("dashboard.colCustomers")}</TH>
-                      <TH>{t("dashboard.colRedemptions")}</TH>
-                    </TR>
-                  </THead>
-                  <TBody>
+                <>
+                  {/* Mobile stacked branch activity cards (phone-first UI) */}
+                  <div className="sm:hidden flex flex-col gap-3">
                     {branches.data.items.map((b) => {
                       const name = pickLocalized(locale, b.nameEn, b.nameAm);
                       return (
-                        <TR key={b.branchId}>
-                          <RowHeader lang={name.lang}>{name.text}</RowHeader>
-                          <TD>{n(b.stamps)}</TD>
-                          <TD>{n(b.uniqueCustomers)}</TD>
-                          <TD>{n(b.redemptions)}</TD>
-                        </TR>
+                        <div
+                          key={`mobile-${b.branchId}`}
+                          className="rounded-2xl border border-border/80 bg-surface p-4 shadow-2xs flex flex-col gap-3"
+                        >
+                          <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2.5">
+                            <h4 className="font-bold text-foreground text-base" lang={name.lang}>
+                              {name.text}
+                            </h4>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                              {n(b.stamps)}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2 text-center">
+                            <div className="flex flex-col bg-cream-50/70 rounded-xl p-2 border border-border/50">
+                              <span className="text-[11px] font-semibold text-muted uppercase">
+                                {t("dashboard.colStamps")}
+                              </span>
+                              <span className="text-base font-bold text-green-900 mt-0.5">
+                                {n(b.stamps)}
+                              </span>
+                            </div>
+                            <div className="flex flex-col bg-cream-50/70 rounded-xl p-2 border border-border/50">
+                              <span className="text-[11px] font-semibold text-muted uppercase">
+                                {t("dashboard.colCustomers")}
+                              </span>
+                              <span className="text-base font-bold text-foreground mt-0.5">
+                                {n(b.uniqueCustomers)}
+                              </span>
+                            </div>
+                            <div className="flex flex-col bg-cream-50/70 rounded-xl p-2 border border-border/50">
+                              <span className="text-[11px] font-semibold text-muted uppercase">
+                                {t("dashboard.colRedemptions")}
+                              </span>
+                              <span className="text-base font-bold text-green-800 mt-0.5">
+                                {n(b.redemptions)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
                       );
                     })}
-                  </TBody>
-                </Table>
+                  </div>
+
+                  {/* Tablet and Desktop Table */}
+                  <div className="hidden sm:block">
+                    <Table label={t("dashboard.branchesCaption")}>
+                      <THead>
+                        <TR>
+                          <TH>{t("dashboard.colBranch")}</TH>
+                          <TH>{t("dashboard.colStamps")}</TH>
+                          <TH>{t("dashboard.colCustomers")}</TH>
+                          <TH>{t("dashboard.colRedemptions")}</TH>
+                        </TR>
+                      </THead>
+                      <TBody>
+                        {branches.data.items.map((b) => {
+                          const name = pickLocalized(locale, b.nameEn, b.nameAm);
+                          return (
+                            <TR key={b.branchId}>
+                              <RowHeader lang={name.lang}>{name.text}</RowHeader>
+                              <TD>{n(b.stamps)}</TD>
+                              <TD>{n(b.uniqueCustomers)}</TD>
+                              <TD>{n(b.redemptions)}</TD>
+                            </TR>
+                          );
+                        })}
+                      </TBody>
+                    </Table>
+                  </div>
+                </>
               ) : null}
             </DashboardSection>
           </div>

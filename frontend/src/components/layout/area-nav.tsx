@@ -43,18 +43,48 @@ export function AreaNav({
       : pathname.startsWith(`${href}/`));
 
   return (
-    <nav aria-label={label} className="min-w-0" data-hydrated={hydrated}>
-      {items.length > 1 ? (
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={listId}
-          onClick={() => setOpen((v) => !v)}
-          className="touch-target rounded-control border border-border bg-surface px-4 font-semibold text-green-900 md:hidden"
-        >
-          {t("nav.menu")}
-        </button>
-      ) : null}
+    <nav aria-label={label} className="min-w-0 w-full" data-hydrated={hydrated}>
+      <div className="flex items-center gap-2 md:hidden">
+        {items.length > 1 ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={listId}
+            onClick={() => setOpen((v) => !v)}
+            className="touch-target inline-flex items-center gap-1.5 rounded-xl border border-border/80 bg-surface px-3 py-1.5 text-xs font-semibold text-green-900 shadow-2xs shrink-0"
+          >
+            <span>{t("nav.menu")}</span>
+            <span aria-hidden="true" className="text-[10px]">{open ? "▲" : "▼"}</span>
+          </button>
+        ) : null}
+
+        {/* Mobile Horizontal Scrollable Tab Bar */}
+        <div className="flex-1 overflow-x-auto no-scrollbar py-1">
+          <ul className="flex items-center gap-1.5 flex-nowrap min-w-max">
+            {items.map((item) => {
+              const current = isCurrent(item.href);
+              return (
+                <li key={`pill-${item.id}`} className="shrink-0">
+                  <Link
+                    href={item.href}
+                    aria-current={current ? "page" : undefined}
+                    onClick={() => setOpen(false)}
+                    className={cn(
+                      "inline-flex items-center rounded-xl px-3 py-1.5 text-xs font-semibold no-underline transition-all whitespace-nowrap",
+                      current
+                        ? "bg-green-800 text-white shadow-2xs"
+                        : "bg-surface border border-border/70 text-charcoal-700 hover:bg-cream-100",
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
+
       <ul
         id={listId}
         className={cn(

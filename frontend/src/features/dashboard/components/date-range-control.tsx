@@ -50,7 +50,7 @@ export function DateRangeControl({
 
   return (
     <div className="flex flex-col gap-3" data-testid="date-range">
-      <div className="max-w-xs">
+      <div className="w-full sm:max-w-xs">
         <FormField label={t("dashboard.periodLabel")}>
           <Select
             value={custom ? "custom" : preset}
@@ -75,14 +75,14 @@ export function DateRangeControl({
       </div>
 
       {custom ? (
-        <form onSubmit={apply} noValidate className="flex flex-wrap items-end gap-3">
+        <form onSubmit={apply} noValidate className="grid grid-cols-1 sm:flex sm:flex-wrap items-end gap-3">
           <FormField label={t("dashboard.from")}>
             <Input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
           </FormField>
           <FormField label={t("dashboard.to")}>
             <Input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
           </FormField>
-          <Button type="submit">{t("dashboard.apply")}</Button>
+          <Button type="submit" className="w-full sm:w-auto">{t("dashboard.apply")}</Button>
           {problem ? (
             <p role="alert" className="basis-full text-sm font-medium text-red-700">
               {t(PROBLEM_TEXT[problem])}

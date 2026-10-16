@@ -174,15 +174,17 @@ export async function MerchantShell({ locale, data, children }: AuthedShellProps
         </aside>
 
         {/* ──────── MOBILE HEADER (when screen < md) ──────── */}
-        <header className="border-b border-border bg-surface md:hidden">
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2.5">
-            <div className="min-w-0">
+        <header className="sticky top-0 z-30 border-b border-border/80 bg-surface/95 backdrop-blur-md md:hidden shadow-2xs">
+          <div className="flex items-center justify-between gap-2 px-3.5 py-2">
+            <div className="flex flex-col min-w-0">
               <Brand locale={locale} />
-              <WhoAndWhere data={data} />
+              <div className="mt-0.5">
+                <WhoAndWhere data={data} />
+              </div>
             </div>
             <HeaderTools locale={locale} data={data} />
           </div>
-          <div className="px-4 pb-2">
+          <div className="px-3 pb-2 border-t border-border/50 pt-1.5 bg-surface/60">
             <AreaNav items={data.nav} label={data.navLabel} orientation="horizontal" />
           </div>
         </header>
@@ -195,7 +197,7 @@ export async function MerchantShell({ locale, data, children }: AuthedShellProps
           </header>
 
           {/* Main Content Area */}
-          <main id="main" className="min-w-0 flex-1 p-4 sm:p-6 md:p-8">
+          <main id="main" className="min-w-0 flex-1 p-3.5 sm:p-6 md:p-8">
             <div className="mx-auto w-full max-w-7xl">
               {children}
             </div>
