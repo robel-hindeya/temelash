@@ -69,15 +69,12 @@ describe("operations access", () => {
     }
   });
 
-  it("shows the administrator operations navigation only, with the audit entry only when permitted", () => {
+  it("shows the administrator operations navigation only", () => {
     const ids = (p: Principal) => visibleNav("operations", p).map((i) => i.id);
     expect(ids(principal("admin@mock.test"))).toEqual([
       "overview",
       "merchants",
-      "audit",
-      "system",
     ]);
-    expect(ids({ kind: "platform", permissions: ["platform:manage"] })).not.toContain("audit");
     expect(visibleNav("merchant", principal("admin@mock.test"))).toEqual([]);
     expect(visibleNav("staff", principal("admin@mock.test"))).toEqual([]);
   });

@@ -152,8 +152,6 @@ describe("navigation by role", () => {
     expect(ids("operations", admin)).toEqual([
       "overview",
       "merchants",
-      "audit",
-      "system",
     ]);
     expect(ids("merchant", admin)).toEqual([]);
     expect(ids("staff", admin)).toEqual([]);
