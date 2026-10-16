@@ -1,10 +1,10 @@
-import { WalletHealth } from "@/features/operations/components/wallet-health";
+import { redirect } from "next/navigation";
 import { OpsFrame } from "@/features/operations/page-frame";
 import { assertLocale } from "@/lib/i18n/server";
 import { pageMetadata } from "@/lib/metadata";
 
 export const generateMetadata = ({ params }: { params: Promise<{ locale: string }> }) =>
-  pageMetadata(params, "nav.walletHealth");
+  pageMetadata(params, "nav.overview");
 
 export default async function WalletHealthPage({
   params,
@@ -12,14 +12,15 @@ export default async function WalletHealthPage({
   params: Promise<{ locale: string }>;
 }) {
   const locale = assertLocale((await params).locale);
+  redirect(`/${locale}/operations`);
   return (
     <OpsFrame
       locale={locale}
       path="/operations/wallet-health"
-      titleKey="nav.walletHealth"
-      subtitleKey="ops.walletSubtitle"
+      titleKey="nav.overview"
+      subtitleKey="ops.overviewSubtitle"
     >
-      <WalletHealth />
+      <div />
     </OpsFrame>
   );
 }

@@ -118,7 +118,6 @@ const NAV: Record<Area, NavItem[]> = {
   operations: [
     { id: "overview", href: "/operations", labelKey: "nav.overview" },
     { id: "merchants", href: "/operations/merchants", labelKey: "nav.merchants" },
-    { id: "wallet-health", href: "/operations/wallet-health", labelKey: "nav.walletHealth" },
     { id: "audit", href: "/operations/audit", labelKey: "nav.audit" },
     { id: "system", href: "/operations/system", labelKey: "nav.system" },
   ],
