@@ -397,25 +397,24 @@ describe("overview and system", () => {
     expect(screen.queryByText("Not offered by the service yet")).not.toBeInTheDocument();
   });
 
-  it("shows all merchants and allows switching to all users", async () => {
-    const user = show(<OpsOverview health={{ live: true, ready: true }} />);
-    expect(screen.getByTestId("tab-merchants")).toBeInTheDocument();
-    expect(screen.getByTestId("tab-users")).toBeInTheDocument();
+  it("shows all merchants and all users directly on the overview page", async () => {
+    show(<OpsOverview health={{ live: true, ready: true }} />);
+    const merchantsTable = await screen.findByRole("table", { name: "Merchants" });
+    expect(merchantsTable).toBeInTheDocument();
+    expect(within(merchantsTable).getByText("Sample Cafe")).toBeInTheDocument();
 
-    await user.click(screen.getByTestId("tab-users"));
-    const table = await screen.findByRole("table", { name: "Platform and merchant users" });
-    expect(table).toBeInTheDocument();
-    expect(within(table).getByText("Operations Admin")).toBeInTheDocument();
-    expect(within(table).getByText("admin@mock.test")).toBeInTheDocument();
+    const usersTable = await screen.findByRole("table", { name: "Platform and merchant users" });
+    expect(usersTable).toBeInTheDocument();
+    expect(within(usersTable).getByText("Operations Admin")).toBeInTheDocument();
+    expect(within(usersTable).getByText("admin@mock.test")).toBeInTheDocument();
   });
 
   it("filters users by role and search query in overview", async () => {
     const user = show(<OpsOverview health={{ live: true, ready: true }} />);
-    await user.click(screen.getByTestId("tab-users"));
-    const table = await screen.findByRole("table", { name: "Platform and merchant users" });
+    const usersTable = await screen.findByRole("table", { name: "Platform and merchant users" });
     await user.type(screen.getByRole("searchbox", { name: "Search users" }), "Hana{Enter}");
-    expect(within(table).getByText("Hana Owner")).toBeInTheDocument();
-    expect(within(table).queryByText("Operations Admin")).not.toBeInTheDocument();
+    expect(within(usersTable).getByText("Hana Owner")).toBeInTheDocument();
+    expect(within(usersTable).queryByText("Operations Admin")).not.toBeInTheDocument();
   });
 });
 
