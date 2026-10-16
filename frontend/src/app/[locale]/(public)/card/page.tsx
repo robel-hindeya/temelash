@@ -82,31 +82,33 @@ export default async function CardPage({ params, searchParams }: Props) {
 
   return (
     <I18nProvider locale={locale} messages={messages}>
-      <CardClaim />
-      {body}
-      {others.length > 0 ? (
-        <nav aria-labelledby="other-cards" className="mt-8">
-          <h2 id="other-cards" className="font-bold text-green-900">
-            {t("card.yourCards")}
-          </h2>
-          <ul className="mt-2 flex flex-col gap-2">
-            {others.map((other) => {
-              const name = pickLocalized(locale, other.merchantEn, other.merchantAm);
-              return (
-                <li key={other.id}>
-                  <Link
-                    href={`/${locale}/card?c=${encodeURIComponent(other.id)}`}
-                    lang={name.lang}
-                    className="touch-target inline-flex items-center"
-                  >
-                    {name.text}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-      ) : null}
+      <div className="mx-auto max-w-md">
+        <CardClaim />
+        {body}
+        {others.length > 0 ? (
+          <nav aria-labelledby="other-cards" className="mt-8">
+            <h2 id="other-cards" className="font-bold text-green-900">
+              {t("card.yourCards")}
+            </h2>
+            <ul className="mt-2 flex flex-col gap-2">
+              {others.map((other) => {
+                const name = pickLocalized(locale, other.merchantEn, other.merchantAm);
+                return (
+                  <li key={other.id}>
+                    <Link
+                      href={`/${locale}/card?c=${encodeURIComponent(other.id)}`}
+                      lang={name.lang}
+                      className="touch-target inline-flex items-center"
+                    >
+                      {name.text}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        ) : null}
+      </div>
     </I18nProvider>
   );
 }

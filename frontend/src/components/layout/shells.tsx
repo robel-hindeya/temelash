@@ -66,15 +66,26 @@ function Brand({ locale, light = false }: { locale: Locale; light?: boolean }) {
 }
 
 export async function PublicShell({ locale, children }: ShellProps) {
+  const t = await getTranslator(locale);
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col bg-surface">
       <SkipLink locale={locale} />
       <div className="tc-border-pattern h-1.5" aria-hidden="true" />
-      <header className="mx-auto flex w-full max-w-2xl items-center justify-between gap-3 px-4 py-3">
-        <Brand locale={locale} />
-        <LanguageSwitcher current={locale} />
+      <header className="sticky top-0 z-30 border-b border-border/60 bg-surface/90 backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <Brand locale={locale} />
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link
+              href={`/${locale}/login`}
+              className="touch-target inline-flex items-center rounded-control border border-green-800/20 bg-green-50/60 px-3 py-1.5 text-xs sm:text-sm font-semibold text-green-900 transition-colors hover:bg-green-100 dark:bg-green-950/40 dark:text-green-200 dark:border-green-800/40"
+            >
+              {t("home.heroCtaMerchant")}
+            </Link>
+            <LanguageSwitcher current={locale} />
+          </div>
+        </div>
       </header>
-      <main id="main" className="mx-auto w-full max-w-2xl flex-1 px-4 pb-10">
+      <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 sm:px-6 pb-12">
         {children}
       </main>
     </div>

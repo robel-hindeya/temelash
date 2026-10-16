@@ -85,12 +85,14 @@ export default async function JoinPage({ params }: Props) {
 
   return (
     <I18nProvider locale={locale} messages={messages}>
-      <MerchantSummary info={info} locale={locale} t={t} />
-      <EnrollmentFlow
-        joinReference={joinReference}
-        consentVersion={info.consent.version}
-        terms={terms ? { text: terms.text, lang: terms.lang } : null}
-      />
+      <div className="mx-auto max-w-md">
+        <MerchantSummary info={info} locale={locale} t={t} />
+        <EnrollmentFlow
+          joinReference={joinReference}
+          consentVersion={info.consent.version}
+          terms={terms ? { text: terms.text, lang: terms.lang } : null}
+        />
+      </div>
     </I18nProvider>
   );
 }
