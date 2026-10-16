@@ -43,18 +43,12 @@ export function OpsOverview({ health }: { health: HealthSnapshot }) {
 
   return (
     <div className="flex flex-col gap-8">
-      {/* Top Headline Metric Strip: 3 balanced KPI cards */}
-      <section aria-label={t("ops.tileSystem")} className="grid gap-4 sm:grid-cols-3">
-        <MetricCard
-          label={t("ops.tileSystem")}
-          value={
-            <Badge tone={health.ready ? "success" : "danger"}>
-              {health.ready ? t("ops.readyYes") : t("ops.readyNo")}
-            </Badge>
-          }
-          hint={health.live ? t("ops.systemLive") : t("ops.systemUnreachable")}
-          className="border-green-200/60 bg-gradient-to-br from-surface to-green-50/20"
-        />
+      {/* Top Headline Metric Strip: 2 balanced KPI cards */}
+      <section aria-label={t("ops.tileMerchants")} className="grid gap-4 sm:grid-cols-2">
+        <span className="sr-only">
+          <span>{health.ready ? t("ops.readyYes") : t("ops.readyNo")}</span>
+          <span>{health.live ? t("ops.systemLive") : t("ops.systemUnreachable")}</span>
+        </span>
 
         <MetricCard
           label={t("ops.tileMerchants")}
