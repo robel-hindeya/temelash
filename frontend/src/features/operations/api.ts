@@ -33,6 +33,14 @@ export function createOperationsApi(transport: Transport) {
         parse: parseWith(platformMerchantListSchema),
       }),
 
+    updateMerchantStatus: (merchantId: string, status: PlatformMerchant["status"]) =>
+      transport.request<PlatformMerchant>({
+        method: "PATCH",
+        path: "/platform/merchants/{merchantId}/status",
+        pathParams: { merchantId },
+        body: { status },
+      }),
+
     outboxStats: (signal?: AbortSignal) =>
       transport.request<OutboxStats>({
         method: "GET",

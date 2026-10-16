@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Badge,
   EmptyState,
@@ -24,6 +24,10 @@ import type { PlatformMerchant } from "@/lib/api/contract";
 import { toApiError } from "@/lib/errors/api-error";
 import { describeApiError } from "@/lib/errors/messages";
 import { useI18n } from "@/lib/i18n/client";
+import {
+  OPS_SYNC_EVENT,
+  getAllStoredMerchantStatuses,
+} from "../ops-persistence";
 import { MERCHANT_STATUS_LABEL, MERCHANT_STATUS_TONE, filterMerchants } from "../ops-rules";
 
 /** The merchant list. The backend returns it whole (no paging), so it is searched, filtered and paged here. */
@@ -33,8 +37,22 @@ export function MerchantsWorkspace() {
     queryKey: ["ops", "merchants"],
     queryFn: ({ signal }) => getBrowserApi().operations.merchants(signal),
   });
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, PlatformMerchant["status"]>>({});
+
+  useEffect(() => {
+    setStatusOverrides(getAllStoredMerchantStatuses());
+    const onSync = () => setStatusOverrides(getAllStoredMerchantStatuses());
+    window.addEventListener(OPS_SYNC_EVENT, onSync);
+    return () => window.removeEventListener(OPS_SYNC_EVENT, onSync);
+  }, []);
+
+  const rawMerchants = list.data ?? [];
+  const merchantsData = useMemo(() => {
+    return rawMerchants.map((m) => (statusOverrides[m.id] ? { ...m, status: statusOverrides[m.id] } : m));
+  }, [rawMerchants, statusOverrides]);
+
   const [filter, setFilter] = useState({ search: "", status: "" });
-  const shown = useMemo(() => filterMerchants(list.data ?? [], filter), [list.data, filter]);
+  const shown = useMemo(() => filterMerchants(merchantsData, filter), [merchantsData, filter]);
   const paged = usePaged(shown);
 
   const n = (val: number) => format.integer(val);
@@ -66,7 +84,6 @@ export function MerchantsWorkspace() {
     );
   }
 
-  const merchantsData = list.data ?? [];
   const totalCount = merchantsData.length;
   const activeCount = merchantsData.filter((m) => m.status === "ACTIVE").length;
   const suspendedCount = merchantsData.filter((m) => m.status === "SUSPENDED").length;

@@ -2,10 +2,16 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { Badge, MetricCard } from "@/components/ui";
 import { DashboardSection } from "@/features/dashboard/components/section";
 import { getBrowserApi } from "@/lib/api/browser";
+import type { PlatformMerchant } from "@/lib/api/contract";
 import { useI18n } from "@/lib/i18n/client";
+import {
+  OPS_SYNC_EVENT,
+  getAllStoredMerchantStatuses,
+} from "../ops-persistence";
 import {
   JOB_STATUS_LABEL,
   JOB_STATUS_ORDER,
@@ -33,10 +39,27 @@ export function OpsOverview({ health }: { health: HealthSnapshot }) {
     queryKey: ["ops", "outbox-stats"],
     queryFn: ({ signal }) => getBrowserApi().operations.outboxStats(signal),
   });
-  const n = (value: number) => format.integer(value);
-  const count = (status: string) => merchants.data?.filter((m) => m.status === status).length ?? 0;
 
-  const totalMerchants = merchants.data?.length ?? 0;
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, PlatformMerchant["status"]>>({});
+
+  useEffect(() => {
+    setStatusOverrides(getAllStoredMerchantStatuses());
+    const onSync = () => setStatusOverrides(getAllStoredMerchantStatuses());
+    window.addEventListener(OPS_SYNC_EVENT, onSync);
+    return () => window.removeEventListener(OPS_SYNC_EVENT, onSync);
+  }, []);
+
+  const rawMerchants = merchants.data ?? [];
+  const merchantsData = useMemo(() => {
+    return rawMerchants.map((m) =>
+      statusOverrides[m.id] ? { ...m, status: statusOverrides[m.id] } : m,
+    );
+  }, [rawMerchants, statusOverrides]);
+
+  const n = (value: number) => format.integer(value);
+  const count = (status: string) => merchantsData.filter((m) => m.status === status).length;
+
+  const totalMerchants = merchantsData.length;
   const totalJobs = stats.data
     ? Object.values(stats.data).reduce((acc, val) => acc + (val ?? 0), 0)
     : 0;

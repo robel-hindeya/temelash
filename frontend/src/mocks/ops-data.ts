@@ -171,6 +171,16 @@ export function opsFor(stores: OpsStores, email: string, now = Date.now()): OpsS
 }
 
 export const listMerchants = (store: OpsStore): Reply => ({ status: 200, body: store.merchants });
+export const updateMerchantStatus = (
+  store: OpsStore,
+  merchantId: string,
+  status: PlatformMerchant["status"],
+): Reply => {
+  const m = store.merchants.find((it) => it.id === merchantId);
+  if (!m) return err(404, "NOT_FOUND", "Merchant not found.");
+  m.status = status;
+  return { status: 200, body: m };
+};
 export const outboxStats = (store: OpsStore): Reply => ({ status: 200, body: store.counts });
 export const deadJobs = (store: OpsStore): Reply => ({ status: 200, body: store.dead });
 

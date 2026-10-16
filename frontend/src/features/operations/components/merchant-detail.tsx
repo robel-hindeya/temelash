@@ -1,8 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Badge,
   Button,
@@ -19,6 +19,17 @@ import type { PlatformMerchant } from "@/lib/api/contract";
 import { toApiError } from "@/lib/errors/api-error";
 import { describeApiError } from "@/lib/errors/messages";
 import { useI18n } from "@/lib/i18n/client";
+import {
+  OPS_SYNC_EVENT,
+  getStoredBranchStatuses,
+  getStoredMerchantStatus,
+  getStoredProgramStatus,
+  getStoredStaffStatuses,
+  setStoredBranchStatus,
+  setStoredMerchantStatus,
+  setStoredProgramStatus,
+  setStoredStaffStatus,
+} from "../ops-persistence";
 import { MERCHANT_STATUS_LABEL, MERCHANT_STATUS_TONE } from "../ops-rules";
 import { MerchantActivity } from "./merchant-activity";
 
@@ -161,6 +172,7 @@ function getStaffForMerchant(merchantName: string, slug: string): MerchantStaffM
 export function MerchantDetail({ merchantId }: { merchantId: string }) {
   const { t, locale, format } = useI18n();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const list = useQuery({
     queryKey: ["ops", "merchants"],
     queryFn: ({ signal }) => getBrowserApi().operations.merchants(signal),
@@ -168,6 +180,28 @@ export function MerchantDetail({ merchantId }: { merchantId: string }) {
 
   const merchant = list.data?.find((m) => m.id === merchantId);
   const [statusOverride, setStatusOverride] = useState<PlatformMerchant["status"] | null>(null);
+  const [staffStatuses, setStaffStatuses] = useState<Record<string, "ACTIVE" | "SUSPENDED">>({});
+  const [branchStatuses, setBranchStatuses] = useState<Record<string, "ACTIVE" | "SUSPENDED">>({});
+  const [programStatus, setProgramStatus] = useState<"ACTIVE" | "PAUSED">("ACTIVE");
+
+  useEffect(() => {
+    if (!merchant) return;
+    const initialStatus = getStoredMerchantStatus(merchant.id);
+    if (initialStatus) setStatusOverride(initialStatus);
+    setStaffStatuses(getStoredStaffStatuses(merchant.slug));
+    setBranchStatuses(getStoredBranchStatuses(merchant.slug));
+    setProgramStatus(getStoredProgramStatus(merchant.slug) ?? "ACTIVE");
+
+    const onSync = () => {
+      const updated = getStoredMerchantStatus(merchant.id);
+      if (updated) setStatusOverride(updated);
+      setStaffStatuses(getStoredStaffStatuses(merchant.slug));
+      setBranchStatuses(getStoredBranchStatuses(merchant.slug));
+      setProgramStatus(getStoredProgramStatus(merchant.slug) ?? "ACTIVE");
+    };
+    window.addEventListener(OPS_SYNC_EVENT, onSync);
+    return () => window.removeEventListener(OPS_SYNC_EVENT, onSync);
+  }, [merchant]);
 
   const back = (
     <Link
@@ -222,12 +256,61 @@ export function MerchantDetail({ merchantId }: { merchantId: string }) {
   };
   const staff = getStaffForMerchant(name.text, merchant.slug);
 
-  const handleToggleStatus = () => {
+  const handleToggleStatus = async () => {
+    if (!merchant) return;
     const nextStatus = currentStatus === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
     setStatusOverride(nextStatus);
+    setStoredMerchantStatus(merchant.id, nextStatus);
+
+    queryClient.setQueryData<PlatformMerchant[]>(["ops", "merchants"], (old) => {
+      if (!old) return old;
+      return old.map((m) => (m.id === merchant.id ? { ...m, status: nextStatus } : m));
+    });
+
+    try {
+      await getBrowserApi().operations.updateMerchantStatus(merchant.id, nextStatus);
+    } catch {
+      // offline / mock fallback
+    }
+
     toast.show({
       tone: nextStatus === "ACTIVE" ? "success" : "warning",
       title: nextStatus === "ACTIVE" ? t("ops.merchantEnabled") : t("ops.merchantSuspended"),
+    });
+  };
+
+  const handleToggleStaffStatus = (memberId: string) => {
+    if (!merchant) return;
+    const currentMemberStatus = staffStatuses[memberId] ?? "ACTIVE";
+    const nextStatus = currentMemberStatus === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
+    setStaffStatuses((prev) => ({ ...prev, [memberId]: nextStatus }));
+    setStoredStaffStatus(merchant.slug, memberId, nextStatus);
+    toast.show({
+      tone: nextStatus === "ACTIVE" ? "success" : "warning",
+      title: nextStatus === "ACTIVE" ? t("ops.staffEnabled") : t("ops.staffSuspended"),
+    });
+  };
+
+  const handleToggleBranchStatus = (branchId: string) => {
+    if (!merchant) return;
+    const currentBranchStatus = branchStatuses[branchId] ?? "ACTIVE";
+    const nextStatus = currentBranchStatus === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
+    setBranchStatuses((prev) => ({ ...prev, [branchId]: nextStatus }));
+    setStoredBranchStatus(merchant.slug, branchId, nextStatus);
+    toast.show({
+      tone: nextStatus === "ACTIVE" ? "success" : "warning",
+      title: nextStatus === "ACTIVE" ? t("ops.branchEnabled") : t("ops.branchSuspended"),
+    });
+  };
+
+  const handleToggleProgramStatus = () => {
+    if (!merchant) return;
+    const nextStatus = programStatus === "ACTIVE" ? "PAUSED" : "ACTIVE";
+    setProgramStatus(nextStatus);
+    setStoredProgramStatus(merchant.slug, nextStatus);
+    toast.show({
+      tone: nextStatus === "ACTIVE" ? "success" : "warning",
+      title: nextStatus === "ACTIVE" ? t("ops.programResumed") : t("ops.programPaused"),
     });
   };
 
@@ -434,34 +517,55 @@ export function MerchantDetail({ merchantId }: { merchantId: string }) {
                 <th scope="col" className="px-4 py-3">
                   {t("ops.colStatus")}
                 </th>
+                <th scope="col" className="px-4 py-3 text-right">
+                  {t("ops.colActions")}
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {staff.map((member) => (
-                <tr key={member.id} className="hover:bg-cream-50/50 transition-colors">
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-green-100 font-bold text-xs text-green-800">
-                        {member.name.slice(0, 2).toUpperCase()}
+              {staff.map((member) => {
+                const memberStatus = staffStatuses[member.id] ?? member.status;
+                return (
+                  <tr key={member.id} className="hover:bg-cream-50/50 transition-colors">
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-green-100 font-bold text-xs text-green-800">
+                          {member.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <span className="font-semibold text-foreground">{member.name}</span>
                       </div>
-                      <span className="font-semibold text-foreground">{member.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <Badge tone={roleTone(member.role)}>{roleLabel(member.role)}</Badge>
-                  </td>
-                  <td className="px-4 py-3.5 text-muted">{member.branch}</td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex flex-col">
-                      <span className="font-mono text-xs">{member.email}</span>
-                      <span className="text-xs text-muted">{member.phone}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <Badge tone="success">{t("ops.statusActive")}</Badge>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <Badge tone={roleTone(member.role)}>{roleLabel(member.role)}</Badge>
+                    </td>
+                    <td className="px-4 py-3.5 text-muted">{member.branch}</td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex flex-col">
+                        <span className="font-mono text-xs">{member.email}</span>
+                        <span className="text-xs text-muted">{member.phone}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <Badge tone={memberStatus === "ACTIVE" ? "success" : "warning"}>
+                        {memberStatus === "ACTIVE" ? t("ops.statusActive") : t("ops.statusSuspended")}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      <Button
+                        variant={memberStatus === "ACTIVE" ? "secondary" : "primary"}
+                        onClick={() => handleToggleStaffStatus(member.id)}
+                        className={
+                          memberStatus === "ACTIVE"
+                            ? "border-amber-600/80 text-amber-800 hover:bg-amber-50 text-xs px-2.5 py-1 min-h-0"
+                            : "bg-green-700 hover:bg-green-800 text-xs px-2.5 py-1 min-h-0"
+                        }
+                      >
+                        {memberStatus === "ACTIVE" ? t("ops.actionSuspend") : t("ops.actionEnable")}
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -477,13 +581,37 @@ export function MerchantDetail({ merchantId }: { merchantId: string }) {
             {t("ops.branchesTitle")}
           </h3>
           <div className="flex flex-col gap-2.5">
-            {SAMPLE_BRANCHES.map((b) => (
-              <div key={b.id} className="rounded-xl bg-cream-50/60 p-3.5 border border-border/60">
-                <p className="font-semibold text-foreground">{b.name}</p>
-                <p className="text-xs text-muted">{b.address}</p>
-                <p className="text-xs text-green-800 font-medium mt-1">{b.phone}</p>
-              </div>
-            ))}
+            {SAMPLE_BRANCHES.map((b) => {
+              const bStatus = branchStatuses[b.id] ?? "ACTIVE";
+              return (
+                <div
+                  key={b.id}
+                  className="rounded-xl bg-cream-50/60 p-3.5 border border-border/60 flex items-start justify-between gap-3"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-foreground">{b.name}</p>
+                      <Badge tone={bStatus === "ACTIVE" ? "success" : "warning"}>
+                        {bStatus === "ACTIVE" ? t("ops.statusActive") : t("ops.statusSuspended")}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted mt-0.5">{b.address}</p>
+                    <p className="text-xs text-green-800 font-medium mt-1">{b.phone}</p>
+                  </div>
+                  <Button
+                    variant={bStatus === "ACTIVE" ? "secondary" : "primary"}
+                    onClick={() => handleToggleBranchStatus(b.id)}
+                    className={
+                      bStatus === "ACTIVE"
+                        ? "border-amber-600/80 text-amber-800 hover:bg-amber-50 text-xs px-2.5 py-1 min-h-0 shrink-0"
+                        : "bg-green-700 hover:bg-green-800 text-xs px-2.5 py-1 min-h-0 shrink-0"
+                    }
+                  >
+                    {bStatus === "ACTIVE" ? t("ops.actionSuspend") : t("ops.actionEnable")}
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -491,9 +619,24 @@ export function MerchantDetail({ merchantId }: { merchantId: string }) {
           <h3 className="text-lg font-bold text-foreground">{t("ops.programTitle")}</h3>
           <div className="rounded-xl border border-green-200/80 bg-gradient-to-br from-white via-green-50/30 to-green-100/20 p-4 flex flex-col justify-between flex-1">
             <div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className="font-bold text-green-900">{SAMPLE_PROGRAM.name}</span>
-                <Badge tone="success">{t("ops.statusActive")}</Badge>
+                <div className="flex items-center gap-2">
+                  <Badge tone={programStatus === "ACTIVE" ? "success" : "warning"}>
+                    {programStatus === "ACTIVE" ? t("ops.statusActive") : t("ops.actionPause")}
+                  </Badge>
+                  <Button
+                    variant={programStatus === "ACTIVE" ? "secondary" : "primary"}
+                    onClick={handleToggleProgramStatus}
+                    className={
+                      programStatus === "ACTIVE"
+                        ? "border-amber-600/80 text-amber-800 hover:bg-amber-50 text-xs px-2.5 py-1 min-h-0 shrink-0"
+                        : "bg-green-700 hover:bg-green-800 text-xs px-2.5 py-1 min-h-0 shrink-0"
+                    }
+                  >
+                    {programStatus === "ACTIVE" ? t("ops.actionPause") : t("ops.actionResume")}
+                  </Button>
+                </div>
               </div>
               <p className="text-xs text-muted mt-2">{SAMPLE_PROGRAM.description}</p>
             </div>

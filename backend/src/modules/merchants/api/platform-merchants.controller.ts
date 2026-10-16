@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiForbiddenResponse,
@@ -18,6 +18,11 @@ export class MerchantSummaryDto {
   @ApiProperty({ enum: ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'] }) status!: string;
 }
 
+export class UpdateMerchantStatusDto {
+  @ApiProperty({ enum: ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'] })
+  status!: 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED';
+}
+
 @ApiTags('Platform')
 @ApiBearerAuth()
 @Controller('platform/merchants')
@@ -35,5 +40,19 @@ export class PlatformMerchantsController {
   @ApiForbiddenResponse({ description: 'Merchant users can never call platform routes' })
   list() {
     return this.merchants.list();
+  }
+
+  @Permissions('platform:manage')
+  @Patch(':id/status')
+  @ApiOperation({
+    summary: 'Update merchant status (platform administrators only)',
+  })
+  @ApiOkResponse({ type: MerchantSummaryDto })
+  @ApiForbiddenResponse({ description: 'Merchant users can never call platform routes' })
+  updateStatus(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: UpdateMerchantStatusDto,
+  ) {
+    return this.merchants.updateStatus(id, body.status);
   }
 }

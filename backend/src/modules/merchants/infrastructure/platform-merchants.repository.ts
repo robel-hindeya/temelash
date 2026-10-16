@@ -11,4 +11,12 @@ export class PlatformMerchantsRepository {
       select: { id: true, slug: true, nameEn: true, nameAm: true, status: true },
     });
   }
+
+  updateStatus(id: string, status: 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED') {
+    return this.prisma.merchant.update({
+      where: { id },
+      data: { status },
+      select: { id: true, slug: true, nameEn: true, nameAm: true, status: true },
+    });
+  }
 }

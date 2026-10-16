@@ -42,6 +42,7 @@ import {
   outboxStats,
   platformAudit,
   requeueDead,
+  updateMerchantStatus,
   type OpsStores,
 } from "./ops-data";
 import {
@@ -101,7 +102,7 @@ import {
   webCardFor,
   type MockEmail,
 } from "./fixtures";
-import type { RedeemResult, RejectionReason, ScanResult } from "@/lib/api/contract";
+import type { PlatformMerchant, RedeemResult, RejectionReason, ScanResult } from "@/lib/api/contract";
 import { generateGoogleWalletSaveUrl } from "@/lib/wallet/google-jwt";
 
 interface CardState {
@@ -875,6 +876,21 @@ export function createHandlers(): MockRoute[] {
       handle: (ctx) => {
         const auth = authenticate(ctx, "platform:manage");
         return "reply" in auth ? auth.reply : listMerchants(opsFor(ctx.state.ops, auth.email));
+      },
+    },
+    {
+      method: "PATCH",
+      path: "/platform/merchants/{merchantId}/status",
+      handle: (ctx) => {
+        const auth = authenticate(ctx, "platform:manage");
+        if ("reply" in auth) return auth.reply;
+        const body = (ctx.body ?? {}) as { status?: PlatformMerchant["status"] };
+        if (!body.status) return error(400, "VALIDATION_FAILED", "Status is required.");
+        return updateMerchantStatus(
+          opsFor(ctx.state.ops, auth.email),
+          String(ctx.params.merchantId),
+          body.status,
+        );
       },
     },
     {
