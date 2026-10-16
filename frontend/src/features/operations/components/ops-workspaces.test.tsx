@@ -121,15 +121,18 @@ describe("merchants", () => {
 describe("merchant detail", () => {
   const ID = "00000000-0000-4000-8000-0000000a0001";
 
-  it("shows organisation data only and states what the service does not offer", async () => {
-    show(<MerchantDetail merchantId={ID} />);
+  it("shows merchant details, contact info, staff members, and allows toggling status", async () => {
+    const user = show(<MerchantDetail merchantId={ID} />);
     expect(await screen.findByRole("heading", { name: "Sample Cafe" })).toBeInTheDocument();
-    expect(screen.getByText(/Organisation details only/)).toBeInTheDocument();
-    expect(screen.getByText("Not available yet")).toBeInTheDocument();
-    expect(screen.getByText("Approving merchants and changing their status")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /approve|suspend|activate/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByText("+251 91 100 0000")).toBeInTheDocument();
+    expect(screen.getByText("Bole Road, Mega Building 4th Floor, Addis Ababa, Ethiopia")).toBeInTheDocument();
+    expect(screen.getByText("Hana Owner")).toBeInTheDocument();
+    expect(screen.getByText("Dawit Manager")).toBeInTheDocument();
+    expect(screen.getByText("Selam Cashier")).toBeInTheDocument();
+    const suspendBtn = screen.getByRole("button", { name: "Suspend merchant" });
+    expect(suspendBtn).toBeInTheDocument();
+    await user.click(suspendBtn);
+    expect(screen.getByRole("button", { name: "Enable merchant" })).toBeInTheDocument();
   });
 
   it("says when the merchant does not exist", async () => {
