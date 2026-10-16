@@ -15,7 +15,7 @@ import {
   Skeleton,
   SkeletonGroup,
 } from "@/components/ui";
-import { TagIcon } from "@/components/ui/icons";
+import { Logo } from "@/components/layout/logo";
 import { pickLocalized } from "@/features/enrollment/localized";
 import { ResponsiveTable } from "@/features/org/responsive-table";
 import { usePaged } from "@/features/org/use-paged";
@@ -78,7 +78,7 @@ export function MerchantsWorkspace() {
   );
   const open = (m: PlatformMerchant) => (
     <Link
-      className="touch-target inline-flex items-center gap-1.5 rounded-control border border-green-700 px-3.5 py-1 text-sm font-semibold text-green-800 hover:bg-green-50 transition-colors"
+      className="touch-target inline-flex items-center gap-1.5 rounded-lg border border-green-700/80 bg-surface px-3 py-1 text-xs font-semibold text-green-800 hover:bg-green-700 hover:text-white hover:border-green-700 shadow-2xs transition-all active:scale-[0.98]"
       href={`/${locale}/operations/merchants/${m.id}`}
     >
       <span>{t("ops.view")}</span>
@@ -95,38 +95,38 @@ export function MerchantsWorkspace() {
           label={t("ops.tileMerchants")}
           value={n(totalCount)}
           hint={t("ops.merchantsSubtitle")}
-          className="border-green-200/60 bg-gradient-to-br from-surface to-green-50/20 shadow-xs"
+          className="border-green-300/80 bg-gradient-to-br from-surface via-green-50/40 to-green-100/30 shadow-xs hover:shadow-sm hover:border-green-400 transition-all"
         />
 
         <MetricCard
           label={t("ops.statusActive")}
           value={n(activeCount)}
           hint={`${n(activeCount)} / ${n(totalCount)}`}
-          className="border-border/80 hover:border-primary/40 transition-colors shadow-xs"
+          className="border-emerald-200/80 bg-gradient-to-br from-surface via-emerald-50/20 to-emerald-100/20 shadow-xs hover:shadow-sm hover:border-emerald-300 transition-all"
         />
 
         <MetricCard
           label={t("ops.statusSuspended")}
           value={n(suspendedCount)}
           hint={`${n(suspendedCount)} / ${n(totalCount)}`}
-          className="border-border/80 hover:border-primary/40 transition-colors shadow-xs"
+          className="border-amber-200/80 bg-gradient-to-br from-surface via-amber-50/20 to-amber-100/20 shadow-xs hover:shadow-sm hover:border-amber-300 transition-all"
         />
 
         <MetricCard
           label={t("ops.statusDeactivated")}
           value={n(deactivatedCount)}
           hint={`${n(deactivatedCount)} / ${n(totalCount)}`}
-          className="border-border/80 hover:border-primary/40 transition-colors shadow-xs"
+          className="border-border/80 bg-gradient-to-br from-surface to-charcoal-50/30 shadow-xs hover:shadow-sm hover:border-border transition-all"
         />
       </section>
 
       {/* Main Table Card Container */}
       <div className="flex flex-col gap-5 rounded-2xl border border-border/80 bg-surface p-6 shadow-sm">
-        {/* Header with Title and Count */}
+        {/* Header with Title, TemelashCard Logo and Count */}
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/70 pb-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <TagIcon size={20} />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white border border-green-200/80 p-1.5 shadow-2xs ring-2 ring-green-600/5">
+              <Logo className="h-7 w-7" />
             </div>
             <div>
               <h2 className="text-lg font-bold text-foreground">
@@ -139,29 +139,33 @@ export function MerchantsWorkspace() {
         </div>
 
         {/* Search & Filter Bar */}
-        <div className="grid gap-3 sm:grid-cols-[1fr_16rem]">
-          <SearchField
-            label={t("ops.searchLabel")}
-            placeholder={t("ops.searchPlaceholder")}
-            onSearch={(search) => {
-              setFilter((f) => ({ ...f, search }));
-              paged.reset();
-            }}
-          />
-          <FormField label={t("ops.filterStatus")}>
-            <Select
-              value={filter.status}
-              onChange={(event) => {
-                setFilter((f) => ({ ...f, status: event.target.value }));
+        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-end justify-between rounded-xl bg-cream-50/60 p-3.5 border border-border/60">
+          <div className="flex-1 min-w-0">
+            <SearchField
+              label={t("ops.searchLabel")}
+              placeholder={t("ops.searchPlaceholder")}
+              onSearch={(search) => {
+                setFilter((f) => ({ ...f, search }));
                 paged.reset();
               }}
-            >
-              <option value="">{t("ops.anyStatus")}</option>
-              <option value="ACTIVE">{t("ops.statusActive")}</option>
-              <option value="SUSPENDED">{t("ops.statusSuspended")}</option>
-              <option value="DEACTIVATED">{t("ops.statusDeactivated")}</option>
-            </Select>
-          </FormField>
+            />
+          </div>
+          <div className="w-full sm:w-64">
+            <FormField label={t("ops.filterStatus")}>
+              <Select
+                value={filter.status}
+                onChange={(event) => {
+                  setFilter((f) => ({ ...f, status: event.target.value }));
+                  paged.reset();
+                }}
+              >
+                <option value="">{t("ops.anyStatus")}</option>
+                <option value="ACTIVE">{t("ops.statusActive")}</option>
+                <option value="SUSPENDED">{t("ops.statusSuspended")}</option>
+                <option value="DEACTIVATED">{t("ops.statusDeactivated")}</option>
+              </Select>
+            </FormField>
+          </div>
         </div>
 
         {/* Content Table or Empty State */}
@@ -182,7 +186,7 @@ export function MerchantsWorkspace() {
                   rowHeader: true,
                   cell: (m) => (
                     <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-green-100 font-bold text-xs text-green-800">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-green-700 to-green-900 font-bold text-xs text-white shadow-xs tracking-wider border border-green-600/30">
                         {(nameOf(m).text || m.slug).slice(0, 2).toUpperCase()}
                       </div>
                       <div>
@@ -202,7 +206,7 @@ export function MerchantsWorkspace() {
                   id: "slug",
                   header: t("ops.colSlug"),
                   cell: (m) => (
-                    <code className="text-xs font-mono text-muted bg-surface-elevated px-2 py-0.5 rounded-md border border-border/60">
+                    <code className="text-xs font-mono font-medium text-charcoal-800 bg-cream-100/90 px-2.5 py-1 rounded-md border border-border/70">
                       {m.slug}
                     </code>
                   ),
@@ -214,7 +218,7 @@ export function MerchantsWorkspace() {
                 <div className="flex flex-col gap-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-green-100 font-bold text-xs text-green-800">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-green-700 to-green-900 font-bold text-xs text-white shadow-xs tracking-wider border border-green-600/30">
                         {(nameOf(m).text || m.slug).slice(0, 2).toUpperCase()}
                       </div>
                       <div>

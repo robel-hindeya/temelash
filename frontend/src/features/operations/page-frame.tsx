@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Logo } from "@/components/layout/logo";
 import { PageHeading } from "@/components/ui";
 import { requireRoute } from "@/lib/auth/server";
 import { I18nProvider } from "@/lib/i18n/client";
@@ -40,7 +41,15 @@ export async function OpsFrame({
   ]);
   return (
     <I18nProvider locale={locale} messages={messages}>
-      <PageHeading title={t(titleKey)} description={t(subtitleKey)} />
+      <PageHeading
+        title={t(titleKey)}
+        description={t(subtitleKey)}
+        icon={
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border/80 bg-white p-1.5 shadow-2xs">
+            <Logo className="h-7 w-7" />
+          </div>
+        }
+      />
       {children}
     </I18nProvider>
   );

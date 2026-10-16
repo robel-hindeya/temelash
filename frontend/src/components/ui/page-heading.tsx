@@ -7,6 +7,7 @@ export function PageHeading({
   description,
   actions,
   eyebrow,
+  icon,
   id = "page-title",
   className,
 }: {
@@ -15,6 +16,7 @@ export function PageHeading({
   actions?: ReactNode;
   /** Small text above the title, e.g. a merchant or branch name. */
   eyebrow?: ReactNode;
+  icon?: ReactNode;
   id?: string;
   className?: string;
 }) {
@@ -22,9 +24,12 @@ export function PageHeading({
     <header className={cn("mb-6 flex flex-wrap items-end justify-between gap-4", className)}>
       <div className="max-w-prose min-w-0">
         {eyebrow ? <p className="mb-1 text-sm font-medium text-gold-text">{eyebrow}</p> : null}
-        <h1 id={id} className="text-2xl font-bold text-green-900 sm:text-3xl">
-          {title}
-        </h1>
+        <div className="flex items-center gap-3">
+          {icon ? <div className="shrink-0">{icon}</div> : null}
+          <h1 id={id} className="text-2xl font-bold text-green-900 sm:text-3xl">
+            {title}
+          </h1>
+        </div>
         {description ? <p className="mt-2 text-charcoal-700">{description}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}

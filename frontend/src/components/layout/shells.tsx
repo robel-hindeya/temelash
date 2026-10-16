@@ -47,12 +47,20 @@ function Brand({ locale, light = false }: { locale: Locale; light?: boolean }) {
     <Link
       href={`/${locale}`}
       className={
-        "touch-target inline-flex items-center gap-2 font-semibold no-underline " +
+        "touch-target inline-flex items-center gap-2.5 font-semibold no-underline group " +
         (light ? "text-white" : "text-green-800")
       }
     >
-      <Logo />
-      <span>TemelashCard</span>
+      <div
+        className={
+          light
+            ? "flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1 shadow-2xs transition-transform group-hover:scale-105"
+            : "flex h-8 w-8 items-center justify-center transition-transform group-hover:scale-105"
+        }
+      >
+        <Logo className={light ? "h-6 w-6" : "h-8 w-8"} />
+      </div>
+      <span className="text-base font-bold tracking-tight">TemelashCard</span>
     </Link>
   );
 }
