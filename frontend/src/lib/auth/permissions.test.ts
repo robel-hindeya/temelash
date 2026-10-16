@@ -153,7 +153,6 @@ describe("navigation by role", () => {
       "overview",
       "merchants",
       "wallet-health",
-      "privacy",
       "audit",
       "system",
     ]);

@@ -75,7 +75,6 @@ describe("operations access", () => {
       "overview",
       "merchants",
       "wallet-health",
-      "privacy",
       "audit",
       "system",
     ]);
