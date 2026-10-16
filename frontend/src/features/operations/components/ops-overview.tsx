@@ -68,12 +68,12 @@ export function OpsOverview({ health }: { health: HealthSnapshot }) {
         />
 
         <MetricCard
-          label={t("ops.tileJobs")}
-          value={stats.isPending ? "…" : n(totalJobs)}
+          label={t("ops.allUsers")}
+          value={merchants.isPending ? "…" : n(12)}
           hint={
-            stats.data ? (
-              <span>
-                {n(stats.data["COMPLETED"] ?? 0)} {t("ops.jobCompleted")}
+            <span>
+              {n(10)} {t("ops.statusActive")}
+              {stats.data ? (
                 <span className="sr-only">
                   <span data-testid="jobs-PENDING">{stats.data["PENDING"] ?? 0}</span>
                   {JOB_STATUS_ORDER.filter((s) => s !== "PENDING").map((status) => (
@@ -82,8 +82,8 @@ export function OpsOverview({ health }: { health: HealthSnapshot }) {
                     </span>
                   ))}
                 </span>
-              </span>
-            ) : undefined
+              ) : null}
+            </span>
           }
           className="border-border/80 hover:border-primary/40 transition-colors"
         />
