@@ -10,3 +10,5 @@ secrets/
 node_modules/
 dist/
 .next/
+frontend_backup/
+frontend_src_backup/

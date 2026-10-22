@@ -1,0 +1,18 @@
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: #f7f7f9;
+  color: #101827;
+  font-family: 'Source Sans 3', 'Noto Sans Ethiopic', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Phone-sized screens (customer flow, web card, staff app) sit centred on wide screens. */
+.tm-phone-stage { min-height: 100vh; background: #e3e5ec; display: flex; justify-content: center; }
+.tm-phone { width: 100%; max-width: 430px; min-height: 100vh; background: #ffffff; }
+@media (min-width: 600px) {
+  .tm-phone-stage { padding: 24px 0; }
+  .tm-phone { min-height: 0; border-radius: 20px; overflow: hidden; box-shadow: 0 8px 24px rgba(16, 24, 39, 0.12); align-self: flex-start; }
+}
+/* The phone screens were drawn at 390px wide; let them fill any phone width. */
+.tm-phone > *:first-child { width: 100% !important; }
