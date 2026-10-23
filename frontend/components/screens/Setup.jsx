@@ -25,6 +25,22 @@ class SetupView extends DCLogic {
       myLoc: false,
     };
   }
+  componentDidMount() {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = window.localStorage.getItem('tc_registered_merchant');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.name) {
+            this.setState({
+              name: parsed.name,
+              type: parsed.type || this.state.type,
+            });
+          }
+        }
+      } catch (e) {}
+    }
+  }
   places() {
     // Approximate centres, for the prototype map only
     return [

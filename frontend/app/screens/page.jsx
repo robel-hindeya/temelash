@@ -3,7 +3,13 @@ import Link from 'next/link';
 export const metadata = { title: 'All screens — Temelash Card' };
 
 const GROUPS = [
-  { title: 'Home page', items: [['Home page', '/']] },
+  {
+    title: 'Home & Authentication',
+    items: [
+      ['Home page', '/'],
+      ['Sign in & Register', '/login'],
+    ],
+  },
   {
     title: 'Business dashboard',
     items: [
