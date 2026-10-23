@@ -35,6 +35,15 @@ export class AnalyticsRepository {
       : Prisma.empty;
   }
 
+  async qrScans(s: Scope): Promise<number> {
+    const rows = await this.prisma.$queryRaw<Array<{ n: bigint }>>`
+      SELECT count(*) AS n FROM audit_events a
+      WHERE a.merchant_id = ${s.merchantId}::uuid
+        AND a.action = 'QR_SCANNED'
+        AND a.occurred_at >= ${s.from} AND a.occurred_at < ${s.to}`;
+    return n(rows[0]?.n);
+  }
+
   async newMembers(s: Scope): Promise<number> {
     const rows = await this.prisma.$queryRaw<Array<{ n: bigint }>>`
       SELECT count(*) AS n FROM customer_memberships m

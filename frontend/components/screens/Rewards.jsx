@@ -4,6 +4,7 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
+import QRCodeDisplay from '../QRCodeDisplay';
 import api from '@/lib/api';
 
 const __CSS =
@@ -382,6 +383,7 @@ class RewardsView extends DCLogic {
       nextName: nextR ? nextR.name : 'Card complete',
       toGo: nextR ? left + (left === 1 ? ' visit' : ' visits') : '—',
       pvMs,
+      cardUrl: (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001') + '/card',
       notifTitle: justHit ? 'NOTIFICATION THEY GET NOW' : 'WHEN THE NEXT REWARD UNLOCKS',
       notifHead: unlockName + ' unlocked',
       notifText: unlockName + ' unlocked. Show this at the counter.',
@@ -1357,12 +1359,7 @@ RewardsView.prototype.__template = function (__v) {
                             gap: '1px',
                           }}
                         >
-                          {(__v?.qr || []).map((q, __i0) => (
-                            <React.Fragment key={__i0}>
-                              <span style={{ background: `${__t(q?.c)}` }} />
-                            </React.Fragment>
-                          ))}
-                        </div>
+                          <QRCodeDisplay value={__v?.cardUrl || "http://localhost:3001/card"} size={84} /></div>
                       </div>{' '}
                       <div style={{ flex: '1 1 auto' }} />{' '}
                       <span
@@ -1483,12 +1480,7 @@ RewardsView.prototype.__template = function (__v) {
                             gap: '1px',
                           }}
                         >
-                          {(__v?.qr || []).map((q, __i0) => (
-                            <React.Fragment key={__i0}>
-                              <span style={{ background: `${__t(q?.c)}` }} />
-                            </React.Fragment>
-                          ))}
-                        </div>
+                          <QRCodeDisplay value={__v?.cardUrl || "http://localhost:3001/card"} size={84} /></div>
                       </div>
                     </div>
                   </div>

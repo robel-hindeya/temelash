@@ -4,6 +4,7 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
+import QRCodeDisplay from '../QRCodeDisplay';
 import ColorPicker from './ColorPicker';
 import api from '@/lib/api';
 
@@ -237,6 +238,7 @@ class CardDesignView extends DCLogic {
       noCover: !s.cover,
       addCover: () => this.setState({ cover: true, tab: s.tab === 'join' ? 'web' : s.tab }),
       removeCover: () => this.setState({ cover: false }),
+      cardUrl: (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001') + '/card',
       liveQr: (() => {
         const N = 11,
           out = [];
@@ -968,12 +970,7 @@ CardDesignView.prototype.__template = function (__v) {
                     gap: '1px',
                   }}
                 >
-                  {(__v?.liveQr || []).map((q, __i0) => (
-                    <React.Fragment key={__i0}>
-                      <span style={{ background: `${__t(q?.c)}` }} />
-                    </React.Fragment>
-                  ))}
-                </div>{' '}
+                  <QRCodeDisplay value={__v?.cardUrl || "http://localhost:3001/card"} size={64} /></div>{' '}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   <strong style={{ fontSize: '17px' }}>{'Try your live card'}</strong>
                   <span style={{ fontSize: '14px', color: '#5b6475' }}>
@@ -1826,12 +1823,7 @@ CardDesignView.prototype.__template = function (__v) {
                             gap: '1px',
                           }}
                         >
-                          {(__v?.liveQr || []).map((q, __i0) => (
-                            <React.Fragment key={__i0}>
-                              <span style={{ background: `${__t(q?.c)}` }} />
-                            </React.Fragment>
-                          ))}
-                        </div>
+                          <QRCodeDisplay value={__v?.cardUrl || "http://localhost:3001/card"} size={64} /></div>
                       </div>{' '}
                       <div style={{ flex: '1 1 auto' }} />{' '}
                       <span

@@ -4,6 +4,7 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import api from '@/lib/api';
+import QRCodeDisplay from '@/components/QRCodeDisplay';
 
 const __CSS =
   'body{margin:0}\ninput,button,a{font:inherit}\nbutton:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid #4661ad;outline-offset:2px}\n.mi:hover{background:#f7f7f9}';
@@ -359,7 +360,10 @@ class CustomerFlowView extends DCLogic {
         };
     const langSet = (l, close) => () =>
       this.setState(Object.assign({ lang: l }, close ? { menu: false, langSub: false } : {}));
+    const tokenVal = s.cardToken || (typeof window !== 'undefined' ? window.localStorage.getItem('tm-customer-token') : null) || 'A25rOmsw_h-cQ1DEXRuJ5pfuSstxAq7l_0pwMJtnZqo';
+
     return {
+      cardToken: tokenVal,
       t: Object.assign({}, T, {
         getCardSub: am ? 'በ' + mainAt + ' ማህተም ' + mainName : mainName + ' at ' + mainAt + ' stamps',
         unlockT: (s.unlockName || mainName) + (am ? ' ተከፍቷል' : ' unlocked'),
@@ -432,10 +436,19 @@ class CustomerFlowView extends DCLogic {
           };
           try {
             const enrollRes = await api.public.enroll(joinRef, payload);
-            if (enrollRes?.cardToken) {
+            const token = enrollRes?.card?.token || enrollRes?.cardToken;
+            if (token) {
               try {
-                window.localStorage.setItem('tm-customer-token', enrollRes.cardToken);
+                window.localStorage.setItem('tm-customer-token', token);
+                window.localStorage.setItem('teme_active_card_token', token);
+                window.localStorage.setItem('teme_last_enrolled_card', JSON.stringify({
+                  token,
+                  customerName: payload.firstName,
+                  phone: payload.phone,
+                }));
               } catch (e) {}
+              this.setState({ cardToken: token, joined: true, tried: false });
+              return;
             }
           } catch (e) {
             console.warn('Backend enrollment note (proceeding):', e);
@@ -1962,23 +1975,22 @@ CustomerFlowView.prototype.__template = function (__v) {
                     padding: '4px',
                   }}
                 >
-                  <span
-                    role="img"
-                    aria-label="Member QR code placeholder"
+                  <div
                     style={{
-                      width: '104px',
-                      height: '104px',
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(11, minmax(0, 1fr))',
-                      gap: '1px',
+                      width: '108px',
+                      height: '108px',
+                      padding: '4px',
+                      background: '#ffffff',
+                      borderRadius: '12px',
+                      border: '1px solid #e3e5ec',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxSizing: 'border-box',
                     }}
                   >
-                    {(__v?.qr || []).map((q, __i0) => (
-                      <React.Fragment key={__i0}>
-                        <span style={{ background: `${__t(q?.c)}` }} />
-                      </React.Fragment>
-                    ))}
-                  </span>{' '}
+                    <QRCodeDisplay value={__v?.cardToken} size={96} />
+                  </div>{' '}
                   <span
                     style={{ fontSize: '13px', color: '#4661ad', fontWeight: '700' }}
                   >{`${__t(__v?.t?.tapEnlarge)}`}</span>
@@ -2056,9 +2068,7 @@ CustomerFlowView.prototype.__template = function (__v) {
               <span
                 style={{ fontSize: '24px', lineHeight: '30px', fontWeight: '700', marginTop: '24px' }}
               >{`${__t(__v?.counterTitle)}`}</span>{' '}
-              <span
-                role="img"
-                aria-label="Member QR code placeholder, large"
+              <div
                 style={{
                   width: '240px',
                   height: '240px',
@@ -2066,16 +2076,32 @@ CustomerFlowView.prototype.__template = function (__v) {
                   border: '1px solid #e3e5ec',
                   borderRadius: '20px',
                   boxSizing: 'border-box',
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(11, minmax(0, 1fr))',
-                  gap: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#ffffff',
+                  boxShadow: '0 8px 24px rgba(16,24,39,0.06)',
                 }}
               >
-                {(__v?.qr || []).map((q, __i0) => (
-                  <React.Fragment key={__i0}>
-                    <span style={{ background: `${__t(q?.c)}` }} />
-                  </React.Fragment>
-                ))}
+                <QRCodeDisplay value={__v?.cardToken} size={208} />
+              </div>{' '}
+              <span
+                style={{
+                  fontSize: '12px',
+                  color: '#64748b',
+                  letterSpacing: '0.04em',
+                  fontFamily: 'monospace',
+                  background: '#f1f5f9',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  maxWidth: '260px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+                title={__v?.cardToken}
+              >
+                {__v?.cardToken}
               </span>{' '}
               <span
                 style={{

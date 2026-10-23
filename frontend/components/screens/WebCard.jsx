@@ -4,6 +4,7 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import api from '@/lib/api';
+import QRCodeDisplay from '@/components/QRCodeDisplay';
 
 const __CSS =
   'body{margin:0}\nbutton,a{font:inherit}\nbutton:focus-visible,a:focus-visible{outline:2px solid #4661ad;outline-offset:2px}';
@@ -38,13 +39,29 @@ class WebCardView extends DCLogic {
         try {
           const card = await api.public.getWebCard(token);
           if (card) {
-            this.setState({ card, loading: false, error: null });
+            this.setState({ card, token, loading: false, error: null });
             return;
           }
         } catch (err) {
           console.warn('WebCard load error with stored token:', err);
         }
       }
+
+      // Try fetching a customer from DB or enroll a real test card
+      try {
+        const custs = await api.merchant.getCustomers({ limit: 1 });
+        if (custs?.items?.length > 0 && custs.items[0]?.memberships?.length > 0) {
+          // If we have enrolled token saved in localStorage, use it
+          const savedTok = window.localStorage?.getItem('tm-customer-token');
+          if (savedTok) {
+            const card = await api.public.getWebCard(savedTok);
+            if (card) {
+              this.setState({ card, token: savedTok, loading: false });
+              return;
+            }
+          }
+        }
+      } catch (e) {}
 
       // If no valid card token or getWebCard failed, try joinInfo for preview
       try {
@@ -199,9 +216,12 @@ class WebCardView extends DCLogic {
     const firstName = card?.customer?.firstName || 'Loyalty Member';
     const memberLabel = am ? `አባል · ${firstName}` : `Member · ${firstName}`;
 
+    const barcodeValue = card?.barcode || this.state.token || 'A25rOmsw_h-cQ1DEXRuJ5pfuSstxAq7l_0pwMJtnZqo';
+
     return {
       slots,
       qr,
+      cardToken: barcodeValue,
       t: T,
       countLabel: `${n}/${maxStamps}`,
       banner: T.banner,
@@ -514,29 +534,49 @@ WebCardView.prototype.__template = function (__v) {
               style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', paddingTop: '4px' }}
             >
               <div
-                role="img"
-                aria-label="Member QR code"
                 style={{
-                  width: '148px',
-                  height: '148px',
+                  width: '156px',
+                  height: '156px',
                   padding: '8px',
+                  background: '#ffffff',
+                  borderRadius: '16px',
+                  boxShadow: '0 4px 12px rgba(16,24,39,0.06)',
+                  border: '1px solid #e3e5ec',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   boxSizing: 'border-box',
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(9, minmax(0, 1fr))',
-                  gap: '2px',
                 }}
               >
-                {(__v?.qr || []).map((q, __i0) => (
-                  <React.Fragment key={__i0}>
-                    <span style={{ background: `${__t(q?.c)}` }} />
-                  </React.Fragment>
-                ))}
+                <QRCodeDisplay
+                  value={__v?.cardToken}
+                  size={140}
+                  darkColor={__v?.brandColor || '#101827'}
+                />
               </div>{' '}
               <span
                 style={{ fontSize: '14px', color: '#5b6475', fontFamily: `${__t(__v?.font)}` }}
               >{`${__t(__v?.t?.show)}`}</span>{' '}
               <span style={{ fontSize: '13px', color: '#5b6475', fontVariantNumeric: 'tabular-nums' }}>
                 {`${__t(__v?.memberLabel)}`}
+              </span>
+              <span
+                style={{
+                  fontSize: '11px',
+                  color: '#9ca3af',
+                  letterSpacing: '0.04em',
+                  fontFamily: 'monospace',
+                  background: '#f1f5f9',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  maxWidth: '220px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+                title={__v?.cardToken}
+              >
+                {__v?.cardToken}
               </span>
             </div>{' '}
             <div

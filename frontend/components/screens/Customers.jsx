@@ -53,22 +53,39 @@ class CustomersView extends DCLogic {
       this.setState({ loading: false });
     }
   }
+
+  async enrollTestCustomer() {
+    const names = ['Abebe', 'Sara', 'Kidus', 'Almaz', 'Dawit', 'Helen', 'Yared', 'Bethlehem'];
+    const randomName = names[Math.floor(Math.random() * names.length)];
+    const rndPhone = '+2519' + Math.floor(10000000 + Math.random() * 90000000);
+    const rndEmail = `${randomName.toLowerCase()}${Date.now().toString().slice(-4)}@customer.test`;
+    try {
+      await api.public.enroll('sample-cafe', {
+        firstName: randomName,
+        phone: rndPhone,
+        email: rndEmail,
+        acceptTerms: true,
+        preferredLanguage: 'EN',
+        marketingConsent: true,
+      });
+      await this.loadCustomers();
+    } catch (e) {
+      console.warn('Enroll failed:', e);
+    }
+  }
   renderVals() {
     const st = this.state;
     const raw = st.rawCustomers || [];
-    const data = (raw.length > 0 ? raw : [
-      { firstName: 'Abebe', phone: '+251 91 100 0101', email: 'abebe@example.com', joinedAt: '2026-10-10' },
-      { firstName: 'Sara', phone: '+251 91 100 0102', email: 'sara@example.com', joinedAt: '2026-10-10' },
-      { firstName: 'Kidus', phone: '+251 91 155 4433', email: '', joinedAt: '2026-10-10' },
-      { firstName: 'Robel', phone: '+251 96 706 7160', email: '', joinedAt: '2026-10-10' },
-    ]).map((c, i) => {
+    const data = raw.map((c, i) => {
       const fn = c.firstName || 'Customer';
       const ph = c.phone || '+251 91 000 0000';
-      const stCount = (i * 3 + 4) % 10;
-      const visits = stCount + 5;
-      const joined = c.joinedAt ? new Date(c.joinedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) : '10 Oct';
-      const statusKey = stCount >= 7 ? 'close' : (i % 3 === 0 ? 'new' : 'regular');
-      const walletKey = i % 2 === 0 ? 'google' : 'web';
+      const stCount = c.stamps ?? (c.memberships?.[0]?.currentStamps ?? 0);
+      const visits = stCount > 0 ? stCount : 1;
+      const joined = c.joinedAt
+        ? new Date(c.joinedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
+        : 'Recently';
+      const statusKey = stCount >= 7 ? 'close' : stCount > 1 ? 'regular' : 'new';
+      const walletKey = 'web';
       return [
         fn,
         ph,
@@ -175,10 +192,10 @@ class CustomersView extends DCLogic {
         pick: () => this.setState(Object.assign({ sel: i }, reset)),
       };
     });
-    const s = data[selIdx];
-    const first = s[0].split(' ')[0];
+    const s = data[selIdx] || ['Customer', '+251 91 000 0000', 0, 1, 'Today', 'new', 0, 'Recently', '', 'web', '', ''];
+    const first = (s[0] || 'Customer').split(' ')[0];
     const hasEmail = !!s[8];
-    const rem = 10 - s[2];
+    const rem = 10 - (s[2] || 0);
     const vw = rem === 1 ? 'visit' : 'visits';
     let defTpl = 'reminder';
     if (s[5] === 'quiet') defTpl = 'missyou';
@@ -348,6 +365,7 @@ class CustomersView extends DCLogic {
             [selIdx]: ['Message by ' + via + ': ' + (en.length > 40 ? en.slice(0, 40) + '…' : en)].concat(myLog),
           }),
         }),
+      enrollTestCustomer: () => this.enrollTestCustomer(),
     };
   }
 }
@@ -415,23 +433,43 @@ CustomersView.prototype.__template = function (__v) {
               </div>{' '}
               <p style={{ margin: '0', color: '#5b6475' }}>{`${__t(__v?.custSubtitle)}`}</p>
             </div>{' '}
-            <A
-              href="/business/offers"
-              style={{
-                background: '#e42330',
-                color: '#ffffff',
-                fontWeight: '700',
-                borderRadius: '12px',
-                padding: '10px 18px',
-                textDecoration: 'none',
-                minHeight: '44px',
-                boxSizing: 'border-box',
-                display: 'inline-flex',
-                alignItems: 'center',
-              }}
-            >
-              {'Message a group'}
-            </A>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={__v?.enrollTestCustomer}
+                style={{
+                  background: '#101827',
+                  color: '#ffffff',
+                  fontWeight: '700',
+                  borderRadius: '12px',
+                  padding: '10px 18px',
+                  border: '0',
+                  minHeight: '44px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                }}
+              >
+                {'+ Enroll Customer'}
+              </button>
+              <A
+                href="/business/offers"
+                style={{
+                  background: '#e42330',
+                  color: '#ffffff',
+                  fontWeight: '700',
+                  borderRadius: '12px',
+                  padding: '10px 18px',
+                  textDecoration: 'none',
+                  minHeight: '44px',
+                  boxSizing: 'border-box',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                }}
+              >
+                {'Message a group'}
+              </A>
+            </div>
           </div>{' '}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
             <div

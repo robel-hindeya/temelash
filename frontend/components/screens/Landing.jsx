@@ -3,6 +3,7 @@
 import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
+import QRCodeDisplay from '../QRCodeDisplay';
 import Sidebar from './Sidebar';
 import ColorPicker from './ColorPicker';
 
@@ -216,12 +217,14 @@ class LandingView extends DCLogic {
         else on = seed.charAt((r * N + c) % seed.length) === '1';
         qr.push({ c: on ? '#101827' : 'transparent' });
       }
+    const liveLandingUrl = (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001') + '/business/landing-page';
     const shownTitle = (s.title || '').trim() || 'Buna House';
     return {
       title: s.title,
       tagline: s.tagline,
       hasTagline: !!(s.tagline || '').trim(),
       shownTitle,
+      liveLandingUrl,
       onTitle: (e) => set({ title: e.target.value }),
       onTag: (e) => set({ tagline: e.target.value }),
       color: s.color,
@@ -1077,12 +1080,7 @@ LandingView.prototype.__template = function (__v) {
                     gap: '1px',
                   }}
                 >
-                  {(__v?.qr || []).map((q, __i0) => (
-                    <React.Fragment key={__i0}>
-                      <span style={{ background: `${__t(q?.c)}` }} />
-                    </React.Fragment>
-                  ))}
-                </div>{' '}
+                  <QRCodeDisplay value={__v?.liveLandingUrl || "http://localhost:3001/business/landing-page"} size={64} /></div>{' '}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   <strong style={{ fontSize: '17px' }}>{'Try the live page'}</strong>
                   <span style={{ fontSize: '14px', color: '#5b6475' }}>{'Scan to open it on your phone.'}</span>

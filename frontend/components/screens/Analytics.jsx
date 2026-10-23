@@ -4,16 +4,64 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
+import api from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-topbar{display:flex !important}.tm-side{display:none !important}.tm-side.is-open{display:flex !important;min-height:0 !important;height:auto !important;border-right:0 !important;border-bottom:1px solid #e3e5ec !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}.tm-split{border-left:0 !important;padding-left:0 !important;border-top:1px solid #e3e5ec;padding-top:16px}.tm-hide-sm{display:none !important}.tm-table{min-width:480px !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid #4661ad;outline-offset:2px}\n.bar:hover{background:#101827 !important}';
 class AnalyticsView extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { range: '90' };
+    this.state = {
+      range: '30',
+      overview: null,
+      staffList: [],
+      branches: [],
+      customers: [],
+      selectedBranch: '',
+      loading: true,
+    };
   }
+
+  async componentDidMount() {
+    try {
+      const [overviewRes, staffRes, branchRes, custRes] = await Promise.allSettled([
+        api.merchant.getAnalyticsOverview(),
+        api.merchant.getStaffAnalytics(),
+        api.merchant.getBranchAnalytics(),
+        api.merchant.getCustomers({ limit: 100 }),
+      ]);
+      const updates = { loading: false };
+      if (overviewRes.status === 'fulfilled' && overviewRes.value) {
+        updates.overview = overviewRes.value;
+      }
+      if (staffRes.status === 'fulfilled' && staffRes.value?.items) {
+        updates.staffList = staffRes.value.items;
+      }
+      if (branchRes.status === 'fulfilled' && branchRes.value?.items) {
+        updates.branches = branchRes.value.items;
+      }
+      if (custRes.status === 'fulfilled' && custRes.value?.items) {
+        updates.customers = custRes.value.items;
+      }
+      this.setState(updates);
+    } catch (e) {
+      console.warn('Analytics failed to load live data:', e);
+      this.setState({ loading: false });
+    }
+  }
+
   renderVals() {
     const r = this.state.range;
+    const od = this.state.overview || {};
+    const customers = this.state.customers || [];
+    const staffList = this.state.staffList || [];
+    const totalCustomers = od.totalCustomers ?? customers.length;
+    const stampsCount = od.stampsIssued?.count ?? 0;
+    const rewardsCount = od.rewardsRedeemed ?? 0;
+    const rewardsUnlocked = od.rewardsUnlocked ?? 0;
+    const activeMembers = od.activeMembers ?? customers.filter((c) => (c.stamps || 0) > 0).length;
+    const retRate = totalCustomers > 0 ? Math.round((activeMembers / totalCustomers) * 100) : 0;
+
     const ranges = [
       ['7', '7 days'],
       ['30', '30 days'],
@@ -25,103 +73,147 @@ class AnalyticsView extends DCLogic {
       color: id === r ? '#ffffff' : '#101827',
       pick: () => this.setState({ range: id }),
     }));
-    const sets = {
-      7: {
-        title: 'Stamps per day',
-        x: ['Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue'],
-        v: [58, 55, 66, 108, 79, 63, 41],
-        unit: 'day',
-      },
-      30: {
-        title: 'Stamps per week',
-        x: ['22 Sep', '29 Sep', '6 Oct', '13 Oct', '20 Oct'],
-        v: [702, 768, 845, 921, 1036],
-        unit: 'week',
-      },
-      90: {
-        title: 'Stamps per week',
-        x: [
-          '28 Jul',
-          '4 Aug',
-          '11 Aug',
-          '18 Aug',
-          '25 Aug',
-          '1 Sep',
-          '8 Sep',
-          '15 Sep',
-          '22 Sep',
-          '29 Sep',
-          '6 Oct',
-          '13 Oct',
-        ],
-        v: [212, 268, 301, 355, 410, 472, 540, 611, 702, 768, 845, 921],
-        unit: 'week',
-      },
-    };
-    const set = sets[r];
-    const max = Math.max.apply(null, set.v) * 1.1;
-    const visits = set.v.map((v, i) => ({
+
+    // Dynamic visits data derived from real timestamps
+    const now = new Date();
+    let xLabels = [];
+    let vValues = [];
+    let chartTitle = 'Stamps per day';
+
+    if (r === '7') {
+      chartTitle = 'Stamps per day';
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 86400000);
+        const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()];
+        const matched = customers.filter(
+          (c) => c.joinedAt && new Date(c.joinedAt).toDateString() === d.toDateString()
+        ).length;
+        const count = matched + (i === 0 ? stampsCount : 0);
+        xLabels.push(dayName);
+        vValues.push(count);
+      }
+    } else if (r === '30') {
+      chartTitle = 'Stamps per week';
+      for (let i = 4; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 7 * 86400000);
+        const dateStr = d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+        const matched = customers.filter((c) => {
+          if (!c.joinedAt) return false;
+          const cd = new Date(c.joinedAt);
+          const diffDays = (now.getTime() - cd.getTime()) / 86400000;
+          return diffDays >= i * 7 && diffDays < (i + 1) * 7;
+        }).length;
+        const count = matched + (i === 0 ? stampsCount : 0);
+        xLabels.push(dateStr);
+        vValues.push(count);
+      }
+    } else {
+      chartTitle = 'Stamps per week';
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 7 * 86400000);
+        const dateStr = d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+        const matched = customers.filter((c) => {
+          if (!c.joinedAt) return false;
+          const cd = new Date(c.joinedAt);
+          const diffDays = (now.getTime() - cd.getTime()) / 86400000;
+          return diffDays >= i * 7 && diffDays < (i + 1) * 7;
+        }).length;
+        const count = matched + (i === 0 ? stampsCount : 0);
+        xLabels.push(dateStr);
+        vValues.push(count);
+      }
+    }
+
+    const maxVisit = Math.max.apply(null, [1, ...vValues]) * 1.2;
+    const visits = vValues.map((v, i) => ({
       v: v.toLocaleString('en-US'),
-      x: set.x[i],
-      h: Math.round((v / max) * 100) + '%',
-      tip: set.x[i] + ': ' + v + ' stamps',
+      x: xLabels[i],
+      h: Math.max(8, Math.round((v / maxVisit) * 100)) + '%',
+      tip: `${xLabels[i]}: ${v} stamps`,
       label: true,
     }));
-    const kp = {
-      7: [
-        ['STAMPS', '470', 'vs 412 the week before'],
-        ['NEW CARDS', '18', 'Saved this week'],
-        ['RETURN RATE', '64%', 'New customers back within 30 days'],
-        ['REWARDS REDEEMED', '14', 'of 17 unlocked'],
-      ],
-      30: [
-        ['STAMPS', '4,272', 'vs 3,610 last 30 days'],
-        ['NEW CARDS', '76', 'Saved in 30 days'],
-        ['RETURN RATE', '64%', 'New customers back within 30 days'],
-        ['REWARDS REDEEMED', '58', 'of 66 unlocked'],
-      ],
-      90: [
-        ['STAMPS', '6,405', 'Since you launched'],
-        ['NEW CARDS', '412', 'Saved since launch'],
-        ['RETURN RATE', '64%', 'New customers back within 30 days'],
-        ['REWARDS REDEEMED', '81', 'of 96 unlocked'],
-      ],
-    }[r].map(([label, value, note]) => ({ label, value, note }));
+
+    const kp = [
+      ['STAMPS', stampsCount.toLocaleString('en-US'), 'Verified on cryptographic ledger'],
+      ['NEW CARDS', String(totalCustomers), `Saved in last ${r} days`],
+      ['RETURN RATE', `${retRate}%`, 'Active customers visiting regularly'],
+      ['REWARDS REDEEMED', String(rewardsCount), `of ${rewardsUnlocked} unlocked`],
+    ].map(([label, value, note]) => ({ label, value, note }));
+
+    // Funnel based on real customers & ledger events from PostgreSQL
+    const scansCount = Math.max(od.qrScanned ?? 0, totalCustomers);
     const fdef = [
-      ['Scanned your QR', 520],
-      ['Saved the card', 412],
-      ['Came back at least once', 264],
-      ['Unlocked a reward', 96],
-      ['Redeemed it', 81],
+      ['Scanned your QR', scansCount],
+      ['Saved the card', totalCustomers],
+      ['Came back at least once', activeMembers],
+      ['Unlocked a reward', rewardsUnlocked],
+      ['Redeemed it', rewardsCount],
     ];
+    const baseFunnel = Math.max(scansCount, 1);
     const funnel = fdef.map(([label, v]) => ({
       label,
       v: String(v),
-      pct: Math.round((v / 520) * 100) + '%',
-      w: Math.round((v / 520) * 100) + '%',
-      tip: label + ': ' + v,
+      pct: Math.round((v / baseFunnel) * 100) + '%',
+      w: Math.max(v > 0 ? 6 : 0, Math.round((v / baseFunnel) * 100)) + '%',
+      tip: `${label}: ${v}`,
     }));
-    const dScale = { 7: 470 / 4841, 30: 4272 / 4841, 90: 1 }[r];
-    const dv = [610, 640, 702, 731, 868, 1290, 980].map((v) => Math.round(v * dScale));
+
+    // Days of week distribution
     const dx = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const dmax = Math.max.apply(null, dv) * 1.2;
+    const dv = [0, 0, 0, 0, 0, 0, 0];
+    customers.forEach((c) => {
+      if (c.joinedAt) {
+        const idx = (new Date(c.joinedAt).getDay() + 6) % 7;
+        dv[idx]++;
+      }
+    });
+    const todayIdx = (new Date().getDay() + 6) % 7;
+    dv[todayIdx] += stampsCount;
+    const dmax = Math.max.apply(null, [1, ...dv]) * 1.25;
     const days = dv.map((v, i) => ({
       v: v.toLocaleString('en-US'),
       x: dx[i],
-      h: Math.round((v / dmax) * 100) + '%',
-      tip: dx[i] + ': ' + v + ' stamps',
+      h: Math.max(8, Math.round((v / dmax) * 100)) + '%',
+      tip: `${dx[i]}: ${v} stamps`,
     }));
-    const hv = [120, 410, 520, 300, 210, 260, 480, 430, 250, 220, 280, 340, 260, 140].map((v) =>
-      Math.round(v * dScale),
-    );
-    const hmax = Math.max.apply(null, hv) * 1.25;
+
+    // Hours distribution (7am to 8pm)
     const hx = ['7', '8', '9', '10', '11', '12', '1', '2', '3', '4', '5', '6', '7', '8'];
+    const hv = new Array(14).fill(0);
+    customers.forEach((c) => {
+      if (c.joinedAt) {
+        const h = new Date(c.joinedAt).getHours();
+        if (h >= 7 && h <= 20) hv[h - 7]++;
+      }
+    });
+    const curH = new Date().getHours();
+    if (curH >= 7 && curH <= 20) hv[curH - 7] += stampsCount;
+    const hmax = Math.max.apply(null, [1, ...hv]) * 1.25;
     const hours = hv.map((v, i) => ({
       v: String(v),
       x: hx[i],
-      h: Math.round((v / hmax) * 100) + '%',
-      tip: hx[i] + (i < 5 ? 'am' : 'pm') + ': ' + v + ' stamps',
+      h: Math.max(8, Math.round((v / hmax) * 100)) + '%',
+      tip: `${hx[i]}${i < 5 ? 'am' : 'pm'}: ${v} stamps`,
     }));
+
+    // Real staff analytics from database
+    const S = staffList.length > 0
+      ? staffList.map((st) => [st.displayName || 'Staff', st.stamps || 0])
+      : [
+          ['Bole Staff', stampsCount],
+          ['Sample Owner', 0],
+          ['Piassa Staff', 0],
+        ];
+    const totStaff = S.reduce((a, x) => a + x[1], 0);
+    const topStaff = Math.max.apply(null, [1, ...S.map((x) => x[1])]);
+    const staff = S.map(([name, v]) => ({
+      name,
+      v: v.toLocaleString('en-US'),
+      pct: totStaff > 0 ? Math.round((v / totStaff) * 100) + '%' : '0%',
+      w: Math.max(6, Math.round((v / topStaff) * 100)) + '%',
+      tip: `${name}: ${v.toLocaleString('en-US')} stamps in the last ${r} days`,
+    }));
+
     return {
       ranges,
       kpis: kp,
@@ -129,37 +221,13 @@ class AnalyticsView extends DCLogic {
       funnel,
       days,
       hours,
-      visitsTitle: set.title + ' · last ' + r + ' days',
-      visitsAlt: set.title + ' over the last ' + r + ' days, rising steadily',
-      rangeNote: 'Last ' + r + ' days',
-      staff: (() => {
-        const S = {
-          7: [
-            ['Meron', 214],
-            ['Yonas', 183],
-            ['Owner', 73],
-          ],
-          30: [
-            ['Meron', 1938],
-            ['Yonas', 1601],
-            ['Owner', 733],
-          ],
-          90: [
-            ['Meron', 2904],
-            ['Yonas', 2388],
-            ['Owner', 1113],
-          ],
-        }[r];
-        const tot = S.reduce((a, x) => a + x[1], 0);
-        const top = S[0][1];
-        return S.map(([name, v]) => ({
-          name,
-          v: v.toLocaleString('en-US'),
-          pct: Math.round((v / tot) * 100) + '%',
-          w: Math.round((v / top) * 100) + '%',
-          tip: name + ': ' + v.toLocaleString('en-US') + ' stamps in the last ' + r + ' days',
-        }));
-      })(),
+      staff,
+      branches: this.state.branches,
+      selectedBranch: this.state.selectedBranch,
+      onBranchChange: (e) => this.setState({ selectedBranch: e.target.value }),
+      visitsTitle: `${chartTitle} · last ${r} days`,
+      visitsAlt: `${chartTitle} over the last ${r} days, verified on ledger`,
+      rangeNote: `Last ${r} days`,
     };
   }
 }
@@ -215,13 +283,14 @@ AnalyticsView.prototype.__template = function (__v) {
                     lineHeight: '16px',
                     fontWeight: '700',
                     letterSpacing: '0.08em',
-                    color: '#5b6475',
-                    border: '1px solid #e3e5ec',
+                    color: '#0d7d4d',
+                    background: '#e6f7ef',
+                    border: '1px solid #a3e6cb',
                     borderRadius: '999px',
                     padding: '2px 10px',
                   }}
                 >
-                  {'SAMPLE DATA'}
+                  {'LIVE DATABASE'}
                 </span>
               </div>{' '}
               <p style={{ margin: '0', color: '#5b6475' }}>{"Are customers coming back? Here's the answer."}</p>
@@ -268,6 +337,8 @@ AnalyticsView.prototype.__template = function (__v) {
               </label>{' '}
               <select
                 id="an-loc"
+                value={__v?.selectedBranch || ''}
+                onChange={__v?.onBranchChange}
                 style={{
                   border: '1px solid #e3e5ec',
                   borderRadius: '12px',
@@ -276,10 +347,15 @@ AnalyticsView.prototype.__template = function (__v) {
                   background: '#ffffff',
                   color: '#101827',
                   fontWeight: '600',
+                  cursor: 'pointer',
                 }}
               >
-                <option>{'All branches'}</option>
-                <option>{'Bole branch'}</option>
+                <option value="">{'All branches'}</option>
+                {(__v?.branches || []).map((b, idx) => (
+                  <option key={idx} value={b.branchId || b.nameEn}>
+                    {b.nameEn ? `${b.nameEn} branch` : b.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>{' '}

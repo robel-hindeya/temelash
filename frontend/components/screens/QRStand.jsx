@@ -4,6 +4,7 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
+import QRCodeDisplay from '../QRCodeDisplay';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-drawer{width:100% !important;border-radius:20px 20px 0 0 !important;top:auto !important;max-height:90% !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #4661ad;outline-offset:2px}';
@@ -201,6 +202,7 @@ class QRStandView extends DCLogic {
       ordersBorder: isOrders ? '#101827' : '#e3e5ec',
       toggleOrders: () => this.setState({ view: isOrders ? 'shop' : 'orders' }),
       products,
+      joinUrl: (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001') + '/join/sample-cafe',
       qr,
       lines,
       hasItems: count > 0,
@@ -708,12 +710,7 @@ QRStandView.prototype.__template = function (__v) {
                                       gap: '0',
                                     }}
                                   >
-                                    {(__v?.qr || []).map((q, __i1) => (
-                                      <React.Fragment key={__i1}>
-                                        <span style={{ background: `${__t(q?.c)}` }} />
-                                      </React.Fragment>
-                                    ))}
-                                  </span>{' '}
+                                    <QRCodeDisplay value={__v?.joinUrl || "http://localhost:3001/join/sample-cafe"} size={58} /></span>{' '}
                                   <span
                                     style={{
                                       fontSize: '8px',
@@ -765,12 +762,7 @@ QRStandView.prototype.__template = function (__v) {
                                       gridTemplateColumns: 'repeat(11, minmax(0, 1fr))',
                                     }}
                                   >
-                                    {(__v?.qr || []).map((q, __i1) => (
-                                      <React.Fragment key={__i1}>
-                                        <span style={{ background: `${__t(q?.c)}` }} />
-                                      </React.Fragment>
-                                    ))}
-                                  </span>{' '}
+                                    <QRCodeDisplay value={__v?.joinUrl || "http://localhost:3001/join/sample-cafe"} size={52} /></span>{' '}
                                   <span style={{ fontSize: '8px', textAlign: 'center', lineHeight: '10px' }}>
                                     {'Scan to save your stamp card'}
                                   </span>
@@ -842,12 +834,7 @@ QRStandView.prototype.__template = function (__v) {
                                     gridTemplateColumns: 'repeat(11, minmax(0, 1fr))',
                                   }}
                                 >
-                                  {(__v?.qr || []).map((q, __i1) => (
-                                    <React.Fragment key={__i1}>
-                                      <span style={{ background: `${__t(q?.c)}` }} />
-                                    </React.Fragment>
-                                  ))}
-                                </span>{' '}
+                                  <QRCodeDisplay value={__v?.joinUrl || "http://localhost:3001/join/sample-cafe"} size={66} /></span>{' '}
                                 <span style={{ fontSize: '9px', fontWeight: '700' }}>{'Buna House'}</span>
                               </div>
                             </>
@@ -890,12 +877,7 @@ QRStandView.prototype.__template = function (__v) {
                                       gridTemplateColumns: 'repeat(11, minmax(0, 1fr))',
                                     }}
                                   >
-                                    {(__v?.qr || []).map((q, __i1) => (
-                                      <React.Fragment key={__i1}>
-                                        <span style={{ background: `${__t(q?.c)}` }} />
-                                      </React.Fragment>
-                                    ))}
-                                  </span>
+                                    <QRCodeDisplay value={__v?.joinUrl || "http://localhost:3001/join/sample-cafe"} size={56} /></span>
                                   <span style={{ fontSize: '7px', fontWeight: '700' }}>{'Just scan'}</span>
                                 </span>{' '}
                                 <span

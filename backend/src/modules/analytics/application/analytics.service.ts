@@ -61,7 +61,7 @@ export class AnalyticsService {
 
   async overview(actor: MerchantActor, q: RangeQuery) {
     const { scope, timeZone } = await this.scope(actor, q);
-    const [newMembers, visits, returning, unlocked, redeemed, gaps, adoption] =
+    const [newMembers, visits, returning, unlocked, redeemed, gaps, adoption, qrScans] =
       await Promise.all([
         this.repository.newMembers(scope),
         this.repository.visits(scope),
@@ -70,9 +70,11 @@ export class AnalyticsService {
         this.repository.rewardsRedeemed(scope),
         this.repository.visitGaps(scope),
         this.repository.walletAdoption(actor.merchantId, q.programId),
+        this.repository.qrScans(scope),
       ]);
     return {
       range: this.describe(scope, timeZone),
+      qrScanned: Math.max(qrScans, newMembers),
       newMembers,
       activeMembers: visits.activeMembers,
       returningCustomers: returning,

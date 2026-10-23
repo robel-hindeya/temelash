@@ -67,37 +67,6 @@ class OverviewView extends DCLogic {
   }
   renderVals() {
     const s = this.state;
-    const vals = [52, 48, 61, 112, 74, 57, 45, 58, 55, 66, 108, 79, 63, 41];
-    const days = ['W', 'T', 'F', 'S', 'S', 'M', 'T', 'W', 'T', 'F', 'S', 'S', 'M', 'T'];
-    const dates = [
-      '7 Oct',
-      '8 Oct',
-      '9 Oct',
-      '10 Oct',
-      '11 Oct',
-      '12 Oct',
-      '13 Oct',
-      '14 Oct',
-      '15 Oct',
-      '16 Oct',
-      '17 Oct',
-      '18 Oct',
-      '19 Oct',
-      '20 Oct',
-    ];
-    const max = 135;
-    const bars = vals.map((v, i) => ({
-      v: String(v),
-      d: days[i],
-      h: Math.round((v / max) * 100) + '%',
-      tip: dates[i] + ': ' + v + ' stamps',
-      peak: true,
-    }));
-    const types = {
-      stamp: { bg: '#f7f7f9', fg: '#101827' },
-      reward: { bg: '#fba919', fg: '#101827' },
-      joined: { bg: '#f7f7f9', fg: '#4661ad' },
-    };
     const od = s.overviewData || {};
     const customers = s.customers || [];
     const totalCustomers = od.totalCustomers ?? customers.length;
@@ -106,6 +75,58 @@ class OverviewView extends DCLogic {
     const newMembersCount = od.newMembers ?? customers.length;
     const retPct = totalCustomers > 0 ? Math.round((newMembersCount / totalCustomers) * 100) : 0;
 
+    // Calculate dynamic 14-day timeline based on current date
+    const now = new Date();
+    const bars = [];
+    let maxVal = 1;
+    const dayCounts = [];
+
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 86400000);
+      const dateStr = d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+      const dayChar = ['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()];
+      const dayFull = d.toLocaleDateString('en-US', { weekday: 'long' });
+      // Count customers that joined on this date
+      const matched = customers.filter((c) => {
+        if (!c.joinedAt) return false;
+        const cd = new Date(c.joinedAt);
+        return cd.toDateString() === d.toDateString();
+      }).length;
+      // If it's today and stamps were issued, add stamps count
+      const count = i === 0 ? Math.max(matched, stampsCount) : matched;
+      if (count > maxVal) maxVal = count;
+      dayCounts.push({ v: count, d: dayChar, dayFull, dateStr, tip: `${dateStr}: ${count} activity` });
+    }
+
+    const lastWeekItems = dayCounts.slice(0, 7);
+    const thisWeekItems = dayCounts.slice(7);
+    const thisWeekCount = thisWeekItems.reduce((acc, item) => acc + item.v, 0);
+    const lastWeekCount = lastWeekItems.reduce((acc, item) => acc + item.v, 0);
+    const thisWeekSub = lastWeekCount > 0 ? `vs ${lastWeekCount} the week before` : 'vs 0 the week before';
+
+    const busiest = dayCounts.reduce((prev, curr) => (curr.v > prev.v ? curr : prev), dayCounts[13]);
+    const busiestDay = busiest.v > 0 ? busiest.dayFull : 'Today';
+    const busiestSub = busiest.v > 0
+      ? `${busiest.v} ${busiest.v === 1 ? 'stamp' : 'stamps'} on ${busiest.dateStr}`
+      : 'No stamps recorded yet';
+
+    const avg = thisWeekCount > 0 ? (thisWeekCount / 7).toFixed(1) : '0';
+    const dailyAvg = `${avg} stamps`;
+
+    const renderedBars = dayCounts.map((dc) => ({
+      v: String(dc.v),
+      d: dc.d,
+      h: Math.max(8, Math.round((dc.v / Math.max(1, maxVal)) * 100)) + '%',
+      tip: dc.tip,
+      peak: dc.v > 0,
+    }));
+
+    const types = {
+      stamp: { bg: '#f7f7f9', fg: '#101827' },
+      reward: { bg: '#fba919', fg: '#101827' },
+      joined: { bg: '#f7f7f9', fg: '#4661ad' },
+    };
+
     const kpis = [
       { label: 'CARD HOLDERS', value: String(totalCustomers), note: `+${newMembersCount} enrolled` },
       { label: 'STAMPS ISSUED', value: String(stampsCount), note: 'Verified on ledger' },
@@ -113,32 +134,28 @@ class OverviewView extends DCLogic {
       { label: 'CAME BACK', value: `${retPct}%`, note: 'of new customers' },
     ];
 
-    const people = (customers.length > 0 ? customers.slice(0, 4) : [
-      { firstName: 'Abebe', joinedAt: new Date().toISOString() },
-      { firstName: 'Sara', joinedAt: new Date().toISOString() },
-      { firstName: 'Kidus', joinedAt: new Date().toISOString() },
-      { firstName: 'Robel', joinedAt: new Date().toISOString() },
-    ]).map((c) => {
+    const people = customers.slice(0, 4).map((c) => {
       const fn = c.firstName || 'Customer';
       const ini = fn.slice(0, 2).toUpperCase();
-      const last = c.joinedAt ? new Date(c.joinedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'recently';
+      const last = c.joinedAt
+        ? new Date(c.joinedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : 'recently';
       return [ini, fn, fn, last];
     });
 
-    const activity = (customers.length > 0 ? customers.slice(0, 5) : [
-      { firstName: 'Abebe', joinedAt: new Date().toISOString() },
-      { firstName: 'Sara', joinedAt: new Date().toISOString() },
-    ]).map((c, i) => {
+    const activity = customers.slice(0, 5).map((c, i) => {
       const fn = c.firstName || 'Customer';
-      const time = c.joinedAt ? new Date(c.joinedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '10:15';
-      const isReward = i === 1;
+      const time = c.joinedAt
+        ? new Date(c.joinedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : 'recently';
+      const st = c.stamps || 1;
       return {
         time,
         name: fn,
-        what: isReward ? 'Reward redeemed' : (i === 0 ? 'Joined program' : 'Stamp added'),
-        card: isReward ? '8/8' : `${(i + 3) % 8 + 1}/8`,
+        what: i === 0 ? 'Joined loyalty program' : 'Card stamp verified',
+        card: `${st}/10`,
         staff: 'Bole Staff',
-        bg: isReward ? '#fba919' : (i === 0 ? '#4661ad' : '#f7f7f9'),
+        bg: i === 0 ? '#4661ad' : '#f7f7f9',
         fg: i === 0 ? '#ffffff' : '#101827',
       };
     });
@@ -194,11 +211,16 @@ class OverviewView extends DCLogic {
     });
     const unsent = people.filter((p, i) => !s.sent[i]).length;
     return {
-      bars,
+      bars: renderedBars,
       activity,
       close,
       kpis,
       headerSubtitle,
+      thisWeekTotal: String(thisWeekCount),
+      thisWeekSub,
+      busiestDay,
+      busiestSub,
+      dailyAvg,
       groupOpen: s.group && unsent > 0,
       groupMsg: s.groupMsg,
       groupPreview: s.groupMsg.replace(/\{first name\}/g, 'Liya'),
@@ -588,9 +610,11 @@ OverviewView.prototype.__template = function (__v) {
                       fontVariantNumeric: 'tabular-nums',
                     }}
                   >
-                    {'470'}
+                    {`${__t(__v?.thisWeekTotal || '0')}`}
                   </span>
-                  <span style={{ fontSize: '14px', color: '#5b6475' }}>{'vs 449 the week before'}</span>
+                  <span style={{ fontSize: '14px', color: '#5b6475' }}>
+                    {`${__t(__v?.thisWeekSub || 'vs 0 the week before')}`}
+                  </span>
                 </div>{' '}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   <span
@@ -604,8 +628,12 @@ OverviewView.prototype.__template = function (__v) {
                   >
                     {'BUSIEST DAY'}
                   </span>
-                  <span style={{ fontSize: '20px', lineHeight: '26px', fontWeight: '700' }}>{'Saturday'}</span>
-                  <span style={{ fontSize: '14px', color: '#5b6475' }}>{'112 stamps on 10 Oct'}</span>
+                  <span style={{ fontSize: '20px', lineHeight: '26px', fontWeight: '700' }}>
+                    {`${__t(__v?.busiestDay || 'Today')}`}
+                  </span>
+                  <span style={{ fontSize: '14px', color: '#5b6475' }}>
+                    {`${__t(__v?.busiestSub || '0 stamps')}`}
+                  </span>
                 </div>{' '}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   <span
@@ -627,7 +655,7 @@ OverviewView.prototype.__template = function (__v) {
                       fontVariantNumeric: 'tabular-nums',
                     }}
                   >
-                    {'66 stamps'}
+                    {`${__t(__v?.dailyAvg || '0 stamps')}`}
                   </span>
                 </div>
               </div>

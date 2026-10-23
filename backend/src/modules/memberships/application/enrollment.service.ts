@@ -82,6 +82,15 @@ export class EnrollmentService {
     const target = await this.directory.findJoinTarget(joinReference);
     const program = target ? await this.programs.findActiveDefault(target.id) : null;
     if (!target || !program) throw notJoinable();
+    try {
+      await this.audit.record({
+        action: 'QR_SCANNED',
+        actorType: 'SYSTEM',
+        merchantId: target.id,
+        targetType: 'LOYALTY_PROGRAM',
+        targetId: program.id,
+      });
+    } catch {}
     return this.describe(target, program);
   }
 
