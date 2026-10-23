@@ -4,6 +4,7 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import AdminSidebar from './AdminSidebar';
+import api from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-hide-sm{display:none !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #4661ad;outline-offset:2px}\n.row:hover{background:#f7f7f9}';
@@ -241,6 +242,44 @@ class AdminBusinessesView extends DCLogic {
       ],
     };
   }
+
+  async componentDidMount() {
+    await this.loadMerchants();
+  }
+
+  async loadMerchants() {
+    try {
+      const list = await api.platform.getMerchants();
+      if (Array.isArray(list) && list.length > 0) {
+        const mapped = list.map((m, idx) => ({
+          id: m.id,
+          name: m.nameEn || m.nameAm || 'Merchant',
+          type: 'Café & Dining',
+          area: 'Addis Ababa',
+          owner: m.slug || 'Owner',
+          phone: '+251 91 *** ' + String(1000 + idx).slice(-4),
+          status: (m.status || 'ACTIVE').toLowerCase() === 'active' ? 'active' : 'suspended',
+          plan: 'Monthly',
+          joined: 'Active',
+          cards: 4,
+          stamps: 12,
+          branches: 1,
+          staff: 1,
+          last: 'Today',
+          color: '#8a4b2a',
+          trialEnds: '',
+          notes: [{ text: `Live database merchant: ${m.slug}`, meta: 'Platform DB', dot: '#4661ad' }],
+        }));
+        this.setState({
+          list: mapped,
+          sel: mapped[0]?.id || 'buna',
+        });
+      }
+    } catch (err) {
+      console.warn('AdminBusinesses platform fetch note:', err);
+    }
+  }
+
   flash(t) {
     if (this.tt) clearTimeout(this.tt);
     this.setState({ toast: t });
@@ -405,14 +444,30 @@ class AdminBusinessesView extends DCLogic {
       cancelSuspend: () => this.setState({ confirm: false }),
       reason: s.reason,
       onReason: (e) => this.setState({ reason: e.target.value }),
-      doSuspend: () =>
-        update({ status: 'suspended', stamps: 0 }, me('Suspended: ' + s.reason, '#c81d29'), cur.name + ' suspended.'),
-      reactivate: () =>
+      doSuspend: async () => {
+        try {
+          if (cur.id && cur.id.length > 20) {
+            await api.platform.updateMerchantStatus(cur.id, 'SUSPENDED');
+          }
+        } catch (e) {
+          console.warn('Suspend API error:', e);
+        }
+        update({ status: 'suspended', stamps: 0 }, me('Suspended: ' + s.reason, '#c81d29'), cur.name + ' suspended.');
+      },
+      reactivate: async () => {
+        try {
+          if (cur.id && cur.id.length > 20) {
+            await api.platform.updateMerchantStatus(cur.id, 'ACTIVE');
+          }
+        } catch (e) {
+          console.warn('Reactivate API error:', e);
+        }
         update(
           { status: cur.plan === 'Trial' ? 'trial' : 'active' },
           me('Reactivated'),
           cur.name + ' is active again.',
-        ),
+        );
+      },
       noteDraft: s.noteDraft,
       onNote: (e) => this.setState({ noteDraft: e.target.value }),
       addNote: () => {

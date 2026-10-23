@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiForbiddenResponse,
@@ -16,6 +16,20 @@ export class MerchantSummaryDto {
   @ApiProperty() nameEn!: string;
   @ApiProperty({ nullable: true }) nameAm!: string | null;
   @ApiProperty({ enum: ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'] }) status!: string;
+}
+
+export class CreateMerchantDto {
+  @ApiProperty()
+  nameEn!: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  nameAm?: string | null;
+
+  @ApiProperty({ required: false })
+  slug?: string;
+
+  @ApiProperty({ required: false, enum: ['EN', 'AM'] })
+  defaultLanguage?: 'EN' | 'AM';
 }
 
 export class UpdateMerchantStatusDto {
@@ -40,6 +54,24 @@ export class PlatformMerchantsController {
   @ApiForbiddenResponse({ description: 'Merchant users can never call platform routes' })
   list() {
     return this.merchants.list();
+  }
+
+  @Permissions('platform:manage')
+  @Get(':id')
+  @ApiOperation({ summary: 'Get merchant by ID (platform administrators only)' })
+  @ApiOkResponse()
+  @ApiForbiddenResponse({ description: 'Merchant users can never call platform routes' })
+  get(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.merchants.getById(id);
+  }
+
+  @Permissions('platform:manage')
+  @Post()
+  @ApiOperation({ summary: 'Create new merchant (platform administrators only)' })
+  @ApiOkResponse()
+  @ApiForbiddenResponse({ description: 'Merchant users can never call platform routes' })
+  create(@Body() body: CreateMerchantDto) {
+    return this.merchants.create(body);
   }
 
   @Permissions('platform:manage')

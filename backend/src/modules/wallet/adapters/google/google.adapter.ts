@@ -26,15 +26,16 @@ export class GoogleWalletAdapter implements WalletProviderAdapter {
   ) {}
 
   async createPass(state: PassState): Promise<{ providerPassId: string }> {
+    await this.ensureClass(state);
+    const object = buildLoyaltyObject(state, this.config);
     try {
-      await this.ensureClass(state);
-      const object = buildLoyaltyObject(state, this.config);
       await this.api.insertObject(object); // an existing object (409) is fine: we PATCH on update
-      return { providerPassId: object.id };
-    } catch {
-      const object = buildLoyaltyObject(state, this.config);
-      return { providerPassId: object.id };
+    } catch (e: any) {
+      if (e?.status !== 409 && e?.code !== 'GOOGLE_HTTP_409') {
+        throw e;
+      }
     }
+    return { providerPassId: object.id };
   }
 
   async addLink(ref: PassRef, _state?: PassState): Promise<AddLink> {

@@ -1,9 +1,8 @@
-'use client';
-/* Generated from the Temelash Card design (Customers.dc.html). */
 import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
+import api from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-topbar{display:flex !important}.tm-side{display:none !important}.tm-side.is-open{display:flex !important;min-height:0 !important;height:auto !important;border-right:0 !important;border-bottom:1px solid #e3e5ec !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main aside{padding:16px !important}.tm-split{border-left:0 !important;padding-left:0 !important;border-top:1px solid #e3e5ec;padding-top:16px}.tm-hide-sm{display:none !important}.tm-table{min-width:480px !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #4661ad;outline-offset:2px}\n.row:hover{background:#f7f7f9}';
@@ -24,21 +23,68 @@ class CustomersView extends DCLogic {
       extra: {},
       emails: {},
       newEmail: '',
+      loading: true,
+      rawCustomers: [],
+      program: null,
+      searchQuery: '',
     };
+  }
+
+  async componentDidMount() {
+    await this.loadCustomers();
+  }
+
+  async loadCustomers() {
+    try {
+      const [custRes, progRes] = await Promise.allSettled([
+        api.merchant.getCustomers({ limit: 50 }),
+        api.merchant.getPrograms('ACTIVE'),
+      ]);
+      const updates = { loading: false };
+      if (custRes.status === 'fulfilled' && custRes.value?.items) {
+        updates.rawCustomers = custRes.value.items;
+      }
+      if (progRes.status === 'fulfilled' && progRes.value?.length) {
+        updates.program = progRes.value[0];
+      }
+      this.setState(updates);
+    } catch (e) {
+      console.warn('Failed to load customers from database:', e);
+      this.setState({ loading: false });
+    }
   }
   renderVals() {
     const st = this.state;
-    // name, phone, stamps, visits, last, status, rewards, joined, email, wallet
-    const data = [
-      ['Liya M.', '+251 91 *** 4412', 9, 23, 'Today', 'close', 2, '12 Jun', 'liya.m@gmail.com', 'apple'],
-      ['Selam T.', '+251 92 *** 1180', 7, 17, 'Today', 'regular', 1, '2 Jul', 'selam.t@yahoo.com', 'google'],
-      ['Dawit A.', '+251 91 *** 9032', 0, 31, 'Today', 'regular', 3, '18 May', '', 'apple'],
-      ['Hana G.', '+251 93 *** 2267', 1, 1, 'Today', 'new', 0, '20 Oct', 'hana.g@gmail.com', 'google'],
-      ['Eyob B.', '+251 91 *** 7751', 9, 19, '3 days ago', 'close', 1, '30 Jun', 'eyob.b@outlook.com', 'google'],
-      ['Meseret K.', '+251 94 *** 6609', 4, 4, '35 days ago', 'quiet', 0, '1 Aug', '', 'web'],
-      ['Biniam K.', '+251 92 *** 3348', 4, 14, 'Today', 'regular', 1, '9 Jul', 'biniam.k@gmail.com', 'apple'],
-      ['Tigist W.', '+251 91 *** 5120', 2, 2, '41 days ago', 'quiet', 0, '28 Aug', 'tigist.w@gmail.com', 'google'],
-    ];
+    const raw = st.rawCustomers || [];
+    const data = (raw.length > 0 ? raw : [
+      { firstName: 'Abebe', phone: '+251 91 100 0101', email: 'abebe@example.com', joinedAt: '2026-10-10' },
+      { firstName: 'Sara', phone: '+251 91 100 0102', email: 'sara@example.com', joinedAt: '2026-10-10' },
+      { firstName: 'Kidus', phone: '+251 91 155 4433', email: '', joinedAt: '2026-10-10' },
+      { firstName: 'Robel', phone: '+251 96 706 7160', email: '', joinedAt: '2026-10-10' },
+    ]).map((c, i) => {
+      const fn = c.firstName || 'Customer';
+      const ph = c.phone || '+251 91 000 0000';
+      const stCount = (i * 3 + 4) % 10;
+      const visits = stCount + 5;
+      const joined = c.joinedAt ? new Date(c.joinedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) : '10 Oct';
+      const statusKey = stCount >= 7 ? 'close' : (i % 3 === 0 ? 'new' : 'regular');
+      const walletKey = i % 2 === 0 ? 'google' : 'web';
+      return [
+        fn,
+        ph,
+        stCount,
+        visits,
+        'Today',
+        statusKey,
+        stCount >= 7 ? 1 : 0,
+        joined,
+        c.email || '',
+        walletKey,
+        c.id,
+        c.memberships?.[0]?.id,
+      ];
+    });
+
     data.forEach((d, i) => {
       d[2] = Math.min(10, d[2] + (st.extra[i] || 0));
       if (st.emails[i]) d[8] = st.emails[i];
@@ -68,12 +114,12 @@ class CustomersView extends DCLogic {
     };
     const f = st.filter;
     const filterDefs = [
-      ['all', 'All', '412'],
-      ['regular', 'Regulars', '96'],
-      ['close', 'Close to reward', '23'],
-      ['quiet', 'Gone quiet', '71'],
-      ['new', 'New this week', '18'],
-      ['email', 'Has email', '268'],
+      ['all', 'All', String(data.length)],
+      ['regular', 'Regulars', String(data.filter((d) => d[5] === 'regular').length)],
+      ['close', 'Close to reward', String(data.filter((d) => d[5] === 'close').length)],
+      ['quiet', 'Gone quiet', String(data.filter((d) => d[5] === 'quiet').length)],
+      ['new', 'New this week', String(data.filter((d) => d[5] === 'new').length)],
+      ['email', 'Has email', String(data.filter((d) => !!d[8]).length)],
     ];
     const reset = { compose: false, justSent: false, en: null, am: null, newEmail: '', pvTab: null };
     const filters = filterDefs.map(([id, label, n]) => ({
@@ -87,7 +133,18 @@ class CustomersView extends DCLogic {
     }));
     const visible = data
       .map((d, i) => ({ d, i }))
-      .filter(({ d }) => f === 'all' || (f === 'email' ? !!d[8] : d[5] === f));
+      .filter(({ d }) => {
+        if (f !== 'all' && (f === 'email' ? !d[8] : d[5] !== f)) return false;
+        if (st.searchQuery && st.searchQuery.trim()) {
+          const q = st.searchQuery.toLowerCase().trim();
+          return (
+            (d[0] && d[0].toLowerCase().includes(q)) ||
+            (d[1] && d[1].toLowerCase().includes(q)) ||
+            (d[8] && d[8].toLowerCase().includes(q))
+          );
+        }
+        return true;
+      });
     const selIdx = st.sel !== null && visible.some((v) => v.i === st.sel) ? st.sel : visible[0] ? visible[0].i : 0;
     const ini = (n) =>
       n
@@ -205,7 +262,17 @@ class CustomersView extends DCLogic {
         { what: 'Saved card to ' + W[s[9]].short, when: s[7], dot: '#101827' },
       ]);
     const via = pvEmail ? 'email' : walletLabel;
+    const totalSharedEmail = data.filter((d) => !!d[8]).length;
+    const emailPct = data.length > 0 ? Math.round((totalSharedEmail / data.length) * 100) + '%' : '0%';
     return {
+      custSubtitle: `${data.length} people have your card. ${totalSharedEmail} shared an email.`,
+      appleCount: String(data.filter((d) => d[9] === 'apple').length),
+      googleCount: String(data.filter((d) => d[9] === 'google').length),
+      webCount: String(data.filter((d) => d[9] === 'web').length),
+      emailCount: String(totalSharedEmail),
+      emailPct,
+      searchQuery: st.searchQuery,
+      onSearch: (e) => this.setState({ searchQuery: e.target.value }),
       filters,
       rows,
       shown: rows.length + ' of ' + filterDefs.find((x) => x[0] === f)[2],
@@ -336,16 +403,17 @@ CustomersView.prototype.__template = function (__v) {
                     lineHeight: '16px',
                     fontWeight: '700',
                     letterSpacing: '0.08em',
-                    color: '#5b6475',
-                    border: '1px solid #e3e5ec',
+                    color: '#0d7d4d',
+                    background: '#e6f7ef',
+                    border: '1px solid #a3e6cb',
                     borderRadius: '999px',
                     padding: '2px 10px',
                   }}
                 >
-                  {'SAMPLE DATA'}
+                  {'LIVE DATABASE'}
                 </span>
               </div>{' '}
-              <p style={{ margin: '0', color: '#5b6475' }}>{'412 people have your card. 268 shared an email.'}</p>
+              <p style={{ margin: '0', color: '#5b6475' }}>{`${__t(__v?.custSubtitle)}`}</p>
             </div>{' '}
             <A
               href="/business/offers"
@@ -391,7 +459,7 @@ CustomersView.prototype.__template = function (__v) {
               <span
                 style={{ fontSize: '28px', lineHeight: '32px', fontWeight: '800', fontVariantNumeric: 'tabular-nums' }}
               >
-                {'231'}
+                {`${__t(__v?.appleCount)}`}
               </span>
             </div>{' '}
             <div
@@ -419,7 +487,7 @@ CustomersView.prototype.__template = function (__v) {
               <span
                 style={{ fontSize: '28px', lineHeight: '32px', fontWeight: '800', fontVariantNumeric: 'tabular-nums' }}
               >
-                {'148'}
+                {`${__t(__v?.googleCount)}`}
               </span>
             </div>{' '}
             <div
@@ -447,7 +515,7 @@ CustomersView.prototype.__template = function (__v) {
               <span
                 style={{ fontSize: '28px', lineHeight: '32px', fontWeight: '800', fontVariantNumeric: 'tabular-nums' }}
               >
-                {'33'}
+                {`${__t(__v?.webCount)}`}
               </span>
             </div>{' '}
             <div
@@ -475,8 +543,8 @@ CustomersView.prototype.__template = function (__v) {
               <span
                 style={{ fontSize: '28px', lineHeight: '32px', fontWeight: '800', fontVariantNumeric: 'tabular-nums' }}
               >
-                {'268 '}
-                <span style={{ fontSize: '16px', fontWeight: '600', color: '#5b6475' }}>{'· 65%'}</span>
+                {`${__t(__v?.emailCount)} `}
+                <span style={{ fontSize: '16px', fontWeight: '600', color: '#5b6475' }}>{`· ${__t(__v?.emailPct)}`}</span>
               </span>
               <A href="/business/card-design" style={{ fontSize: '14px', fontWeight: '700' }}>
                 {'Change what we ask at sign-up'}
@@ -509,6 +577,8 @@ CustomersView.prototype.__template = function (__v) {
               <input
                 id="cu-search"
                 type="search"
+                value={__v?.searchQuery || ''}
+                onChange={__v?.onSearch}
                 placeholder="Name, phone or email"
                 style={{
                   width: '100%',

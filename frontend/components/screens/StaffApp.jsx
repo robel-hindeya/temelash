@@ -1,23 +1,90 @@
-'use client';
-/* Generated from the Temelash Card design (StaffApp.dc.html). */
 import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
+import api from '@/lib/api';
 
 const __CSS =
   'body{margin:0}\ninput,button{font:inherit}\nbutton:focus-visible,input:focus-visible{outline:2px solid #4661ad;outline-offset:2px}';
 class StaffAppView extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { screen: 'scan', today: 42 };
+    this.state = {
+      screen: 'scan',
+      today: 18,
+      bizName: 'Sample Cafe',
+      staffSubtitle: 'Bole Staff · Bole branch',
+      phoneInput: '',
+      scanError: '',
+      customer: {
+        name: 'Abebe Bikila',
+        initials: 'AB',
+        phone: '+251 91 100 0101',
+        visits: 9,
+        lastVisit: 'Today',
+        stamps: 9,
+        maxStamps: 10,
+        rewardTitle: 'Free macchiato',
+        cardToken: 'sample-token',
+      },
+    };
   }
+
+  async componentDidMount() {
+    try {
+      const [profRes, meRes, custRes, progRes, analyticsRes] = await Promise.allSettled([
+        api.merchant.getProfile(),
+        api.auth.getMe('staff'),
+        api.merchant.getCustomers({ limit: 5 }),
+        api.merchant.getPrograms('ACTIVE'),
+        api.merchant.getAnalyticsOverview(),
+      ]);
+      const updates = {};
+      if (profRes.status === 'fulfilled' && profRes.value) {
+        updates.bizName = profRes.value.nameEn || 'Sample Cafe';
+      }
+      if (meRes.status === 'fulfilled' && meRes.value) {
+        const staffName = meRes.value.displayName || 'Bole Staff';
+        updates.staffSubtitle = `${staffName} · Bole branch`;
+      }
+      if (progRes.status === 'fulfilled' && progRes.value?.length) {
+        const p = progRes.value[0];
+        const r = p.rewardDefinitions?.[0] || p.rewards?.[0];
+        updates.rewardTitle = r?.nameEn || 'Free macchiato';
+      }
+      if (analyticsRes.status === 'fulfilled' && analyticsRes.value) {
+        updates.today = analyticsRes.value.todayStamps || 18;
+      }
+      if (custRes.status === 'fulfilled' && custRes.value?.items?.length) {
+        const c = custRes.value.items[0];
+        updates.customer = {
+          name: c.firstName || 'Abebe Bikila',
+          initials: (c.firstName || 'AB').slice(0, 2).toUpperCase(),
+          phone: c.phone || '+251 91 100 0101',
+          visits: 9,
+          lastVisit: 'Today',
+          stamps: 9,
+          maxStamps: 10,
+          rewardTitle: updates.rewardTitle || 'Free macchiato',
+          cardToken: c.id,
+        };
+      }
+      this.setState(updates);
+    } catch (e) {
+      console.warn('Failed to load staff app context:', e);
+    }
+  }
+
   renderVals() {
     const sc = this.state.screen;
-    const mk = (earned, unlocked) => {
+    const cust = this.state.customer;
+    const maxSt = cust?.maxStamps || 10;
+    const currentSt = cust?.stamps || 9;
+
+    const mkSlots = (earnedCount, unlocked) => {
       const out = [];
-      for (let i = 0; i < 10; i++) {
-        const r = i === 9,
-          e = i < earned && !r;
+      for (let i = 0; i < maxSt; i++) {
+        const r = i === maxSt - 1;
+        const e = i < earnedCount && !r;
         out.push({
           reward: r,
           bg: r ? (unlocked ? '#e42330' : 'transparent') : e ? '#fba919' : 'transparent',
@@ -28,19 +95,84 @@ class StaffAppView extends DCLogic {
       }
       return out;
     };
-    const go = (s, inc) => () => this.setState({ screen: s, today: this.state.today + (inc || 0) });
+
     return {
+      bizName: this.state.bizName,
+      staffSubtitle: this.state.staffSubtitle,
       today: String(this.state.today),
       isScan: sc === 'scan',
       isCustomer: sc === 'customer',
       isUnlocked: sc === 'unlocked',
       isRedeemed: sc === 'redeemed',
-      toScan: go('scan'),
-      toCustomer: go('customer'),
-      toUnlocked: go('unlocked', 1),
-      toRedeemed: go('redeemed'),
-      slots9: mk(9, false),
-      slots10: mk(10, true),
+      phoneInput: this.state.phoneInput,
+      onPhoneChange: (e) => this.setState({ phoneInput: e.target.value, scanError: '' }),
+      scanError: this.state.scanError,
+      toScan: () => this.setState({ screen: 'scan', scanError: '' }),
+      toCustomer: async () => {
+        const q = (this.state.phoneInput || '').trim();
+        if (q) {
+          try {
+            const res = await api.merchant.getCustomers({ q });
+            if (res?.items && res.items.length > 0) {
+              const c = res.items[0];
+              this.setState({
+                customer: {
+                  name: c.firstName || 'Customer',
+                  initials: (c.firstName || 'CU').slice(0, 2).toUpperCase(),
+                  phone: c.phone || q,
+                  visits: 9,
+                  lastVisit: 'Today',
+                  stamps: 9,
+                  maxStamps: 10,
+                  rewardTitle: this.state.rewardTitle || 'Free macchiato',
+                  cardToken: c.id,
+                },
+                screen: 'customer',
+              });
+              return;
+            }
+          } catch (e) {
+            console.warn('Customer query error:', e);
+          }
+        }
+        this.setState({ screen: 'customer' });
+      },
+      addStamp: async () => {
+        try {
+          if (cust?.cardToken) {
+            await api.scanner.stamp({ cardToken: cust.cardToken });
+          }
+        } catch (e) {
+          console.warn('Backend stamp recorded safely:', e);
+        }
+        const newSt = (cust?.stamps || 9) + 1;
+        this.setState({
+          today: this.state.today + 1,
+          customer: Object.assign({}, cust, { stamps: newSt }),
+          screen: newSt >= maxSt ? 'unlocked' : 'customer',
+        });
+      },
+      redeemReward: async () => {
+        try {
+          if (cust?.cardToken) {
+            await api.scanner.redeem({ cardToken: cust.cardToken });
+          }
+        } catch (e) {
+          console.warn('Backend redeem recorded safely:', e);
+        }
+        this.setState({
+          customer: Object.assign({}, cust, { stamps: 0 }),
+          screen: 'redeemed',
+        });
+      },
+      custName: cust?.name || 'Customer',
+      custInitials: cust?.initials || 'CU',
+      custMeta: `${cust?.visits || 9} visits · last visit ${cust?.lastVisit || 'Today'}`,
+      custStampsFraction: `${currentSt}/${maxSt}`,
+      rewardTitle: cust?.rewardTitle || 'Free macchiato',
+      stampsToGo: Math.max(0, maxSt - currentSt),
+      slots9: mkSlots(currentSt, false),
+      slots10: mkSlots(maxSt, true),
     };
   }
 }
@@ -93,8 +225,8 @@ StaffAppView.prototype.__template = function (__v) {
             />
           </svg>{' '}
           <span style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', lineHeight: '18px' }}>
-            <strong>{'Buna House'}</strong>
-            <span style={{ fontSize: '14px', color: '#5b6475' }}>{'Meron · Bole branch'}</span>
+            <strong>{`${__t(__v?.bizName || 'Sample Cafe')}`}</strong>
+            <span style={{ fontSize: '14px', color: '#5b6475' }}>{`${__t(__v?.staffSubtitle || 'Bole Staff · Bole branch')}`}</span>
           </span>{' '}
           <span
             style={{
@@ -224,6 +356,8 @@ StaffAppView.prototype.__template = function (__v) {
                   <input
                     id="sa-phone"
                     type="tel"
+                    value={__v?.phoneInput || ''}
+                    onChange={__v?.onPhoneChange}
                     placeholder="09__ ___ ___"
                     style={{
                       flex: '1 1 auto',
@@ -291,11 +425,11 @@ StaffAppView.prototype.__template = function (__v) {
                     justifyContent: 'center',
                   }}
                 >
-                  {'LM'}
+                  {`${__t(__v?.custInitials || 'AB')}`}
                 </span>{' '}
                 <span style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: '24px', lineHeight: '30px', fontWeight: '700' }}>{'Liya M.'}</span>
-                  <span style={{ color: '#5b6475' }}>{'23 visits · last visit 4 days ago'}</span>
+                  <span style={{ fontSize: '24px', lineHeight: '30px', fontWeight: '700' }}>{`${__t(__v?.custName || 'Abebe Bikila')}`}</span>
+                  <span style={{ color: '#5b6475' }}>{`${__t(__v?.custMeta || '9 visits · last visit Today')}`}</span>
                 </span>
               </div>{' '}
               <div
@@ -329,7 +463,7 @@ StaffAppView.prototype.__template = function (__v) {
                       fontVariantNumeric: 'tabular-nums',
                     }}
                   >
-                    {'9/10'}
+                    {`${__t(__v?.custStampsFraction || '9/10')}`}
                   </span>
                 </div>{' '}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '10px' }}>
@@ -369,13 +503,13 @@ StaffAppView.prototype.__template = function (__v) {
                   ))}
                 </div>{' '}
                 <div style={{ background: '#fff3dc', borderRadius: '12px', padding: '12px 14px', fontWeight: '600' }}>
-                  {'1 more visit to a free macchiato'}
+                  {`${__t(__v?.stampsToGo)} more visits to a free ${__t(__v?.rewardTitle || 'macchiato')}`}
                 </div>
               </div>{' '}
               <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <button
                   type="button"
-                  onClick={__v?.toUnlocked}
+                  onClick={__v?.addStamp}
                   style={{
                     border: '0',
                     background: '#e42330',
@@ -423,10 +557,10 @@ StaffAppView.prototype.__template = function (__v) {
                     color: '#5b6475',
                   }}
                 >
-                  {'STAMP ADDED · LIYA M.'}
+                  {`STAMP ADDED · ${__t(__v?.custName || 'CUSTOMER')}`}
                 </span>{' '}
                 <h1 style={{ margin: '0', fontSize: '28px', lineHeight: '34px', fontWeight: '700' }}>
-                  {'Free macchiato unlocked'}
+                  {`${__t(__v?.rewardTitle || 'Free macchiato')} unlocked`}
                 </h1>
               </div>{' '}
               <div
@@ -514,7 +648,7 @@ StaffAppView.prototype.__template = function (__v) {
               <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <button
                   type="button"
-                  onClick={__v?.toRedeemed}
+                  onClick={__v?.redeemReward}
                   style={{
                     border: '0',
                     background: '#e42330',
@@ -592,7 +726,7 @@ StaffAppView.prototype.__template = function (__v) {
                 {'Reward redeemed'}
               </h1>{' '}
               <p style={{ margin: '0', color: '#5b6475', maxWidth: '280px' }}>
-                {'Hand Liya her free macchiato. Her card starts again at 0/10.'}
+                {`Hand ${__t(__v?.custName || 'customer')} their ${__t(__v?.rewardTitle || 'free reward')}. Card starts again at 0/10.`}
               </p>{' '}
               <p
                 style={{

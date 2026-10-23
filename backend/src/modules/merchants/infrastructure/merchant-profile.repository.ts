@@ -94,8 +94,10 @@ export class MerchantProfileRepository {
     status: MerchantStatus;
     defaultLanguage: Language;
   } | null> {
-    return db.merchant.findUnique({
-      where: { joinReference },
+    return db.merchant.findFirst({
+      where: {
+        OR: [{ joinReference }, { slug: joinReference }],
+      },
       select: { id: true, nameEn: true, nameAm: true, status: true, defaultLanguage: true },
     });
   }

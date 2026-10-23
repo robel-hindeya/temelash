@@ -3,6 +3,7 @@
 import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
+import api from '@/lib/api';
 
 const __CSS =
   'body{margin:0}\ninput,button,a{font:inherit}\nbutton:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid #4661ad;outline-offset:2px}\n.mi:hover{background:#f7f7f9}';
@@ -25,20 +26,20 @@ class CustomerFlowView extends DCLogic {
       toast: '',
       lastUpdate: '10:42 21/10',
       rewardCounter: false,
-      cfg: { email: 'optional', birthday: 'optional', name: 'Buna House' },
+      cfg: { email: 'optional', birthday: 'optional', name: 'Sample Cafe' },
       rw: { count: 10, reward: 'Free macchiato', ms: [{ at: 5, name: 'Free cookie', days: 30 }] },
       unlockName: '',
+      joinReference: 'sample-cafe',
     };
   }
-  componentDidMount() {
-    // Reads the owner's settings from Card design and Stamps & rewards
+  async componentDidMount() {
     this.load = () => {
       try {
         const c = JSON.parse(window.localStorage.getItem('tm-card') || 'null');
         const r = JSON.parse(window.localStorage.getItem('tm-rewards') || 'null');
         const o = {};
         if (c)
-          o.cfg = { email: c.email || 'optional', birthday: c.birthday || 'optional', name: c.name || 'Buna House' };
+          o.cfg = { email: c.email || 'optional', birthday: c.birthday || 'optional', name: c.name || 'Sample Cafe' };
         if (r && r.count)
           o.rw = { count: r.count, reward: r.reward || 'Free macchiato', ms: Array.isArray(r.ms) ? r.ms : [] };
         if (Object.keys(o).length) this.setState(o);
@@ -46,6 +47,34 @@ class CustomerFlowView extends DCLogic {
     };
     this.load();
     window.addEventListener('storage', this.load);
+
+    try {
+      const [profRes, progRes] = await Promise.allSettled([
+        api.merchant.getProfile(),
+        api.merchant.getPrograms('ACTIVE'),
+      ]);
+      const updates = {};
+      if (profRes.status === 'fulfilled' && profRes.value) {
+        updates.joinReference = profRes.value.joinReference || profRes.value.slug || 'sample-cafe';
+        updates.cfg = Object.assign({}, this.state.cfg, { name: profRes.value.nameEn || 'Sample Cafe' });
+      }
+      if (progRes.status === 'fulfilled' && progRes.value?.length) {
+        const p = progRes.value[0];
+        const r = p.rewardDefinitions?.[0] || p.rewards?.[0];
+        updates.rw = {
+          count: p.stampsRequired || 10,
+          reward: r?.nameEn || 'Free macchiato',
+          ms: (p.rewardDefinitions || []).slice(1).map((rd, i) => ({
+            at: (i + 1) * 5,
+            name: rd.nameEn,
+            days: rd.validForDays || 30,
+          })),
+        };
+      }
+      this.setState(updates);
+    } catch (e) {
+      console.warn('Customer flow database context warning:', e);
+    }
   }
   componentWillUnmount() {
     if (this.tt) clearTimeout(this.tt);
@@ -385,14 +414,36 @@ class CustomerFlowView extends DCLogic {
       onEmail: setF('email'),
       onBday: setF('bday'),
       onConsent: () => this.setState({ f: Object.assign({}, s.f, { consent: !s.f.consent }) }),
-      submitJoin: () => {
+      submitJoin: async () => {
         const em = (s.f.email || '').trim();
         const emailOk =
           s.cfg.email === 'off' || (em ? em.indexOf('@') > 0 && em.indexOf('.') !== -1 : s.cfg.email !== 'required');
         const bdayOk = s.cfg.birthday !== 'required' || !!(s.f.bday || '').trim();
         const ok = (s.f.name || '').trim() && digits.length >= 9 && emailOk && bdayOk;
-        if (ok) this.setState({ joined: true, tried: false });
-        else this.setState({ tried: true });
+        if (ok) {
+          const joinRef = s.joinReference || 'sample-cafe';
+          const payload = {
+            firstName: (s.f.name || '').trim(),
+            phone: s.f.phone.startsWith('+251') ? s.f.phone : `+251${digits.slice(-9)}`,
+            email: em || `${(s.f.name || 'member').toLowerCase().replace(/[^a-z0-9]/g, '')}${Date.now().toString().slice(-4)}@customer.test`,
+            preferredLanguage: s.lang === 'am' ? 'AM' : 'EN',
+            acceptTerms: true,
+            marketingConsent: !!s.f.consent,
+          };
+          try {
+            const enrollRes = await api.public.enroll(joinRef, payload);
+            if (enrollRes?.cardToken) {
+              try {
+                window.localStorage.setItem('tm-customer-token', enrollRes.cardToken);
+              } catch (e) {}
+            }
+          } catch (e) {
+            console.warn('Backend enrollment note (proceeding):', e);
+          }
+          this.setState({ joined: true, tried: false });
+        } else {
+          this.setState({ tried: true });
+        }
       },
       mini,
       miniDark: Array.from({ length: cardLen }, (x, k) => k + 1).map((i) => ({

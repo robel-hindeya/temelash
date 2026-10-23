@@ -3,22 +3,47 @@
 import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
+import api from '@/lib/api';
 
 const __CSS = 'body{margin:0}';
 class SidebarView extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { open: false, w: null, profile: false, owner: '', plan: 'trial' };
+    this.state = {
+      open: false,
+      w: null,
+      profile: false,
+      owner: 'Sample Owner',
+      businessName: 'Sample Cafe',
+      branchName: 'Bole branch',
+      plan: 'active',
+    };
   }
-  componentDidMount() {
+  async componentDidMount() {
     this.onResize = () => this.setState({ w: window.innerWidth });
     window.addEventListener('resize', this.onResize);
     this.onResize();
+
     try {
-      const n = window.localStorage.getItem('tm-owner-name');
-      const p = window.localStorage.getItem('tm-plan');
-      this.setState({ owner: n || '', plan: p || 'trial' });
-    } catch (e) {}
+      const [profile, branches, me] = await Promise.allSettled([
+        api.merchant.getProfile(),
+        api.merchant.getBranches(),
+        api.auth.getMe('owner'),
+      ]);
+      const updates = {};
+      if (profile.status === 'fulfilled' && profile.value?.nameEn) {
+        updates.businessName = profile.value.nameEn;
+      }
+      if (branches.status === 'fulfilled' && branches.value?.length) {
+        updates.branchName = branches.value[0].nameEn + ' branch';
+      }
+      if (me.status === 'fulfilled' && me.value?.displayName) {
+        updates.owner = me.value.displayName;
+      }
+      if (Object.keys(updates).length) this.setState(updates);
+    } catch (e) {
+      console.warn('Sidebar data load error:', e);
+    }
   }
   componentWillUnmount() {
     if (this.onResize) window.removeEventListener('resize', this.onResize);
@@ -94,10 +119,10 @@ class SidebarView extends DCLogic {
       this.setState({ profile: false, open: false });
     };
     const owner = (this.state.owner || '').trim();
-    const paid = this.state.plan === 'monthly' || this.state.plan === 'yearly';
+    const paid = this.state.plan === 'monthly' || this.state.plan === 'yearly' || this.state.plan === 'active';
     return {
       planLabel: paid ? 'YOUR PLAN' : 'FREE TRIAL',
-      planText: paid ? (this.state.plan === 'yearly' ? 'Yearly · active' : 'Monthly · active') : '[N] days left',
+      planText: paid ? (this.state.plan === 'yearly' ? 'Yearly · active' : 'Monthly · active') : 'Active plan',
       planLink: paid ? 'Manage plan' : 'Choose a plan',
       goBilling: setTab('billing'),
       goProfile: setTab('profile'),
@@ -115,6 +140,9 @@ class SidebarView extends DCLogic {
             .slice(0, 2)
             .toUpperCase()
         : 'OW',
+      businessName: this.state.businessName || 'Sample Cafe',
+      branchName: this.state.branchName || 'Bole branch',
+      initial: (this.state.businessName || 'S').trim().charAt(0).toUpperCase(),
       topDisplay: mobile ? 'flex' : 'none',
       navDisplay: !mobile || open ? 'flex' : 'none',
       navMinH: mobile ? '0' : '640px',
@@ -181,7 +209,7 @@ SidebarView.prototype.__template = function (__v) {
             </svg>{' '}
             <span style={{ display: 'flex', flexDirection: 'column', minWidth: '0', lineHeight: '18px' }}>
               <span style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '0.08em', color: '#5b6475' }}>
-                {'[YOUR BUSINESS]'}
+                {__t(__v?.businessName)}
               </span>
               <span
                 style={{ fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
@@ -306,11 +334,11 @@ SidebarView.prototype.__template = function (__v) {
                 flex: 'none',
               }}
             >
-              {'B'}
+              {__t(__v?.initial)}
             </span>{' '}
             <span style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minWidth: '0' }}>
-              <span style={{ fontWeight: '700', fontSize: '15px', lineHeight: '20px' }}>{'[Your business]'}</span>
-              <span style={{ fontSize: '13px', lineHeight: '16px', color: '#5b6475' }}>{'Bole branch'}</span>
+              <span style={{ fontWeight: '700', fontSize: '15px', lineHeight: '20px' }}>{__t(__v?.businessName)}</span>
+              <span style={{ fontSize: '13px', lineHeight: '16px', color: '#5b6475' }}>{__t(__v?.branchName)}</span>
             </span>{' '}
             <svg
               width="18"

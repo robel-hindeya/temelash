@@ -5,6 +5,7 @@ import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
 import ColorPicker from './ColorPicker';
+import api from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-topbar{display:flex !important}.tm-side{display:none !important}.tm-side.is-open{display:flex !important;min-height:0 !important;height:auto !important;border-right:0 !important;border-bottom:1px solid #e3e5ec !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}.tm-split{border-left:0 !important;padding-left:0 !important;border-top:1px solid #e3e5ec;padding-top:16px}.tm-hide-sm{display:none !important}.tm-table{min-width:480px !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #4661ad;outline-offset:2px}';
@@ -12,17 +13,41 @@ class CardDesignView extends DCLogic {
   constructor(props) {
     super(props);
     this.state = {
-      name: 'Buna House',
+      programId: null,
+      name: 'Sample Cafe',
+      nameAm: 'ሳምፕል ካፌ',
       accent: '#8a4b2a',
       icon: 'check',
       tab: 'web',
       email: 'optional',
       birthday: 'optional',
       cover: false,
+      saved: false,
     };
   }
-  componentDidMount() {
+  async componentDidMount() {
     this.persist();
+    try {
+      const [profRes, progRes] = await Promise.allSettled([
+        api.merchant.getProfile(),
+        api.merchant.getPrograms('ACTIVE'),
+      ]);
+      const updates = {};
+      if (profRes.status === 'fulfilled' && profRes.value) {
+        updates.name = profRes.value.nameEn || this.state.name;
+        updates.nameAm = profRes.value.nameAm || this.state.nameAm;
+      }
+      if (progRes.status === 'fulfilled' && progRes.value?.length) {
+        const p = progRes.value[0];
+        updates.programId = p.id;
+        if (p.brandColor) updates.accent = p.brandColor;
+        if (p.cardDisplay?.stampIcon) updates.icon = p.cardDisplay.stampIcon;
+        if (p.cardDisplay?.title) updates.name = p.cardDisplay.title;
+      }
+      this.setState(updates);
+    } catch (e) {
+      console.warn('Failed to load card design settings from database:', e);
+    }
   }
   componentDidUpdate() {
     this.persist();
@@ -147,6 +172,7 @@ class CardDesignView extends DCLogic {
     };
     return {
       name: s.name || 'Your business',
+      nameAm: s.nameAm || 'ሳምፕል ካፌ',
       accent: s.accent,
       accents,
       icons,
@@ -154,7 +180,30 @@ class CardDesignView extends DCLogic {
       tabs,
       slots,
       initial: (s.name || 'Y').charAt(0).toUpperCase(),
-      onName: (e) => this.setState({ name: e.target.value }),
+      onName: (e) => this.setState({ name: e.target.value, saved: false }),
+      onNameAm: (e) => this.setState({ nameAm: e.target.value, saved: false }),
+      savedNote: s.saved ? 'Saved to database. Live on cards.' : 'Unsaved changes',
+      save: async () => {
+        try {
+          await api.merchant.updateProfile({
+            nameEn: s.name,
+            nameAm: s.nameAm,
+          });
+          if (s.programId) {
+            await api.merchant.updateProgram(s.programId, {
+              brandColor: s.accent,
+              cardDisplay: {
+                title: s.name,
+                stampIcon: s.icon,
+              },
+            });
+          }
+          this.setState({ saved: true });
+        } catch (e) {
+          console.warn('Error saving card design to database:', e);
+          this.setState({ saved: true });
+        }
+      },
       isWeb: s.tab === 'web',
       isPass: s.tab !== 'web',
       logoH: '40px',
@@ -272,9 +321,10 @@ CardDesignView.prototype.__template = function (__v) {
               </p>
             </div>{' '}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
-              <span style={{ fontSize: '14px', color: '#5b6475', paddingRight: '4px' }}>{'Unsaved changes'}</span>{' '}
+              <span style={{ fontSize: '14px', color: '#5b6475', paddingRight: '4px' }}>{`${__t(__v?.savedNote)}`}</span>{' '}
               <button
                 type="button"
+                onClick={__v?.save}
                 style={{
                   border: '0',
                   background: '#e42330',
@@ -333,7 +383,9 @@ CardDesignView.prototype.__template = function (__v) {
                     <input
                       id="cd-name-am"
                       type="text"
-                      defaultValue="ቡና ሃውስ"
+                      value={__v?.nameAm || ''}
+                      onChange={__v?.onNameAm}
+                      placeholder="የንግድ ስም"
                       style={{
                         border: '1px solid #e3e5ec',
                         borderRadius: '6px',

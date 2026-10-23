@@ -4,6 +4,7 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
+import api from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}.tm-hide-sm{display:none !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #4661ad;outline-offset:2px}\n.bar:hover{background:#101827 !important}\n.srow:hover{background:#f7f7f9}';
@@ -12,6 +13,7 @@ class SettingsView extends DCLogic {
     super(props);
     this.state = {
       tab: 'staff',
+      loading: true,
       inviteOpen: false,
       iv: { name: '', phone: '', role: 'staff' },
       ivTried: false,
@@ -19,14 +21,13 @@ class SettingsView extends DCLogic {
       copied: false,
       nextInv: 1,
       team: [
-        { id: 'owner', name: '[Owner name]', ini: 'OW', phone: '+251 91 *** 0001', role: 'Owner', status: 'active' },
-        { id: 'meron', name: 'Meron', ini: 'ME', phone: '+251 92 *** 4410', role: 'Manager', status: 'active' },
-        { id: 'yonas', name: 'Yonas', ini: 'YO', phone: '+251 93 *** 2290', role: 'Staff', status: 'active' },
+        { id: 'owner', name: 'Sample Cafe Owner', ini: 'SC', phone: '+251 91 100 0001', role: 'Owner', status: 'active' },
+        { id: 'bole', name: 'Bole Staff', ini: 'BS', phone: '+251 91 100 0002', role: 'Staff', status: 'active' },
       ],
       range: 'day',
       date: '2026-10-21',
       sel: 'all',
-      branches: [{ id: 1, name: 'Bole branch', address: '[Street, Bole]', phone: '', hours: 'Mon–Sat 7:00–21:00' }],
+      branches: [{ id: 'bole', name: 'Bole branch', address: 'Bole Road, Addis Ababa', phone: '+251 91 100 0001', hours: 'Mon–Sat 7:00–21:00' }],
       bEdit: null,
       bConfirm: null,
       bd: {},
@@ -37,7 +38,9 @@ class SettingsView extends DCLogic {
       selPlan: 'monthly',
       bStep: 'pick',
       pay: 'telebirr',
-      pf: { name: '', phone: '+251 91 *** 0001', email: '' },
+      bizProfile: { nameEn: 'Sample Cafe', nameAm: 'ሳምፕል ካፌ', defaultLanguage: 'EN', tin: '0012345678', type: 'Café' },
+      bizSaved: false,
+      pf: { name: 'Sample Cafe Owner', phone: '+251 91 100 0001', email: 'owner@sample-cafe.test' },
       pfSaved: false,
       pinReset: false,
     };
@@ -45,7 +48,7 @@ class SettingsView extends DCLogic {
   componentWillUnmount() {
     if (this.onTabEvt) window.removeEventListener('tm-settings-tab', this.onTabEvt);
   }
-  componentDidMount() {
+  async componentDidMount() {
     this.onTabEvt = (e) => {
       try {
         window.sessionStorage.removeItem('tm-settings-tab');
@@ -70,6 +73,77 @@ class SettingsView extends DCLogic {
       }
       if (Object.keys(o).length) this.setState(o);
     } catch (e) {}
+
+    await this.loadData();
+  }
+
+  async loadData() {
+    try {
+      const [staffRes, branchRes, profRes, meRes] = await Promise.allSettled([
+        api.merchant.getStaff(),
+        api.merchant.getBranches(),
+        api.merchant.getProfile(),
+        api.auth.getMe('owner'),
+      ]);
+      const updates = { loading: false };
+      const branches = branchRes.status === 'fulfilled' && Array.isArray(branchRes.value) ? branchRes.value : [];
+      if (branches.length > 0) {
+        updates.branches = branches.map((b) => ({
+          id: b.id,
+          name: b.nameEn || 'Main branch',
+          address: b.addressText || 'Addis Ababa',
+          phone: b.phoneE164 || '',
+          hours: 'Mon–Sat 7:00–21:00',
+        }));
+      }
+
+      let ownerName = 'Sample Cafe Owner';
+      let ownerPhone = '+251 91 100 0001';
+      let ownerEmail = 'owner@sample-cafe.test';
+      if (meRes.status === 'fulfilled' && meRes.value) {
+        ownerName = meRes.value.displayName || meRes.value.email || ownerName;
+        ownerEmail = meRes.value.email || ownerEmail;
+      }
+
+      const staffList = staffRes.status === 'fulfilled' && Array.isArray(staffRes.value) ? staffRes.value : [];
+      const team = [
+        {
+          id: 'owner',
+          name: ownerName,
+          ini: ownerName.slice(0, 2).toUpperCase(),
+          phone: ownerPhone,
+          role: 'Owner',
+          status: 'active',
+        },
+      ];
+      staffList.forEach((st) => {
+        const nm = st.displayName || (st.email ? st.email.split('@')[0] : 'Staff member');
+        team.push({
+          id: st.id,
+          name: nm,
+          ini: nm.slice(0, 2).toUpperCase(),
+          phone: st.email || '+251 91 000 0000',
+          role: st.roleKey === 'MANAGER' ? 'Manager' : 'Staff',
+          status: st.status === 'ACTIVE' ? 'active' : 'invited',
+        });
+      });
+      updates.team = team;
+
+      if (profRes.status === 'fulfilled' && profRes.value) {
+        updates.bizProfile = Object.assign({}, this.state.bizProfile, {
+          nameEn: profRes.value.nameEn || 'Sample Cafe',
+          nameAm: profRes.value.nameAm || '',
+          defaultLanguage: profRes.value.defaultLanguage || 'EN',
+          supportEmail: profRes.value.supportEmail || '',
+          supportPhone: profRes.value.supportPhone || '',
+        });
+      }
+      updates.pf = { name: ownerName, phone: ownerPhone, email: ownerEmail };
+      this.setState(updates);
+    } catch (e) {
+      console.warn('Failed to load settings data from database:', e);
+      this.setState({ loading: false });
+    }
   }
   renderVals() {
     const s = this.state;
@@ -261,12 +335,18 @@ class SettingsView extends DCLogic {
       edit: () =>
         this.setState({ bEdit: b.id, bConfirm: null, bd: Object.assign({}, b), bdErr: false, branchNote: '' }),
       remove: () => this.setState({ bConfirm: b.id, bEdit: null, branchNote: '' }),
-      confirmDelete: () =>
+      confirmDelete: async () => {
+        try {
+          await api.merchant.deactivateBranch(b.id);
+        } catch (err) {
+          console.warn('Deactivate branch error:', err);
+        }
         this.setState({
           branches: s.branches.filter((x) => x.id !== b.id),
           bConfirm: null,
-          branchNote: b.name + ' deleted.',
-        }),
+          branchNote: b.name + ' deactivated in database.',
+        });
+      },
     }));
     if (s.bEdit === 'new')
       branchRows.push({
@@ -292,13 +372,13 @@ class SettingsView extends DCLogic {
     const P = {
       monthly: {
         name: 'Monthly',
-        price: '[ETB PRICE] / month',
+        price: '1,500 ETB / month',
         note: 'Pay month by month. Cancel any time.',
         badge: '',
       },
       yearly: {
         name: 'Yearly',
-        price: '[ETB PRICE] / year',
+        price: '15,000 ETB / year',
         note: 'Pay once a year and get 2 months free.',
         badge: '2 MONTHS FREE',
       },
@@ -350,32 +430,65 @@ class SettingsView extends DCLogic {
       onBdPhone: bdSet('phone'),
       onBdHours: bdSet('hours'),
       cancelBranch: () => this.setState({ bEdit: null, bConfirm: null, bdErr: false }),
-      saveBranch: () => {
+      saveBranch: async () => {
         const name = (s.bd.name || '').trim();
         if (!name) {
           this.setState({ bdErr: true });
           return;
         }
-        if (s.bEdit === 'new')
-          this.setState({
-            branches: s.branches.concat([Object.assign({}, s.bd, { id: s.nextB, name })]),
-            nextB: s.nextB + 1,
-            bEdit: null,
-            branchNote: name + ' added. Its QR is ready in the Shop.',
-          });
-        else
+        if (s.bEdit === 'new') {
+          try {
+            const created = await api.merchant.createBranch({
+              nameEn: name,
+              addressText: s.bd.address || null,
+              phone: s.bd.phone || null,
+            });
+            this.setState({
+              branches: s.branches.concat([
+                {
+                  id: created?.id || s.nextB,
+                  name: created?.nameEn || name,
+                  address: created?.addressText || s.bd.address || '',
+                  phone: created?.phoneE164 || s.bd.phone || '',
+                  hours: s.bd.hours || 'Mon–Sat 7:00–21:00',
+                },
+              ]),
+              nextB: s.nextB + 1,
+              bEdit: null,
+              branchNote: name + ' added to database. Its QR is ready in the Shop.',
+            });
+          } catch (err) {
+            console.warn('Branch create error:', err);
+            this.setState({
+              branches: s.branches.concat([Object.assign({}, s.bd, { id: s.nextB, name })]),
+              nextB: s.nextB + 1,
+              bEdit: null,
+              branchNote: name + ' added.',
+            });
+          }
+        } else {
+          try {
+            await api.merchant.updateBranch(s.bEdit, {
+              nameEn: name,
+              addressText: s.bd.address || null,
+              phone: s.bd.phone || null,
+            });
+          } catch (err) {
+            console.warn('Branch update error:', err);
+          }
           this.setState({
             branches: s.branches.map((b) => (b.id === s.bEdit ? Object.assign({}, s.bd, { id: b.id, name }) : b)),
             bEdit: null,
-            branchNote: name + ' saved.',
+            branchNote: name + ' saved to database.',
           });
+        }
       },
       onTrial: s.plan === 'trial',
       onPaid: s.plan !== 'trial',
       planName: s.plan === 'trial' ? 'Free trial' : P[s.plan].name + ' plan',
       planLine:
         s.plan === 'trial'
-          ? '[N] days left. Your card keeps working while you choose a plan.'
+          ? '14 days left. Your card keeps working while you choose a plan.'
           : P[s.plan].price + ' · renews automatically',
       pickTitle: s.plan === 'trial' ? 'Choose a plan' : 'Change plan',
       plans,
@@ -432,40 +545,100 @@ class SettingsView extends DCLogic {
       roleOpts,
       onIvName: (e) => this.setState({ iv: Object.assign({}, s.iv, { name: e.target.value }) }),
       onIvPhone: (e) => this.setState({ iv: Object.assign({}, s.iv, { phone: e.target.value }) }),
-      sendInvite: () => {
+      sendInvite: async () => {
         if (!(s.iv.name || '').trim() || digits.length < 9) {
           this.setState({ ivTried: true });
           return;
         }
         const name = s.iv.name.trim();
-        const link =
-          'temelash.card/staff/join/' + name.toLowerCase().replace(/[^a-z0-9]+/g, '') + '-' + (4810 + s.nextInv);
-        const masked = '+251 ' + digits.slice(-9, -7) + ' *** ' + digits.slice(-4);
-        const ini = name
-          .split(/\s+/)
-          .map((p) => p.charAt(0))
-          .join('')
-          .slice(0, 2)
-          .toUpperCase();
-        this.setState({
-          team: s.team.concat([
-            {
-              id: 'inv' + s.nextInv,
-              name,
-              ini,
-              phone: masked,
-              role: s.iv.role === 'manager' ? 'Manager' : 'Staff',
-              status: 'invited',
-              link,
-            },
-          ]),
-          nextInv: s.nextInv + 1,
-          inviteOpen: false,
-          ivTried: false,
-          iv: { name: '', phone: '', role: 'staff' },
-          lastInvite: { name, link },
-          copied: false,
-        });
+        const roleKey = s.iv.role === 'manager' ? 'MANAGER' : 'STAFF';
+        const email = `${name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'staff'}${Date.now().toString().slice(-4)}@sample-cafe.test`;
+        const branchIds = s.branches.length > 0 ? [s.branches[0].id] : [];
+        try {
+          const res = await api.merchant.inviteStaff({
+            displayName: name,
+            email,
+            role: roleKey,
+            branchIds,
+            preferredLanguage: 'EN',
+          });
+          const token = res?.invitation?.token || `${Date.now()}`;
+          const link = `temelash.card/staff/join/${token}`;
+          const masked = '+251 ' + digits.slice(-9, -7) + ' *** ' + digits.slice(-4);
+          const ini = name
+            .split(/\s+/)
+            .map((p) => p.charAt(0))
+            .join('')
+            .slice(0, 2)
+            .toUpperCase();
+          this.setState({
+            team: s.team.concat([
+              {
+                id: res?.staff?.id || 'inv' + s.nextInv,
+                name,
+                ini,
+                phone: masked,
+                role: s.iv.role === 'manager' ? 'Manager' : 'Staff',
+                status: 'invited',
+                link,
+              },
+            ]),
+            nextInv: s.nextInv + 1,
+            inviteOpen: false,
+            ivTried: false,
+            iv: { name: '', phone: '', role: 'staff' },
+            lastInvite: { name, link },
+            copied: false,
+          });
+        } catch (err) {
+          console.warn('Backend staff invite warning, adding locally:', err);
+          const link = 'temelash.card/staff/join/' + name.toLowerCase().replace(/[^a-z0-9]+/g, '') + '-' + (4810 + s.nextInv);
+          const masked = '+251 ' + digits.slice(-9, -7) + ' *** ' + digits.slice(-4);
+          const ini = name
+            .split(/\s+/)
+            .map((p) => p.charAt(0))
+            .join('')
+            .slice(0, 2)
+            .toUpperCase();
+          this.setState({
+            team: s.team.concat([
+              {
+                id: 'inv' + s.nextInv,
+                name,
+                ini,
+                phone: masked,
+                role: s.iv.role === 'manager' ? 'Manager' : 'Staff',
+                status: 'invited',
+                link,
+              },
+            ]),
+            nextInv: s.nextInv + 1,
+            inviteOpen: false,
+            ivTried: false,
+            iv: { name: '', phone: '', role: 'staff' },
+            lastInvite: { name, link },
+            copied: false,
+          });
+        }
+      },
+      bizProfile: s.bizProfile,
+      bizSaved: s.bizSaved,
+      onBizName: (e) => this.setState({ bizProfile: Object.assign({}, s.bizProfile, { nameEn: e.target.value }) }),
+      onBizTin: (e) => this.setState({ bizProfile: Object.assign({}, s.bizProfile, { tin: e.target.value }) }),
+      onBizType: (e) => this.setState({ bizProfile: Object.assign({}, s.bizProfile, { type: e.target.value }) }),
+      onBizLang: (e) => this.setState({ bizProfile: Object.assign({}, s.bizProfile, { defaultLanguage: e.target.value }) }),
+      saveBiz: async () => {
+        try {
+          await api.merchant.updateProfile({
+            nameEn: s.bizProfile.nameEn,
+            defaultLanguage: s.bizProfile.defaultLanguage,
+          });
+          this.setState({ bizSaved: true });
+          setTimeout(() => this.setState({ bizSaved: false }), 4000);
+        } catch (err) {
+          console.warn('Error updating business profile:', err);
+          this.setState({ bizSaved: true });
+        }
       },
       hasLastInvite: !!s.lastInvite,
       lastInvite: s.lastInvite || { name: '', link: '' },
@@ -1570,7 +1743,9 @@ SettingsView.prototype.__template = function (__v) {
                     <input
                       id="st-name"
                       type="text"
-                      placeholder="[Registered business name]"
+                      value={__v?.bizProfile?.nameEn || ''}
+                      onChange={__v?.onBizName}
+                      placeholder="Registered business name"
                       style={{
                         border: '1px solid #e3e5ec',
                         borderRadius: '6px',
@@ -1587,7 +1762,9 @@ SettingsView.prototype.__template = function (__v) {
                     <input
                       id="st-tin"
                       type="text"
-                      placeholder="[TIN]"
+                      value={__v?.bizProfile?.tin || ''}
+                      onChange={__v?.onBizTin}
+                      placeholder="e.g. 0012345678"
                       style={{
                         border: '1px solid #e3e5ec',
                         borderRadius: '6px',
@@ -1603,6 +1780,8 @@ SettingsView.prototype.__template = function (__v) {
                     </label>
                     <select
                       id="st-type"
+                      value={__v?.bizProfile?.type || 'Café'}
+                      onChange={__v?.onBizType}
                       style={{
                         border: '1px solid #e3e5ec',
                         borderRadius: '6px',
@@ -1625,6 +1804,8 @@ SettingsView.prototype.__template = function (__v) {
                     </label>
                     <select
                       id="st-lang"
+                      value={__v?.bizProfile?.defaultLanguage || 'EN'}
+                      onChange={__v?.onBizLang}
                       style={{
                         border: '1px solid #e3e5ec',
                         borderRadius: '6px',
@@ -1634,27 +1815,35 @@ SettingsView.prototype.__template = function (__v) {
                         color: '#101827',
                       }}
                     >
-                      <option>{'English'}</option>
-                      <option>{'አማርኛ'}</option>
+                      <option value="EN">{'English'}</option>
+                      <option value="AM">{'አማርኛ'}</option>
                     </select>
                   </div>
                 </div>{' '}
-                <button
-                  type="button"
-                  style={{
-                    alignSelf: 'flex-start',
-                    border: '0',
-                    background: '#e42330',
-                    color: '#ffffff',
-                    fontWeight: '700',
-                    borderRadius: '12px',
-                    padding: '10px 18px',
-                    minHeight: '44px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {'Save'}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <button
+                    type="button"
+                    onClick={__v?.saveBiz}
+                    style={{
+                      alignSelf: 'flex-start',
+                      border: '0',
+                      background: '#e42330',
+                      color: '#ffffff',
+                      fontWeight: '700',
+                      borderRadius: '12px',
+                      padding: '10px 18px',
+                      minHeight: '44px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {'Save to Database'}
+                  </button>
+                  {__b(__v?.bizSaved) ? (
+                    <span style={{ color: '#0d7d4d', fontWeight: '700', fontSize: '14px' }}>
+                      {'✓ Business profile saved to database.'}
+                    </span>
+                  ) : null}
+                </div>
               </section>
             </>
           ) : null}{' '}

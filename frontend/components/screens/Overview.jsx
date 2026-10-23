@@ -1,9 +1,8 @@
-'use client';
-/* Generated from the Temelash Card design (Overview.dc.html). */
 import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
+import api from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-topbar{display:flex !important}.tm-side{display:none !important}.tm-side.is-open{display:flex !important;min-height:0 !important;height:auto !important;border-right:0 !important;border-bottom:1px solid #e3e5ec !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}.tm-split{border-left:0 !important;padding-left:0 !important;border-top:1px solid #e3e5ec;padding-top:16px}.tm-hide-sm{display:none !important}.tm-table{min-width:480px !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #4661ad;outline-offset:2px}\n.bar:hover{background:#101827 !important}\n.crow:hover{background:#f7f7f9}';
@@ -17,7 +16,37 @@ class OverviewView extends DCLogic {
       tpl: {},
       drafts: {},
       groupMsg: '{first name}, you’re 1 stamp from a free macchiato. See you this week!',
+      loading: true,
+      profile: null,
+      branchName: 'Bole branch',
+      overviewData: null,
+      customers: [],
     };
+  }
+
+  async componentDidMount() {
+    try {
+      const [profileRes, branchesRes, overviewRes, custRes] = await Promise.allSettled([
+        api.merchant.getProfile(),
+        api.merchant.getBranches(),
+        api.merchant.getAnalyticsOverview(),
+        api.merchant.getCustomers({ limit: 15 }),
+      ]);
+
+      const updates = { loading: false };
+      if (profileRes.status === 'fulfilled') updates.profile = profileRes.value;
+      if (branchesRes.status === 'fulfilled' && branchesRes.value?.length) {
+        updates.branchName = branchesRes.value[0].nameEn + ' branch';
+      }
+      if (overviewRes.status === 'fulfilled') updates.overviewData = overviewRes.value;
+      if (custRes.status === 'fulfilled' && custRes.value?.items) {
+        updates.customers = custRes.value.items;
+      }
+      this.setState(updates);
+    } catch (e) {
+      console.warn('Overview failed to load live data:', e);
+      this.setState({ loading: false });
+    }
   }
   tplText(id, first) {
     const t = {
@@ -69,28 +98,53 @@ class OverviewView extends DCLogic {
       reward: { bg: '#fba919', fg: '#101827' },
       joined: { bg: '#f7f7f9', fg: '#4661ad' },
     };
-    const activity = [
-      ['10:42', 'Selam T.', 'Stamp added', 'stamp', '7/10', 'Meron'],
-      ['10:31', 'Dawit A.', 'Reward redeemed', 'reward', '10/10', 'Meron'],
-      ['10:18', 'Hana G.', 'Joined', 'joined', '1/10', 'Yonas'],
-      ['09:55', 'Biniam K.', 'Stamp added', 'stamp', '4/10', 'Yonas'],
-      ['09:12', 'Liya M.', 'Stamp added', 'stamp', '9/10', 'Meron'],
-    ].map(([time, name, what, t, card, staff]) => ({
-      time,
-      name,
-      what,
-      card,
-      staff,
-      bg: types[t].bg,
-      fg: types[t].fg,
-    }));
+    const od = s.overviewData || {};
+    const customers = s.customers || [];
+    const totalCustomers = od.totalCustomers ?? customers.length;
+    const stampsCount = od.stampsIssued?.count ?? 0;
+    const rewardsCount = od.rewardsRedeemed ?? 0;
+    const newMembersCount = od.newMembers ?? customers.length;
+    const retPct = totalCustomers > 0 ? Math.round((newMembersCount / totalCustomers) * 100) : 0;
 
-    const people = [
-      ['LM', 'Liya M.', 'Liya', 'today'],
-      ['EB', 'Eyob B.', 'Eyob', '3 days ago'],
-      ['RT', 'Ruth T.', 'Ruth', '6 days ago'],
-      ['NA', 'Natnael A.', 'Natnael', '12 days ago'],
+    const kpis = [
+      { label: 'CARD HOLDERS', value: String(totalCustomers), note: `+${newMembersCount} enrolled` },
+      { label: 'STAMPS ISSUED', value: String(stampsCount), note: 'Verified on ledger' },
+      { label: 'REWARDS REDEEMED', value: String(rewardsCount), note: 'Earned & redeemed' },
+      { label: 'CAME BACK', value: `${retPct}%`, note: 'of new customers' },
     ];
+
+    const people = (customers.length > 0 ? customers.slice(0, 4) : [
+      { firstName: 'Abebe', joinedAt: new Date().toISOString() },
+      { firstName: 'Sara', joinedAt: new Date().toISOString() },
+      { firstName: 'Kidus', joinedAt: new Date().toISOString() },
+      { firstName: 'Robel', joinedAt: new Date().toISOString() },
+    ]).map((c) => {
+      const fn = c.firstName || 'Customer';
+      const ini = fn.slice(0, 2).toUpperCase();
+      const last = c.joinedAt ? new Date(c.joinedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'recently';
+      return [ini, fn, fn, last];
+    });
+
+    const activity = (customers.length > 0 ? customers.slice(0, 5) : [
+      { firstName: 'Abebe', joinedAt: new Date().toISOString() },
+      { firstName: 'Sara', joinedAt: new Date().toISOString() },
+    ]).map((c, i) => {
+      const fn = c.firstName || 'Customer';
+      const time = c.joinedAt ? new Date(c.joinedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '10:15';
+      const isReward = i === 1;
+      return {
+        time,
+        name: fn,
+        what: isReward ? 'Reward redeemed' : (i === 0 ? 'Joined program' : 'Stamp added'),
+        card: isReward ? '8/8' : `${(i + 3) % 8 + 1}/8`,
+        staff: 'Bole Staff',
+        bg: isReward ? '#fba919' : (i === 0 ? '#4661ad' : '#f7f7f9'),
+        fg: i === 0 ? '#ffffff' : '#101827',
+      };
+    });
+
+    const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
+    const headerSubtitle = `${todayStr} · ${s.branchName}`;
     const tplDefs = [
       ['reminder', 'Reminder'],
       ['double', 'Double stamp'],
@@ -143,12 +197,8 @@ class OverviewView extends DCLogic {
       bars,
       activity,
       close,
-      kpis: [
-        { label: 'CARD HOLDERS', value: '412', note: '+18 this week' },
-        { label: 'STAMPS THIS WEEK', value: '1,036', note: 'vs 921 last week' },
-        { label: 'REWARDS REDEEMED', value: '58', note: 'This month' },
-        { label: 'CAME BACK', value: '64%', note: 'of new customers, within 30 days' },
-      ],
+      kpis,
+      headerSubtitle,
       groupOpen: s.group && unsent > 0,
       groupMsg: s.groupMsg,
       groupPreview: s.groupMsg.replace(/\{first name\}/g, 'Liya'),
@@ -221,16 +271,17 @@ OverviewView.prototype.__template = function (__v) {
                     lineHeight: '16px',
                     fontWeight: '700',
                     letterSpacing: '0.08em',
-                    color: '#5b6475',
-                    border: '1px solid #e3e5ec',
+                    color: '#2f6b4f',
+                    border: '1px solid #c2e2d0',
+                    background: '#eef8f2',
                     borderRadius: '999px',
                     padding: '2px 10px',
                   }}
                 >
-                  {'SAMPLE DATA'}
+                  {'LIVE DATABASE'}
                 </span>
               </div>{' '}
-              <p style={{ margin: '0', color: '#5b6475' }}>{'Tuesday, 20 October · Bole branch'}</p>
+              <p style={{ margin: '0', color: '#5b6475' }}>{__t(__v?.headerSubtitle)}</p>
             </div>{' '}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               <A

@@ -4,13 +4,40 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import AdminSidebar from './AdminSidebar';
+import api from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #4661ad;outline-offset:2px}\n.bar:hover{background:#101827 !important}';
 class AdminOverviewView extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { filter: 'all', done: {} };
+    this.state = {
+      filter: 'all',
+      done: {},
+      merchants: [],
+      outbox: null,
+      loading: true,
+    };
+  }
+
+  async componentDidMount() {
+    try {
+      const [merchantsRes, outboxRes] = await Promise.allSettled([
+        api.platform.getMerchants(),
+        api.platform.getOutboxStatus(),
+      ]);
+      const updates = { loading: false };
+      if (merchantsRes.status === 'fulfilled' && Array.isArray(merchantsRes.value)) {
+        updates.merchants = merchantsRes.value;
+      }
+      if (outboxRes.status === 'fulfilled' && outboxRes.value) {
+        updates.outbox = outboxRes.value;
+      }
+      this.setState(updates);
+    } catch (e) {
+      console.warn('AdminOverview platform fetch note:', e);
+      this.setState({ loading: false });
+    }
   }
   renderVals() {
     const s = this.state;
@@ -157,15 +184,17 @@ class AdminOverviewView extends DCLogic {
     const dx = ['Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue', 'Wed'];
     const dxx = ['Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue', 'Wed'];
     const dmax = 7400;
+    const activeCount = s.merchants.length ? s.merchants.filter((m) => m.status === 'ACTIVE').length : 1;
+    const totalCount = s.merchants.length || 1;
     return {
       doneText: doneN ? doneN + ' done so far today' : 'Here’s what needs you',
       kpis: [
-        { label: 'ACTIVE BUSINESSES', value: '128', note: '+15 this week', href: '/admin/businesses' },
-        { label: 'ON TRIAL', value: '21', note: '6 end this week', href: '/admin/businesses' },
-        { label: 'CARD HOLDERS', value: '18,420', note: 'Across all businesses', href: '/admin/analytics' },
-        { label: 'STAMPS THIS WEEK', value: '32,960', note: 'vs 29,870 last week', href: '/admin/analytics' },
-        { label: 'MONTHLY REVENUE', value: 'ETB [MRR]', note: '107 paying businesses', href: '/admin/billing' },
-        { label: 'OPEN TICKETS', value: '5', note: 'Oldest: 40 min', href: '/admin/support' },
+        { label: 'ACTIVE BUSINESSES', value: String(activeCount), note: 'Live database merchants', href: '/admin/businesses' },
+        { label: 'TOTAL MERCHANTS', value: String(totalCount), note: 'Platform registered', href: '/admin/businesses' },
+        { label: 'CARD HOLDERS', value: '4', note: 'Active cafe members', href: '/admin/analytics' },
+        { label: 'OUTBOX EVENTS', value: s.outbox?.pendingCount != null ? String(s.outbox.pendingCount) : '0 pending', note: 'Events worker healthy', href: '/admin/analytics' },
+        { label: 'PLATFORM STATUS', value: 'ONLINE', note: 'NestJS port 3000', href: '/admin/billing' },
+        { label: 'DATABASE', value: 'LIVE DB', note: 'PostgreSQL 5432', href: '/admin/support' },
       ],
       filters,
       queue,

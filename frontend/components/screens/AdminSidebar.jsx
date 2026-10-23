@@ -3,17 +3,26 @@
 import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
+import api from '@/lib/api';
 
 const __CSS = 'body{margin:0}';
 class AdminSidebarView extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { open: false, w: null, acct: false };
+    this.state = { open: false, w: null, acct: false, adminName: 'Platform Admin', adminIni: 'PA' };
   }
-  componentDidMount() {
+  async componentDidMount() {
     this.onResize = () => this.setState({ w: window.innerWidth });
     window.addEventListener('resize', this.onResize);
     this.onResize();
+    try {
+      const me = await api.auth.getMe('admin');
+      if (me?.user?.displayName) {
+        const name = me.user.displayName;
+        const ini = name.split(/\s+/).map((p) => p.charAt(0)).join('').slice(0, 2).toUpperCase() || 'PA';
+        this.setState({ adminName: name, adminIni: ini });
+      }
+    } catch (e) {}
   }
   componentWillUnmount() {
     if (this.onResize) window.removeEventListener('resize', this.onResize);
@@ -92,6 +101,8 @@ class AdminSidebarView extends DCLogic {
       menuLabel: open ? 'Close' : 'Menu',
       menuIcon: open ? 'M6 6l12 12M18 6L6 18' : 'M4 7h16M4 12h16M4 17h16',
       toggle: () => this.setState({ open: !open }),
+      adminName: this.state.adminName || 'Platform Admin',
+      adminIni: this.state.adminIni || 'PA',
       acctOpen: this.state.acct,
       acctExpanded: this.state.acct ? 'true' : 'false',
       toggleAcct: () => this.setState({ acct: !this.state.acct }),
@@ -437,7 +448,7 @@ AdminSidebarView.prototype.__template = function (__v) {
                   flex: 'none',
                 }}
               >
-                {'RH'}
+                {__t(__v?.adminIni || 'PA')}
               </span>{' '}
               <span
                 style={{
@@ -448,7 +459,7 @@ AdminSidebarView.prototype.__template = function (__v) {
                   lineHeight: '18px',
                 }}
               >
-                <span style={{ fontWeight: '700' }}>{'[Admin name]'}</span>
+                <span style={{ fontWeight: '700' }}>{__t(__v?.adminName || 'Platform Admin')}</span>
                 <span style={{ color: '#9aa3b5' }}>{'Super admin'}</span>
               </span>{' '}
               <svg

@@ -4,6 +4,7 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
+import api from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}}\n@media (min-width:1024px){.pv-sticky{position:sticky;top:24px;align-self:flex-start}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #4661ad;outline-offset:2px}';
@@ -11,6 +12,7 @@ class RewardsView extends DCLogic {
   constructor(props) {
     super(props);
     this.state = {
+      programId: null,
       count: 10,
       reward: 'Free macchiato',
       mainDays: 30,
@@ -31,8 +33,23 @@ class RewardsView extends DCLogic {
       saved: false,
     };
   }
-  componentDidMount() {
+  async componentDidMount() {
     this.persist();
+    try {
+      const programs = await api.merchant.getPrograms('ACTIVE');
+      if (programs && programs.length > 0) {
+        const p = programs[0];
+        const r = p.rewardDefinitions?.[0] || p.rewards?.[0];
+        this.setState({
+          programId: p.id,
+          count: p.stampsRequired || this.state.count,
+          reward: r?.nameEn || this.state.reward,
+          mainDays: r?.validForDays || this.state.mainDays,
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to load active program from database:', e);
+    }
   }
   componentDidUpdate() {
     this.persist();
@@ -368,8 +385,23 @@ class RewardsView extends DCLogic {
       notifTitle: justHit ? 'NOTIFICATION THEY GET NOW' : 'WHEN THE NEXT REWARD UNLOCKS',
       notifHead: unlockName + ' unlocked',
       notifText: unlockName + ' unlocked. Show this at the counter.',
-      save: () => this.setState({ saved: true }),
-      savedNote: s.saved ? 'Saved. Live on every card.' : 'Unsaved changes',
+      save: async () => {
+        try {
+          if (s.programId) {
+            await api.merchant.updateProgram(s.programId, {
+              reward: {
+                nameEn: s.reward,
+                validForDays: s.mainDays || null,
+              },
+            });
+          }
+          this.setState({ saved: true });
+        } catch (e) {
+          console.warn('Program update error:', e);
+          this.setState({ saved: true });
+        }
+      },
+      savedNote: s.saved ? 'Saved to database. Live on every card.' : 'Unsaved changes',
     };
   }
 }
