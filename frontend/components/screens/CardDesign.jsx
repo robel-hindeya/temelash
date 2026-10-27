@@ -5,8 +5,7 @@ import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
 import QRCodeDisplay from '../QRCodeDisplay';
-import ColorPicker from './ColorPicker';
-import api from '@/lib/api';
+import api, { getAppOrigin } from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-topbar{display:flex !important}.tm-side{display:none !important}.tm-side.is-open{display:flex !important;min-height:0 !important;height:auto !important;border-right:0 !important;border-bottom:1px solid #e3e5ec !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}.tm-split{border-left:0 !important;padding-left:0 !important;border-top:1px solid #e3e5ec;padding-top:16px}.tm-hide-sm{display:none !important}.tm-table{min-width:480px !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #4661ad;outline-offset:2px}';
@@ -24,6 +23,8 @@ class CardDesignView extends DCLogic {
       birthday: 'optional',
       cover: false,
       saved: false,
+      copied: false,
+      qrModalOpen: false,
     };
   }
   async componentDidMount() {
@@ -237,39 +238,19 @@ class CardDesignView extends DCLogic {
       cover: !!s.cover,
       noCover: !s.cover,
       addCover: () => this.setState({ cover: true, tab: s.tab === 'join' ? 'web' : s.tab }),
-      removeCover: () => this.setState({ cover: false }),
-      cardUrl: (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001') + '/card',
-      liveQr: (() => {
-        const N = 11,
-          out = [];
-        const finder = (r, c, R, C) => {
-          const y = r - R,
-            x = c - C;
-          if (y < 0 || x < 0 || y > 2 || x > 2) return null;
-          return !(y === 1 && x === 1) || true;
-        };
-        const seed =
-          '1011001011101101001101011100101101010011101011001010111001101001011011100101011010011101010110010110101101001011100';
-        for (let r = 0; r < N; r++)
-          for (let c = 0; c < N; c++) {
-            let on;
-            const inF = (R, C) => r >= R && r < R + 3 && c >= C && c < C + 3;
-            if (inF(0, 0) || inF(0, N - 3) || inF(N - 3, 0)) {
-              const R = r < 3 ? 0 : N - 3,
-                C = c < 3 ? 0 : N - 3;
-              on = !(r === R + 1 && c === C + 1) || true;
-            } else if (
-              (r === 3 && (c < 4 || c > N - 5)) ||
-              (c === 3 && (r < 4 || r > N - 5)) ||
-              (r === N - 4 && c < 4) ||
-              (c === N - 4 && r < 4)
-            )
-              on = false;
-            else on = seed.charAt((r * N + c) % seed.length) === '1';
-            out.push({ c: on ? '#101827' : 'transparent' });
-          }
-        return out;
-      })(),
+      cardUrl: `${getAppOrigin()}/card`,
+      copied: s.copied,
+      copyLink: () => {
+        const url = `${getAppOrigin()}/card`;
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          navigator.clipboard.writeText(url).catch(() => {});
+        }
+        this.setState({ copied: true });
+        setTimeout(() => this.setState({ copied: false }), 2000);
+      },
+      qrModalOpen: s.qrModalOpen,
+      openQrModal: () => this.setState({ qrModalOpen: true }),
+      closeQrModal: () => this.setState({ qrModalOpen: false }),
     };
   }
 }
@@ -945,37 +926,160 @@ CardDesignView.prototype.__template = function (__v) {
               <div
                 style={{
                   alignSelf: 'stretch',
+                  background: '#ffffff',
                   border: '1px solid #e3e5ec',
-                  borderRadius: '12px',
+                  borderRadius: '16px',
                   padding: '16px',
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: '20px',
+                  flexDirection: 'column',
+                  gap: '14px',
+                  boxShadow: '0 4px 12px rgba(16,24,39,0.04)',
                 }}
               >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div
+                    onClick={__v?.openQrModal}
+                    title="Click to enlarge QR code"
+                    role="button"
+                    tabIndex={0}
+                    style={{
+                      width: '96px',
+                      height: '96px',
+                      flex: 'none',
+                      background: '#ffffff',
+                      border: '1px solid #e3e5ec',
+                      borderRadius: '12px',
+                      padding: '8px',
+                      boxSizing: 'border-box',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+                      transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                    }}
+                  >
+                    <QRCodeDisplay value={__v?.cardUrl} size={80} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          color: '#059669',
+                          background: '#ecfdf5',
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          border: '1px solid #a7f3d0',
+                        }}
+                      >
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+                        LIVE USER CARD
+                      </span>
+                    </div>
+                    <strong style={{ fontSize: '16px', color: '#101827', fontWeight: '700' }}>
+                      Try your live customer card
+                    </strong>
+                    <span style={{ fontSize: '13px', color: '#64748b', lineHeight: '18px' }}>
+                      Scan or share with customers to open a new unstamped loyalty card with unique Member ID.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Link URL pill & actions */}
                 <div
-                  role="img"
-                  aria-label="QR code to open your live card on your phone (placeholder)"
                   style={{
-                    width: '112px',
-                    height: '112px',
-                    flex: 'none',
-                    background: '#ffffff',
-                    border: '1px solid #e3e5ec',
-                    borderRadius: '12px',
-                    padding: '12px',
-                    boxSizing: 'border-box',
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(11, minmax(0, 1fr))',
-                    gap: '1px',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '10px',
+                    padding: '8px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '10px',
                   }}
                 >
-                  <QRCodeDisplay value={__v?.cardUrl || "http://localhost:3001/card"} size={64} /></div>{' '}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <strong style={{ fontSize: '17px' }}>{'Try your live card'}</strong>
-                  <span style={{ fontSize: '14px', color: '#5b6475' }}>
-                    {'Scan to open it on your phone and save it to your wallet.'}
-                  </span>
+                  <div
+                    style={{
+                      fontFamily: 'monospace',
+                      fontSize: '12px',
+                      color: '#0f172a',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      flex: 1,
+                      minWidth: 0,
+                    }}
+                    title={__v?.cardUrl}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                    </svg>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {__v?.cardUrl}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      onClick={__v?.copyLink}
+                      style={{
+                        padding: '6px 10px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        borderRadius: '6px',
+                        background: __v?.copied ? '#059669' : '#ffffff',
+                        color: __v?.copied ? '#ffffff' : '#0f172a',
+                        border: __v?.copied ? '1px solid #059669' : '1px solid #cbd5e1',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {__v?.copied ? (
+                        <>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                          Copy
+                        </>
+                      )}
+                    </button>
+                    <a
+                      href={__v?.cardUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        borderRadius: '6px',
+                        background: '#101827',
+                        color: '#ffffff',
+                        textDecoration: 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'opacity 0.15s ease',
+                      }}
+                    >
+                      Open
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
+                    </a>
+                  </div>
                 </div>
               </div>{' '}
               <span
@@ -1813,17 +1917,23 @@ CardDesignView.prototype.__template = function (__v) {
                         </div>{' '}
                         <div
                           role="img"
-                          aria-label="Member QR code placeholder"
+                          aria-label="Member QR code"
                           style={{
                             alignSelf: 'center',
                             width: '96px',
                             height: '96px',
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(11, minmax(0, 1fr))',
-                            gap: '1px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: '#ffffff',
+                            borderRadius: '10px',
+                            padding: '6px',
+                            boxSizing: 'border-box',
+                            border: '1px solid #e3e5ec',
                           }}
                         >
-                          <QRCodeDisplay value={__v?.cardUrl || "http://localhost:3001/card"} size={64} /></div>
+                          <QRCodeDisplay value={__v?.cardUrl} size={84} />
+                        </div>
                       </div>{' '}
                       <div style={{ flex: '1 1 auto' }} />{' '}
                       <span
@@ -1848,6 +1958,132 @@ CardDesignView.prototype.__template = function (__v) {
           </div>
         </main>
       </div>
+      {__v?.qrModalOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={__v?.closeQrModal}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(16,24,39,0.7)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: '20px',
+              padding: '28px',
+              maxWidth: '380px',
+              width: '100%',
+              textAlign: 'center',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '16px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <strong style={{ fontSize: '18px', color: '#101827' }}>Live Customer Card QR</strong>
+              <button
+                type="button"
+                onClick={__v?.closeQrModal}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: '20px',
+                  color: '#64748b',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  lineHeight: 1,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
+              Scan with any mobile camera to open your live customer loyalty card:
+            </p>
+            <div
+              style={{
+                background: '#ffffff',
+                border: '2px solid #e2e8f0',
+                borderRadius: '16px',
+                padding: '16px',
+                display: 'inline-flex',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+              }}
+            >
+              <QRCodeDisplay value={__v?.cardUrl} size={220} />
+            </div>
+            <div
+              style={{
+                width: '100%',
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                color: '#334155',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {__v?.cardUrl}
+            </div>
+            <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+              <button
+                type="button"
+                onClick={__v?.copyLink}
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  background: __v?.copied ? '#059669' : '#ffffff',
+                  color: __v?.copied ? '#ffffff' : '#101827',
+                  border: __v?.copied ? '1px solid #059669' : '1px solid #cbd5e1',
+                  fontWeight: '600',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                }}
+              >
+                {__v?.copied ? '✓ Copied URL' : '📋 Copy URL'}
+              </button>
+              <a
+                href={__v?.cardUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  background: '#101827',
+                  color: '#ffffff',
+                  fontWeight: '600',
+                  fontSize: '13px',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                }}
+              >
+                Open Card ↗
+              </a>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 };

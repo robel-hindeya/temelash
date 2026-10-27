@@ -20,6 +20,8 @@ class WebCardView extends DCLogic {
       error: null,
       walletLoading: false,
       walletMsg: null,
+      memberId: null,
+      token: null,
     };
   }
 
@@ -30,16 +32,23 @@ class WebCardView extends DCLogic {
   async loadCard() {
     try {
       let token = null;
+      let memberId = null;
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
         token = params.get('token') || window.localStorage.getItem('tm-customer-token');
+        memberId = params.get('id') || window.localStorage.getItem('tm-customer-id');
       }
 
-      if (token) {
+      // 1. If we already have a real stored token, try loading the card from the backend
+      if (token && !token.startsWith('DEMO-')) {
         try {
           const card = await api.public.getWebCard(token);
           if (card) {
-            this.setState({ card, token, loading: false, error: null });
+            if (!memberId) {
+              memberId = card.customer?.id || ('TC-' + Math.abs(token.split('').reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0)).toString().slice(-8).padStart(8, '0').replace(/(\d{4})(\d{4})/, '$1-$2'));
+              if (typeof window !== 'undefined') window.localStorage.setItem('tm-customer-id', memberId);
+            }
+            this.setState({ card, token, memberId, loading: false, error: null });
             return;
           }
         } catch (err) {
@@ -47,67 +56,110 @@ class WebCardView extends DCLogic {
         }
       }
 
-      // Try fetching a customer from DB or enroll a real test card
+      // 2. Assign unique ID for new user if not already set
+      if (!memberId) {
+        const rndA = Math.floor(1000 + Math.random() * 9000);
+        const rndB = Math.floor(1000 + Math.random() * 9000);
+        memberId = `TC-${rndA}-${rndB}`;
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('tm-customer-id', memberId);
+        }
+      }
+
+      // Determine active merchant / program slug
+      let joinSlug = 'sample-cafe';
       try {
-        const custs = await api.merchant.getCustomers({ limit: 1 });
-        if (custs?.items?.length > 0 && custs.items[0]?.memberships?.length > 0) {
-          // If we have enrolled token saved in localStorage, use it
-          const savedTok = window.localStorage?.getItem('tm-customer-token');
-          if (savedTok) {
-            const card = await api.public.getWebCard(savedTok);
-            if (card) {
-              this.setState({ card, token: savedTok, loading: false });
-              return;
-            }
-          }
+        if (typeof window !== 'undefined') {
+          const params = new URLSearchParams(window.location.search);
+          const pSlug = params.get('slug') || params.get('merchant');
+          if (pSlug) joinSlug = pSlug;
         }
       } catch (e) {}
 
-      // If no valid card token or getWebCard failed, try joinInfo for preview
+      // Attempt to auto-enroll new user in the database so staff scanner can validate and stamp real membership
+      let enrolledToken = token;
+      let joinInfo = null;
       try {
-        const joinInfo = await api.public.getJoinInfo('sample-cafe');
-        if (joinInfo) {
-          const prog = joinInfo.program || {};
-          const merch = joinInfo.merchant || {};
-          const rw = prog.rewards && prog.rewards[0] ? prog.rewards[0] : null;
-          this.setState({
-            card: {
-              merchant: { nameEn: merch.nameEn || 'Sample Cafe', nameAm: merch.nameAm || 'ሳምፕል ካፌ' },
-              program: {
-                nameEn: prog.nameEn || 'Coffee Stamp Card',
-                nameAm: prog.nameAm || 'የቡና ማህተም ካርድ',
-                brandColor: prog.brandColor || '#8a4b2a',
-                termsEn: prog.termsEn || 'One stamp per visit. Valid 30 days.',
-                termsAm: prog.termsAm || 'በአንድ ጉብኝት አንድ ማህተም።',
-              },
-              customer: { firstName: 'Loyalty Member', preferredLanguage: 'EN' },
-              progress: {
-                current: 7,
-                required: prog.stampsRequired || 10,
-                remaining: Math.max(0, (prog.stampsRequired || 10) - 7),
-                completedCards: 0,
-              },
-              rewardsAvailable: 0,
-              reward: rw
-                ? {
-                    nameEn: rw.nameEn || rw.name || 'Free macchiato',
-                    nameAm: rw.nameAm || 'ነፃ ማኪያቶ',
-                    descriptionEn: rw.descriptionEn || 'Free drink at completed card',
-                    descriptionAm: rw.descriptionAm || '',
-                  }
-                : { nameEn: 'Free macchiato', nameAm: 'ነፃ ማኪያቶ' },
-              barcode: 'DEMO-MEMBER-CARD',
-              status: 'ACTIVE',
-            },
-            loading: false,
+        joinInfo = await api.public.getJoinInfo(joinSlug).catch(() => null);
+      } catch (e) {}
+
+      if (!enrolledToken || enrolledToken.startsWith('DEMO-')) {
+        try {
+          const rndPhone = '+2519' + Math.floor(10000000 + Math.random() * 90000000);
+          const rndEmail = 'member_' + Date.now().toString().slice(-6) + '@customer.temelash.et';
+          const enrollRes = await api.public.enroll(joinSlug, {
+            firstName: 'Member ' + memberId.slice(-4),
+            phone: rndPhone,
+            email: rndEmail,
+            acceptTerms: true,
+            preferredLanguage: 'EN',
+            marketingConsent: true,
           });
-          return;
+          if (enrollRes?.card?.token) {
+            enrolledToken = enrollRes.card.token;
+            if (typeof window !== 'undefined') {
+              window.localStorage.setItem('tm-customer-token', enrolledToken);
+            }
+          }
+        } catch (enrollErr) {
+          console.warn('Auto-enrollment fallback:', enrollErr);
         }
-      } catch (e) {
-        console.warn('Join info fetch fallback:', e);
       }
 
-      this.setState({ loading: false });
+      // If enrolled token exists, fetch live web card
+      if (enrolledToken && !enrolledToken.startsWith('DEMO-')) {
+        try {
+          const card = await api.public.getWebCard(enrolledToken);
+          if (card) {
+            this.setState({ card, token: enrolledToken, memberId, loading: false, error: null });
+            return;
+          }
+        } catch (e) {}
+      }
+
+      // 3. Fallback: Fresh unstamped card with 0 STAMPS (never 7 stamps!)
+      const prog = joinInfo?.program || {};
+      const merch = joinInfo?.merchant || {};
+      const rw = prog.rewards && prog.rewards[0] ? prog.rewards[0] : null;
+      const stampsReq = prog.stampsRequired || 10;
+      const fallbackToken = enrolledToken || ('tc_card_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Date.now().toString(36));
+      if (typeof window !== 'undefined' && !enrolledToken) {
+        window.localStorage.setItem('tm-customer-token', fallbackToken);
+      }
+
+      this.setState({
+        card: {
+          merchant: { nameEn: merch.nameEn || 'Sample Cafe', nameAm: merch.nameAm || 'ሳምፕል ካፌ' },
+          program: {
+            nameEn: prog.nameEn || 'Coffee Stamp Card',
+            nameAm: prog.nameAm || 'የቡና ማህተም ካርድ',
+            brandColor: prog.brandColor || '#8a4b2a',
+            termsEn: prog.termsEn || 'One stamp per visit. Valid 30 days.',
+            termsAm: prog.termsAm || 'በአንድ ጉብኝት አንድ ማህተም።',
+          },
+          customer: { firstName: 'Member ' + memberId.slice(-4), preferredLanguage: 'EN', id: memberId },
+          progress: {
+            current: 0, // NEW USER CARD: ALWAYS 0 STAMPS!
+            required: stampsReq,
+            remaining: stampsReq,
+            completedCards: 0,
+          },
+          rewardsAvailable: 0,
+          reward: rw
+            ? {
+                nameEn: rw.nameEn || rw.name || 'Free macchiato',
+                nameAm: rw.nameAm || 'ነፃ ማኪያቶ',
+                descriptionEn: rw.descriptionEn || 'Free drink at completed card',
+                descriptionAm: rw.descriptionAm || '',
+              }
+            : { nameEn: 'Free macchiato', nameAm: 'ነፃ ማኪያቶ' },
+          barcode: fallbackToken,
+          status: 'ACTIVE',
+        },
+        token: fallbackToken,
+        memberId,
+        loading: false,
+      });
     } catch (e) {
       console.error('Failed to load card:', e);
       this.setState({ loading: false, error: e.message });
@@ -155,7 +207,7 @@ class WebCardView extends DCLogic {
   renderVals() {
     const card = this.state.card;
     const maxStamps = card?.progress?.required ?? 10;
-    const n = Math.max(0, Math.min(maxStamps, card?.progress?.current ?? (this.props.stamps ?? 7)));
+    const n = Math.max(0, Math.min(maxStamps, card?.progress?.current ?? (this.props.stamps ?? 0)));
     const unlocked = n >= maxStamps || (card?.rewardsAvailable ?? 0) > 0;
     const brandColor = card?.program?.brandColor || '#8a4b2a';
     const slots = [];
@@ -177,6 +229,8 @@ class WebCardView extends DCLogic {
       ? card?.reward?.nameAm || card?.reward?.nameEn || 'ነፃ ማኪያቶ'
       : card?.reward?.nameEn || 'free macchiato';
 
+    const memberId = this.state.memberId || (typeof window !== 'undefined' ? window.localStorage.getItem('tm-customer-id') : null) || 'TC-NEW-MEMBER';
+
     const T = am
       ? {
           stamps: 'ማህተሞች',
@@ -187,7 +241,9 @@ class WebCardView extends DCLogic {
           google: 'ወደ Google Wallet ያክሉ',
           banner: unlocked
             ? `${rewardName} ተከፍቷል። ለካውንተሩ ያሳዩ።`
-            : `ለ${rewardName} ${left} ጉብኝት ቀርቷል`,
+            : n === 0
+              ? `ለ${rewardName} ${maxStamps} ጉብኝት ቀርቷል · ለ1ኛ ማህተም ለካውንተሩ ያሳዩ`
+              : `ለ${rewardName} ${left} ጉብኝት ቀርቷል`,
         }
       : {
           stamps: 'STAMPS',
@@ -198,7 +254,9 @@ class WebCardView extends DCLogic {
           google: 'Add to Google Wallet',
           banner: unlocked
             ? `${rewardName} unlocked. Show this at the counter.`
-            : `${left} more ${left === 1 ? 'visit' : 'visits'} to a ${rewardName}`,
+            : n === 0
+              ? `${maxStamps} visits to a ${rewardName} · Show at counter for 1st stamp`
+              : `${left} more ${left === 1 ? 'visit' : 'visits'} to a ${rewardName}`,
         };
 
     const businessName = am
@@ -213,8 +271,8 @@ class WebCardView extends DCLogic {
     const pattern = '111101111100101001101101101111101111000010000101110110010010000101111101011100101';
     const qr = pattern.split('').map((c) => ({ c: c === '1' ? '#101827' : 'transparent' }));
 
-    const firstName = card?.customer?.firstName || 'Loyalty Member';
-    const memberLabel = am ? `አባል · ${firstName}` : `Member · ${firstName}`;
+    const firstName = card?.customer?.firstName || 'Member';
+    const memberLabel = am ? `አባል · ${memberId}` : `Member · ${memberId}`;
 
     const barcodeValue = card?.barcode || this.state.token || 'A25rOmsw_h-cQ1DEXRuJ5pfuSstxAq7l_0pwMJtnZqo';
 
@@ -222,6 +280,7 @@ class WebCardView extends DCLogic {
       slots,
       qr,
       cardToken: barcodeValue,
+      memberId,
       t: T,
       countLabel: `${n}/${maxStamps}`,
       banner: T.banner,
@@ -256,7 +315,7 @@ class WebCardView extends DCLogic {
   }
 }
 
-WebCardView.defaultProps = { stamps: 7 };
+WebCardView.defaultProps = { stamps: 0 };
 WebCardView.prototype.__template = function (__v) {
   return (
     <>
@@ -526,7 +585,7 @@ WebCardView.prototype.__template = function (__v) {
                   }}
                 >{`${__t(__v?.t?.last)}`}</span>
                 <span style={{ fontWeight: '700', fontSize: '17px', fontVariantNumeric: 'tabular-nums' }}>
-                  {'Recent visit'}
+                  {card?.progress?.current > 0 ? 'Recent visit' : 'New member'}
                 </span>
               </div>
             </div>{' '}
@@ -557,26 +616,27 @@ WebCardView.prototype.__template = function (__v) {
               <span
                 style={{ fontSize: '14px', color: '#5b6475', fontFamily: `${__t(__v?.font)}` }}
               >{`${__t(__v?.t?.show)}`}</span>{' '}
-              <span style={{ fontSize: '13px', color: '#5b6475', fontVariantNumeric: 'tabular-nums' }}>
+              <span style={{ fontSize: '13px', fontWeight: '700', color: '#101827', fontVariantNumeric: 'tabular-nums' }}>
                 {`${__t(__v?.memberLabel)}`}
               </span>
               <span
                 style={{
                   fontSize: '11px',
-                  color: '#9ca3af',
+                  color: '#64748b',
                   letterSpacing: '0.04em',
                   fontFamily: 'monospace',
                   background: '#f1f5f9',
-                  padding: '2px 8px',
+                  padding: '3px 10px',
                   borderRadius: '6px',
-                  maxWidth: '220px',
+                  border: '1px solid #e2e8f0',
+                  maxWidth: '260px',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                 }}
                 title={__v?.cardToken}
               >
-                {__v?.cardToken}
+                Card ID: {__v?.memberId || __v?.cardToken}
               </span>
             </div>{' '}
             <div
