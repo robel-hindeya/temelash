@@ -736,6 +736,99 @@ export function getMerchantLoyaltyCard(cardId) {
   return cards.find((c) => c.id === cardId) || null;
 }
 
+let _memoryStamps = {};
+
+function getStampStorageKeys(cardId, userId) {
+  const keys = [];
+  if (cardId && userId) keys.push(`tm-stamps-${cardId}-${userId}`);
+  if (userId) keys.push(`tm-stamps-${userId}`);
+  if (cardId) keys.push(`tm-stamps-${cardId}`);
+  return keys;
+}
+
+/**
+ * Get current recorded stamp count for a user and loyalty card
+ */
+export function getUserCardStamps(cardId, userId) {
+  if (typeof window === 'undefined') {
+    const key = cardId && userId ? `${cardId}-${userId}` : cardId || userId || 'default';
+    return _memoryStamps[key] || 0;
+  }
+  try {
+    const keys = getStampStorageKeys(cardId, userId);
+    for (const k of keys) {
+      const val = window.localStorage.getItem(k);
+      if (val !== null && val !== undefined) {
+        const num = parseInt(val, 10);
+        if (!isNaN(num) && num >= 0) return num;
+      }
+    }
+  } catch {}
+  return 0;
+}
+
+/**
+ * Record stamps added by staff scanner for a user's loyalty card
+ */
+export function recordCardStamp({ cardId, userId, cardToken, count = 1, maxStamps = 10 }) {
+  const addCount = Math.max(1, Number(count) || 1);
+  const cur = getUserCardStamps(cardId, userId || cardToken);
+  const newTotal = cur + addCount;
+
+  const memKey = cardId && (userId || cardToken) ? `${cardId}-${userId || cardToken}` : cardId || userId || cardToken || 'default';
+  _memoryStamps[memKey] = newTotal;
+
+  if (typeof window !== 'undefined') {
+    try {
+      const keys = getStampStorageKeys(cardId, userId || cardToken);
+      if (cardToken && !keys.includes(`tm-stamps-${cardToken}`)) {
+        keys.push(`tm-stamps-${cardToken}`);
+      }
+      keys.forEach((k) => {
+        window.localStorage.setItem(k, String(newTotal));
+      });
+      window.localStorage.setItem('tm-last-stamp-time', String(Date.now()));
+
+      window.dispatchEvent(
+        new CustomEvent('teme-card-stamp-updated', {
+          detail: {
+            cardId,
+            userId: userId || cardToken,
+            cardToken,
+            count: addCount,
+            newStamps: newTotal,
+            maxStamps,
+          },
+        })
+      );
+    } catch {}
+  }
+  return newTotal;
+}
+
+/**
+ * Reset stamps upon reward redemption
+ */
+export function resetUserCardStamps(cardId, userId) {
+  const memKey = cardId && userId ? `${cardId}-${userId}` : cardId || userId || 'default';
+  _memoryStamps[memKey] = 0;
+
+  if (typeof window !== 'undefined') {
+    try {
+      const keys = getStampStorageKeys(cardId, userId);
+      keys.forEach((k) => {
+        window.localStorage.setItem(k, '0');
+      });
+      window.dispatchEvent(
+        new CustomEvent('teme-card-stamp-updated', {
+          detail: { cardId, userId, count: 0, newStamps: 0 },
+        })
+      );
+    } catch {}
+  }
+  return 0;
+}
+
 export default api;
 
 

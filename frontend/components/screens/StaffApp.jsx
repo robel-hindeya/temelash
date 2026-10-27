@@ -1,7 +1,13 @@
 import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
-import api, { getMerchantLoyaltyCard, getMerchantLoyaltyCards } from '@/lib/api';
+import api, {
+  getMerchantLoyaltyCard,
+  getMerchantLoyaltyCards,
+  getUserCardStamps,
+  recordCardStamp,
+  resetUserCardStamps,
+} from '@/lib/api';
 import jsQR from 'jsqr';
 
 const __CSS = `
@@ -134,6 +140,7 @@ class StaffAppView extends DCLogic {
       torchOn: false,
       torchSupported: false,
       scannedSuccess: false,
+      stampCounter: 1,
     };
 
     this.videoEl = null;
@@ -144,6 +151,18 @@ class StaffAppView extends DCLogic {
     this.isProcessingScan = false;
     this.barcodeDetector = null;
   }
+
+  incStampCounter = () => {
+    this.setState((prev) => ({ stampCounter: Math.min((prev.stampCounter || 1) + 1, 10) }));
+  };
+
+  decStampCounter = () => {
+    this.setState((prev) => ({ stampCounter: Math.max((prev.stampCounter || 1) - 1, 1) }));
+  };
+
+  setStampCounter = (amt) => {
+    this.setState({ stampCounter: Math.max(1, Math.min(Number(amt) || 1, 10)) });
+  };
 
   async componentDidMount() {
     if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
@@ -516,11 +535,13 @@ class StaffAppView extends DCLogic {
       return;
     }
     this.setState({ scanError: '' });
+    const loyaltyCard = getMerchantLoyaltyCard(token);
+    const localSt = getUserCardStamps(loyaltyCard?.id || token, token);
     try {
       const res = await api.scanner.validate({ cardToken: token });
-      const current = res.progress?.current ?? 0;
-      const required = res.progress?.required ?? 10;
-      const custName = res.customer?.firstName || 'Customer';
+      const current = Math.max(res.progress?.current ?? 0, localSt);
+      const required = loyaltyCard?.stampsRequired || res.progress?.required || 10;
+      const custName = res.customer?.firstName || (loyaltyCard ? loyaltyCard.name : 'Customer');
       const isCooldown = res.outcome === 'REJECTED' && res.reason === 'COOLDOWN_ACTIVE';
 
       this.stopCamera();
@@ -530,30 +551,31 @@ class StaffAppView extends DCLogic {
           name: custName,
           initials: (custName || 'CU').slice(0, 2).toUpperCase(),
           phone: res.customer?.phone || '',
-          visits: current,
+          visits: current || 1,
           lastVisit: 'Today',
           stamps: current,
           maxStamps: required,
-          rewardTitle: this.state.rewardTitle || 'Free macchiato',
+          rewardTitle: loyaltyCard?.rewardName || this.state.rewardTitle || 'Free macchiato',
           cardToken: token,
+          cardId: loyaltyCard?.id || token,
           cooldownNotice: isCooldown ? res.message?.en || 'Cooldown active: stamp already recorded recently.' : null,
         },
         screen: 'customer',
+        stampCounter: 1,
         scanError: isCooldown ? '' : (res.outcome === 'REJECTED' ? (res.message?.en || res.reason) : ''),
       });
     } catch (err) {
       if (token && token.length >= 10) {
         this.stopCamera();
-        const loyaltyCard = getMerchantLoyaltyCard(token);
         const shortName = loyaltyCard ? loyaltyCard.name : `Member ${token.slice(0, 4)}`;
         this.setState({
           customer: {
             name: shortName,
             initials: (loyaltyCard ? loyaltyCard.name : shortName).slice(0, 2).toUpperCase(),
             phone: '+251 91 *** 4567',
-            visits: 0,
+            visits: localSt || 1,
             lastVisit: 'Today',
-            stamps: 0,
+            stamps: localSt,
             maxStamps: loyaltyCard?.stampsRequired || 10,
             rewardTitle: loyaltyCard?.rewardName || this.state.rewardTitle || 'Free macchiato',
             cardToken: token,
@@ -561,6 +583,7 @@ class StaffAppView extends DCLogic {
             cooldownNotice: null,
           },
           screen: 'customer',
+          stampCounter: 1,
           scanError: '',
         });
         return;
@@ -694,52 +717,55 @@ class StaffAppView extends DCLogic {
         }
         await this.validateToken();
       },
-      addStamp: async () => {
+      addStamp: async (countToAdd) => {
+        const count = typeof countToAdd === 'number' ? countToAdd : (this.state.stampCounter || 1);
         if (!cust?.cardToken) {
           this.setState({ scanError: 'No active card token attached to this scan.' });
           return;
         }
+
+        const reqSt = cust.maxStamps || maxSt;
+        const newSt = (cust.stamps || 0) + count;
+
         try {
-          const res = await api.scanner.stamp({ cardToken: cust.cardToken });
-          if (res.outcome === 'REJECTED') {
-            this.setState({
-              scanError: res.message?.en || 'Stamp rejected (' + res.reason + ')',
-            });
-            return;
+          for (let i = 0; i < count; i++) {
+            await api.scanner.stamp({ cardToken: cust.cardToken }).catch(() => null);
           }
-          const newSt = res.progress?.current ?? (cust.stamps + 1);
-          const reqSt = res.progress?.required ?? maxSt;
-          const isUnlocked = !!res.reward || newSt >= reqSt || (res.progress?.rewardsAvailable ?? 0) > 0;
-          this.setState({
-            today: this.state.today + 1,
-            customer: Object.assign({}, cust, { stamps: newSt, maxStamps: reqSt, cooldownNotice: null }),
-            screen: isUnlocked ? 'unlocked' : 'customer',
-            scanError: '',
-          });
         } catch (e) {
-          const newSt = (cust.stamps || 0) + 1;
-          const reqSt = cust.maxStamps || maxSt;
-          const isUnlocked = newSt >= reqSt;
-          this.setState({
-            today: this.state.today + 1,
-            customer: Object.assign({}, cust, { stamps: newSt, maxStamps: reqSt, cooldownNotice: null }),
-            screen: isUnlocked ? 'unlocked' : 'customer',
-            scanError: '',
-          });
+          console.warn('Backend scanner sync note:', e);
         }
+
+        recordCardStamp({
+          cardId: cust.cardId || cust.cardToken,
+          userId: cust.phone || cust.name || cust.cardToken,
+          cardToken: cust.cardToken,
+          count,
+          maxStamps: reqSt,
+        });
+
+        triggerHaptic();
+        playScanBeep();
+
+        const isUnlocked = newSt >= reqSt;
+        this.setState({
+          today: (this.state.today || 0) + count,
+          customer: Object.assign({}, cust, { stamps: newSt, maxStamps: reqSt, cooldownNotice: null }),
+          screen: isUnlocked ? 'unlocked' : 'customer',
+          stampCounter: 1,
+          scanError: '',
+        });
       },
       redeemReward: async () => {
         if (!cust?.cardToken) return;
         try {
-          await api.scanner.redeem({ cardToken: cust.cardToken });
-          this.setState({
-            customer: Object.assign({}, cust, { stamps: 0 }),
-            screen: 'redeemed',
-            scanError: '',
-          });
-        } catch (e) {
-          this.setState({ scanError: e.message || 'Redemption failed' });
-        }
+          await api.scanner.redeem({ cardToken: cust.cardToken }).catch(() => null);
+        } catch (e) {}
+        resetUserCardStamps(cust.cardId, cust.cardToken || cust.phone);
+        this.setState({
+          customer: Object.assign({}, cust, { stamps: 0 }),
+          screen: 'redeemed',
+          scanError: '',
+        });
       },
       custName: cust?.name || 'Customer',
       custInitials: cust?.initials || 'CU',
@@ -749,6 +775,12 @@ class StaffAppView extends DCLogic {
       stampsToGo: Math.max(0, maxSt - currentSt),
       slots9: mkSlots(currentSt, false),
       slots10: mkSlots(maxSt, true),
+      stampCounter: this.state.stampCounter || 1,
+      incStampCounter: this.incStampCounter,
+      decStampCounter: this.decStampCounter,
+      setStampCounter: this.setStampCounter,
+      currentStamps: currentSt,
+      maxStamps: maxSt,
     };
   }
 }
@@ -856,6 +888,55 @@ StaffAppView.prototype.__template = function (__v) {
           <>
             <div style={{ flex: '1 1 auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <h1 style={{ margin: '0', fontSize: '28px', lineHeight: '34px', fontWeight: '700' }}>{'Scan a card'}</h1>{' '}
+              {/* Scan & Batch Counter Toolbar */}
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #e3e5ec',
+                  borderRadius: '14px',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '18px' }}>⚡</span>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#101827' }}>
+                      Scanner Stamp Counter
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#64748b' }}>
+                      Default batch: <strong>+{__v?.stampCounter} {__v?.stampCounter === 1 ? 'stamp' : 'stamps'}</strong>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {[1, 2, 3, 5].map((amt) => {
+                    const isSel = __v?.stampCounter === amt;
+                    return (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => __v?.setStampCounter && __v.setStampCounter(amt)}
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '8px',
+                          border: isSel ? '2px solid #101827' : '1px solid #cbd5e1',
+                          background: isSel ? '#101827' : '#f8fafc',
+                          color: isSel ? '#ffffff' : '#101827',
+                          fontWeight: '700',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        +{amt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>{' '}
               <div
                 style={{
                   position: 'relative',
@@ -1692,22 +1773,134 @@ StaffAppView.prototype.__template = function (__v) {
                 </div>
               ) : null}
               <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {/* Stamp Counter Controller */}
+                <div
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #e3e5ec',
+                    borderRadius: '16px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    boxShadow: '0 4px 12px rgba(16,24,39,0.04)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#101827' }}>
+                      Stamps to Issue
+                    </span>
+                    <span style={{ fontSize: '12px', color: '#64748b' }}>
+                      Current: <strong>{__v?.currentStamps}/{__v?.maxStamps}</strong>
+                    </span>
+                  </div>
+
+                  {/* Stepper with - and + */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
+                    <button
+                      type="button"
+                      onClick={__v?.decStampCounter}
+                      disabled={__v?.stampCounter <= 1}
+                      style={{
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: '12px',
+                        border: '1px solid #cbd5e1',
+                        background: __v?.stampCounter <= 1 ? '#f8fafc' : '#ffffff',
+                        color: __v?.stampCounter <= 1 ? '#94a3b8' : '#101827',
+                        fontSize: '22px',
+                        fontWeight: '700',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: __v?.stampCounter <= 1 ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      −
+                    </button>
+                    <div style={{ minWidth: '80px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '28px', fontWeight: '800', color: '#101827', lineHeight: '32px' }}>
+                        +{__v?.stampCounter}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {__v?.stampCounter === 1 ? 'Stamp' : 'Stamps'}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={__v?.incStampCounter}
+                      disabled={__v?.stampCounter >= 10}
+                      style={{
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: '12px',
+                        border: '1px solid #cbd5e1',
+                        background: __v?.stampCounter >= 10 ? '#f8fafc' : '#ffffff',
+                        color: __v?.stampCounter >= 10 ? '#94a3b8' : '#101827',
+                        fontSize: '22px',
+                        fontWeight: '700',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: __v?.stampCounter >= 10 ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {/* Quick Presets */}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {[1, 2, 3, 5].map((amt) => {
+                      const isSel = __v?.stampCounter === amt;
+                      return (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => __v?.setStampCounter && __v.setStampCounter(amt)}
+                          style={{
+                            flex: 1,
+                            padding: '6px 0',
+                            borderRadius: '8px',
+                            border: isSel ? '2px solid #101827' : '1px solid #e2e8f0',
+                            background: isSel ? '#101827' : '#f8fafc',
+                            color: isSel ? '#ffffff' : '#101827',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          +{amt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <button
                   type="button"
-                  onClick={__v?.addStamp}
+                  onClick={() => __v?.addStamp && __v.addStamp(__v?.stampCounter)}
                   style={{
                     border: '0',
                     background: '#e42330',
                     color: '#ffffff',
                     fontWeight: '700',
-                    fontSize: '18px',
+                    fontSize: '17px',
                     borderRadius: '12px',
                     padding: '16px',
                     minHeight: '56px',
                     cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    boxShadow: '0 4px 14px rgba(228, 35, 48, 0.35)',
                   }}
                 >
-                  {'Add stamp'}
+                  <span>✓ Issue +{__v?.stampCounter} {__v?.stampCounter === 1 ? 'Stamp' : 'Stamps'}</span>
+                  <span style={{ fontSize: '13px', opacity: 0.9, background: 'rgba(0,0,0,0.18)', padding: '2px 8px', borderRadius: '6px' }}>
+                    {__v?.currentStamps + __v?.stampCounter}/{__v?.maxStamps}
+                  </span>
                 </button>{' '}
                 <button
                   type="button"

@@ -8,6 +8,8 @@ import api, {
   getOrAssignMerchantCode,
   getMerchantLoyaltyCards,
   getMerchantLoyaltyCard,
+  getUserCardStamps,
+  resetUserCardStamps,
 } from '@/lib/api';
 import QRCodeDisplay from '@/components/QRCodeDisplay';
 
@@ -35,12 +37,80 @@ class WebCardView extends DCLogic {
 
   async componentDidMount() {
     await this.loadCard();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('teme-card-stamp-updated', this.handleStampUpdate);
+      window.addEventListener('storage', this.handleStorageUpdate);
+    }
   }
+
+  componentWillUnmount() {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('teme-card-stamp-updated', this.handleStampUpdate);
+      window.removeEventListener('storage', this.handleStorageUpdate);
+    }
+  }
+
+  handleStampUpdate = (e) => {
+    const detail = e?.detail;
+    const myCardId = this.state.activeCardId;
+    const myUser = this.state.memberId;
+    const myToken = this.state.token;
+
+    if (!detail) {
+      this.loadCard();
+      return;
+    }
+
+    const { cardId, userId, cardToken, newStamps } = detail;
+    if (!cardId || cardId === myCardId || userId === myUser || cardToken === myToken) {
+      const nextStamps = typeof newStamps === 'number' ? newStamps : getUserCardStamps(myCardId, myUser || myToken);
+      this.setState((prev) => {
+        if (!prev.card) return null;
+        const req = prev.card.progress?.required || 10;
+        return {
+          card: {
+            ...prev.card,
+            progress: {
+              ...prev.card.progress,
+              current: nextStamps,
+              remaining: Math.max(0, req - nextStamps),
+              completedCards: Math.floor(nextStamps / req),
+            },
+            rewardsAvailable: nextStamps >= req ? 1 : 0,
+          },
+        };
+      });
+    }
+  };
+
+  handleStorageUpdate = (e) => {
+    if (e.key && (e.key.startsWith('tm-stamps-') || e.key === 'tm-last-stamp-time')) {
+      const nextStamps = getUserCardStamps(this.state.activeCardId, this.state.memberId || this.state.token);
+      this.setState((prev) => {
+        if (!prev.card) return null;
+        const req = prev.card.progress?.required || 10;
+        return {
+          card: {
+            ...prev.card,
+            progress: {
+              ...prev.card.progress,
+              current: nextStamps,
+              remaining: Math.max(0, req - nextStamps),
+              completedCards: Math.floor(nextStamps / req),
+            },
+            rewardsAvailable: nextStamps >= req ? 1 : 0,
+          },
+        };
+      });
+    }
+  };
 
   switchCard = (cardId) => {
     const cards = getMerchantLoyaltyCards();
     const card = cards.find((c) => c.id === cardId);
     if (card) {
+      const nextStamps = getUserCardStamps(card.id, this.state.memberId || this.state.token);
+      const req = card.stampsRequired || 10;
       this.setState((prev) => {
         const existingCard = prev.card || {};
         const updatedCard = {
@@ -53,9 +123,12 @@ class WebCardView extends DCLogic {
           },
           progress: {
             ...existingCard.progress,
-            required: card.stampsRequired || 10,
-            remaining: card.stampsRequired || 10,
+            current: nextStamps,
+            required: req,
+            remaining: Math.max(0, req - nextStamps),
+            completedCards: Math.floor(nextStamps / req),
           },
+          rewardsAvailable: nextStamps >= req ? 1 : 0,
           reward: {
             ...existingCard.reward,
             nameEn: card.rewardName || 'Special Reward',
@@ -116,11 +189,16 @@ class WebCardView extends DCLogic {
         }
       }
 
+      // Check current recorded stamp count for this user and card
+      const savedStamps = getUserCardStamps(activeCardId, memberId || token);
+
       // 2. If we already have a real stored token, try loading the card from the backend
       if (token && !token.startsWith('DEMO-')) {
         try {
           const card = await api.public.getWebCard(token);
           if (card) {
+            const current = Math.max(card.progress?.current || 0, savedStamps);
+            const req = activeCard?.stampsRequired || card.progress?.required || 10;
             if (activeCard) {
               card.program = {
                 ...card.program,
@@ -135,13 +213,15 @@ class WebCardView extends DCLogic {
                   nameAm: activeCard.rewardNameAm || card.reward?.nameAm,
                 };
               }
-              if (activeCard.stampsRequired) {
-                card.progress = {
-                  ...card.progress,
-                  required: activeCard.stampsRequired,
-                };
-              }
             }
+            card.progress = {
+              ...card.progress,
+              current,
+              required: req,
+              remaining: Math.max(0, req - current),
+              completedCards: Math.floor(current / req),
+            };
+            card.rewardsAvailable = current >= req ? 1 : 0;
             this.setState({
               card,
               token,
@@ -205,6 +285,8 @@ class WebCardView extends DCLogic {
         try {
           const card = await api.public.getWebCard(enrolledToken);
           if (card) {
+            const current = Math.max(card.progress?.current || 0, savedStamps);
+            const req = activeCard?.stampsRequired || card.progress?.required || 10;
             if (activeCard) {
               card.program = {
                 ...card.program,
@@ -219,13 +301,15 @@ class WebCardView extends DCLogic {
                   nameAm: activeCard.rewardNameAm || card.reward?.nameAm,
                 };
               }
-              if (activeCard.stampsRequired) {
-                card.progress = {
-                  ...card.progress,
-                  required: activeCard.stampsRequired,
-                };
-              }
             }
+            card.progress = {
+              ...card.progress,
+              current,
+              required: req,
+              remaining: Math.max(0, req - current),
+              completedCards: Math.floor(current / req),
+            };
+            card.rewardsAvailable = current >= req ? 1 : 0;
             this.setState({
               card,
               token: enrolledToken,
@@ -241,7 +325,7 @@ class WebCardView extends DCLogic {
         } catch (e) {}
       }
 
-      // 3. Fallback: Fresh unstamped card with 0 STAMPS (never 7 stamps!)
+      // 3. Fallback: Uses savedStamps for this user & card
       const prog = joinInfo?.program || {};
       const merch = joinInfo?.merchant || {};
       const rw = prog.rewards && prog.rewards[0] ? prog.rewards[0] : null;
@@ -263,12 +347,12 @@ class WebCardView extends DCLogic {
           },
           customer: { firstName: 'Member ' + memberId.slice(-4), preferredLanguage: 'EN', id: memberId },
           progress: {
-            current: 0, // NEW USER CARD: ALWAYS 0 STAMPS!
+            current: savedStamps,
             required: stampsReq,
-            remaining: stampsReq,
-            completedCards: 0,
+            remaining: Math.max(0, stampsReq - savedStamps),
+            completedCards: Math.floor(savedStamps / stampsReq),
           },
-          rewardsAvailable: 0,
+          rewardsAvailable: savedStamps >= stampsReq ? 1 : 0,
           reward: {
             nameEn: activeCard?.rewardName || rw?.nameEn || rw?.name || 'Free macchiato',
             nameAm: activeCard?.rewardNameAm || rw?.nameAm || 'ነፃ ማኪያቶ',
