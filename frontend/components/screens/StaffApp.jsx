@@ -2,9 +2,111 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import api from '@/lib/api';
+import jsQR from 'jsqr';
 
-const __CSS =
-  'body{margin:0}\ninput,button{font:inherit}\nbutton:focus-visible,input:focus-visible{outline:2px solid #4661ad;outline-offset:2px}';
+const __CSS = `
+body { margin: 0; }
+input, button { font: inherit; }
+button:focus-visible, input:focus-visible { outline: 2px solid #4661ad; outline-offset: 2px; }
+@keyframes tmScanLaser {
+  0% { top: 10%; opacity: 0.95; }
+  50% { top: 88%; opacity: 1; }
+  100% { top: 10%; opacity: 0.95; }
+}
+@keyframes tmPulseDot {
+  0% { transform: scale(0.9); opacity: 0.8; }
+  50% { transform: scale(1.25); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.8; }
+}
+@keyframes tmSuccessFlash {
+  0% { opacity: 0; transform: scale(0.92); }
+  60% { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+`;
+
+function playScanBeep() {
+  try {
+    if (typeof window === 'undefined') return;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1850, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(2400, ctx.currentTime + 0.08);
+
+    gain.gain.setValueAtTime(0.35, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.12);
+  } catch (err) {
+    console.debug('Scanner audio error:', err);
+  }
+}
+
+function triggerHaptic() {
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      navigator.vibrate([40, 30, 60]);
+    }
+  } catch {}
+}
+
+function extractTokenFromScan(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  const text = raw.trim();
+
+  // 1. JSON object payload check
+  if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('{"') && text.endsWith('"}'))) {
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.cardToken) return String(parsed.cardToken).trim();
+      if (parsed.token) return String(parsed.token).trim();
+      if (parsed.barcode) return String(parsed.barcode).trim();
+    } catch {}
+  }
+
+  // 2. URL parsing (e.g., https://domain.com/card?token=... or /card/<token>)
+  if (text.includes('?') || text.startsWith('http://') || text.startsWith('https://') || text.includes('/card')) {
+    try {
+      const url = new URL(text.startsWith('http') ? text : `https://temelashcard.et/${text.replace(/^\//, '')}`);
+      const tokParam =
+        url.searchParams.get('token') ||
+        url.searchParams.get('cardToken') ||
+        url.searchParams.get('card') ||
+        url.searchParams.get('t');
+      if (tokParam) return tokParam.trim();
+
+      const segments = url.pathname.split('/').filter(Boolean);
+      const cardIdx = segments.indexOf('card');
+      if (cardIdx !== -1 && segments[cardIdx + 1]) {
+        return segments[cardIdx + 1].trim();
+      }
+    } catch {}
+  }
+
+  // 3. Fallback: match 20-64 char token pattern
+  const match = text.match(/[A-Za-z0-9_-]{20,64}/);
+  if (match) {
+    if (text.length <= 64 && !text.includes(' ') && !text.includes('/') && !text.includes(':')) {
+      return text;
+    }
+    return match[0];
+  }
+
+  return text;
+}
+
 class StaffAppView extends DCLogic {
   constructor(props) {
     super(props);
@@ -19,10 +121,34 @@ class StaffAppView extends DCLogic {
       testCards: [],
       rewardTitle: 'Free macchiato',
       customer: null,
+      cameraActive: false,
+      cameraLoading: false,
+      cameraError: '',
+      facingMode: 'environment',
+      hasMultipleCameras: false,
+      torchOn: false,
+      torchSupported: false,
+      scannedSuccess: false,
     };
+
+    this.videoEl = null;
+    this.canvasEl = null;
+    this.fileInputEl = null;
+    this.stream = null;
+    this.scanRafId = null;
+    this.isProcessingScan = false;
+    this.barcodeDetector = null;
   }
 
   async componentDidMount() {
+    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+      try {
+        this.barcodeDetector = new window.BarcodeDetector({ formats: ['qr_code'] });
+      } catch (e) {
+        this.barcodeDetector = null;
+      }
+    }
+
     try {
       const [profRes, meRes, progRes, analyticsRes] = await Promise.allSettled([
         api.merchant.getProfile(),
@@ -71,7 +197,312 @@ class StaffAppView extends DCLogic {
     } catch (e) {
       console.warn('Failed to load staff app context:', e);
     }
+
+    if (this.state.screen === 'scan') {
+      this.startCamera();
+    }
   }
+
+  componentWillUnmount() {
+    this.stopCamera();
+  }
+
+  scanFrame = async () => {
+    if (!this.state.cameraActive || this.state.screen !== 'scan' || this.isProcessingScan) {
+      return;
+    }
+
+    const video = this.videoEl;
+    if (video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+      let detectedText = null;
+
+      // 1. Try native BarcodeDetector if available
+      if (this.barcodeDetector) {
+        try {
+          const barcodes = await this.barcodeDetector.detect(video);
+          if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+            detectedText = barcodes[0].rawValue;
+          }
+        } catch (e) {
+          // Continue to fallback
+        }
+      }
+
+      // 2. Fall back to jsQR
+      if (!detectedText) {
+        if (!this.canvasEl) {
+          this.canvasEl = document.createElement('canvas');
+        }
+        const canvas = this.canvasEl;
+        const scale = Math.min(1, 640 / Math.max(video.videoWidth, video.videoHeight));
+        const width = Math.max(1, Math.floor(video.videoWidth * scale));
+        const height = Math.max(1, Math.floor(video.videoHeight * scale));
+
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        }
+
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, width, height);
+          const imgData = ctx.getImageData(0, 0, width, height);
+          const decode = typeof jsQR === 'function' ? jsQR : jsQR?.default;
+          if (decode) {
+            const code = decode(imgData.data, width, height, {
+              inversionAttempts: 'dontInvert',
+            });
+            if (code && code.data) {
+              detectedText = code.data;
+            }
+          }
+        }
+      }
+
+      if (detectedText) {
+        await this.handleDetectedCode(detectedText);
+        return;
+      }
+    }
+
+    if (this.state.cameraActive && this.state.screen === 'scan' && !this.isProcessingScan) {
+      this.scanRafId = requestAnimationFrame(this.scanFrame);
+    }
+  };
+
+  async handleDetectedCode(rawText) {
+    if (this.isProcessingScan) return;
+    this.isProcessingScan = true;
+
+    playScanBeep();
+    triggerHaptic();
+
+    const token = extractTokenFromScan(rawText);
+    this.setState({
+      scannedSuccess: true,
+      cardTokenInput: token,
+      scanError: '',
+    });
+
+    setTimeout(async () => {
+      this.stopCamera();
+      await this.validateToken(token);
+      if (this.state.screen === 'scan') {
+        this.isProcessingScan = false;
+        this.setState({ scannedSuccess: false });
+        this.startCamera();
+      } else {
+        this.setState({ scannedSuccess: false });
+        this.isProcessingScan = false;
+      }
+    }, 400);
+  }
+
+  async startCamera() {
+    if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      this.setState({
+        cameraError: 'Camera is not supported on this browser or connection is not secure (HTTPS required).',
+        cameraActive: false,
+        cameraLoading: false,
+      });
+      return;
+    }
+
+    this.stopCamera();
+    this.setState({ cameraLoading: true, cameraError: '', scannedSuccess: false });
+    this.isProcessingScan = false;
+
+    const facing = this.state.facingMode || 'environment';
+    let stream = null;
+
+    try {
+      try {
+        if (navigator.mediaDevices.enumerateDevices) {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevs = devices.filter((d) => d.kind === 'videoinput');
+          if (videoDevs.length > 1) {
+            this.setState({ hasMultipleCameras: true });
+          }
+        }
+      } catch {}
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: facing },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+      } catch (err) {
+        console.warn('Ideal camera constraint failed, using default video constraint:', err);
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
+
+      this.stream = stream;
+
+      const track = stream.getVideoTracks()?.[0];
+      let torchSupported = false;
+      if (track && typeof track.getCapabilities === 'function') {
+        try {
+          const caps = track.getCapabilities();
+          if (caps.torch) {
+            torchSupported = true;
+          }
+        } catch {}
+      }
+
+      if (this.videoEl) {
+        this.videoEl.srcObject = stream;
+        try {
+          await this.videoEl.play();
+        } catch (playErr) {
+          console.warn('Video play error:', playErr);
+        }
+      }
+
+      this.setState({
+        cameraActive: true,
+        cameraLoading: false,
+        cameraError: '',
+        torchSupported,
+        torchOn: false,
+      });
+
+      if (this.scanRafId) cancelAnimationFrame(this.scanRafId);
+      this.scanRafId = requestAnimationFrame(this.scanFrame);
+    } catch (err) {
+      console.error('Camera access failed:', err);
+      let errMsg = 'Unable to access camera. Please allow camera permissions in your browser settings.';
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        errMsg = 'Camera permission was denied. Please allow camera access in your browser address bar.';
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        errMsg = 'No camera found on this device. You can paste a token or upload a QR image below.';
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        errMsg = 'Camera is already in use by another application or tab.';
+      }
+      this.setState({
+        cameraActive: false,
+        cameraLoading: false,
+        cameraError: errMsg,
+      });
+    }
+  }
+
+  stopCamera() {
+    if (this.scanRafId) {
+      cancelAnimationFrame(this.scanRafId);
+      this.scanRafId = null;
+    }
+    if (this.stream) {
+      try {
+        this.stream.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch {}
+        });
+      } catch {}
+      this.stream = null;
+    }
+    if (this.videoEl) {
+      this.videoEl.srcObject = null;
+    }
+    this.setState({ cameraActive: false, cameraLoading: false, torchOn: false });
+  }
+
+  toggleCamera = () => {
+    if (this.state.cameraActive) {
+      this.stopCamera();
+    } else {
+      this.startCamera();
+    }
+  };
+
+  flipCamera = () => {
+    const nextFacing = this.state.facingMode === 'environment' ? 'user' : 'environment';
+    this.setState({ facingMode: nextFacing }, () => {
+      this.startCamera();
+    });
+  };
+
+  toggleTorch = async () => {
+    if (!this.stream) return;
+    const track = this.stream.getVideoTracks()?.[0];
+    if (!track) return;
+    const nextVal = !this.state.torchOn;
+    try {
+      await track.applyConstraints({
+        advanced: [{ torch: nextVal }],
+      });
+      this.setState({ torchOn: nextVal });
+    } catch (e) {
+      console.warn('Torch constraint error:', e);
+    }
+  };
+
+  handleImageUpload = (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = async () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth || img.width;
+          canvas.height = img.naturalHeight || img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+          let detected = null;
+          if (this.barcodeDetector) {
+            try {
+              const results = await this.barcodeDetector.detect(img);
+              if (results?.length > 0 && results[0].rawValue) {
+                detected = results[0].rawValue;
+              }
+            } catch {}
+          }
+
+          if (!detected) {
+            const decode = typeof jsQR === 'function' ? jsQR : jsQR?.default;
+            if (decode) {
+              const code = decode(imgData.data, canvas.width, canvas.height);
+              if (code && code.data) {
+                detected = code.data;
+              }
+            }
+          }
+
+          if (detected) {
+            this.handleDetectedCode(detected);
+          } else {
+            this.setState({
+              scanError: 'Could not detect a QR code in this image. Please ensure the QR code is clear and well-lit.',
+            });
+          }
+        } catch (err) {
+          this.setState({ scanError: 'Failed to process image: ' + err.message });
+        }
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  toScan = () => {
+    this.isProcessingScan = false;
+    this.setState({ screen: 'scan', scanError: '', scannedSuccess: false }, () => {
+      this.startCamera();
+    });
+  };
 
   async validateToken(tokenToTest) {
     const token = (tokenToTest || this.state.cardTokenInput || '').trim();
@@ -86,6 +517,8 @@ class StaffAppView extends DCLogic {
       const required = res.progress?.required ?? 10;
       const custName = res.customer?.firstName || 'Customer';
       const isCooldown = res.outcome === 'REJECTED' && res.reason === 'COOLDOWN_ACTIVE';
+
+      this.stopCamera();
 
       this.setState({
         customer: {
@@ -168,6 +601,21 @@ class StaffAppView extends DCLogic {
       isCustomer: sc === 'customer',
       isUnlocked: sc === 'unlocked',
       isRedeemed: sc === 'redeemed',
+      cameraActive: this.state.cameraActive,
+      cameraLoading: this.state.cameraLoading,
+      cameraError: this.state.cameraError,
+      facingMode: this.state.facingMode,
+      hasMultipleCameras: this.state.hasMultipleCameras,
+      torchSupported: this.state.torchSupported,
+      torchOn: this.state.torchOn,
+      scannedSuccess: this.state.scannedSuccess,
+      startCamera: () => this.startCamera(),
+      stopCamera: () => this.stopCamera(),
+      toggleCamera: () => this.toggleCamera(),
+      flipCamera: () => this.flipCamera(),
+      toggleTorch: () => this.toggleTorch(),
+      triggerUpload: () => this.fileInputEl?.click(),
+      onImageUpload: (e) => this.handleImageUpload(e),
       phoneInput: this.state.phoneInput,
       onPhoneChange: (e) => this.setState({ phoneInput: e.target.value, scanError: '' }),
       cardTokenInput: this.state.cardTokenInput,
@@ -180,7 +628,7 @@ class StaffAppView extends DCLogic {
       createQuickTestCard: () => this.createQuickTestCard(),
       scanError: this.state.scanError,
       cooldownNotice: cust?.cooldownNotice,
-      toScan: () => this.setState({ screen: 'scan', scanError: '' }),
+      toScan: () => this.toScan(),
       scanCardNow: () => this.validateToken(),
       toCustomer: async () => {
         const q = (this.state.phoneInput || '').trim();
@@ -189,7 +637,7 @@ class StaffAppView extends DCLogic {
             const res = await api.merchant.getCustomers({ q });
             if (res?.items && res.items.length > 0) {
               const c = res.items[0];
-              // Search matched customer
+              this.stopCamera();
               this.setState({
                 customer: {
                   name: c.firstName || 'Customer',
@@ -375,77 +823,568 @@ StaffAppView.prototype.__template = function (__v) {
               <div
                 style={{
                   position: 'relative',
-                  height: '340px',
-                  background: '#101827',
+                  height: '350px',
+                  background: '#090d16',
                   borderRadius: '20px',
+                  overflow: 'hidden',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  boxShadow: '0 8px 30px rgba(0,0,0,0.25)',
+                  border: '1px solid #1e293b',
                 }}
               >
-                <div aria-hidden="true" style={{ width: '200px', height: '200px', position: 'relative' }}>
-                  <span
+                {/* Hidden File Input for QR Image Upload */}
+                <input
+                  ref={(el) => {
+                    this.fileInputEl = el;
+                  }}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={__v?.onImageUpload}
+                />
+
+                {/* Live Video Camera Stream */}
+                <video
+                  ref={(el) => {
+                    this.videoEl = el;
+                    if (el && this.stream && el.srcObject !== this.stream) {
+                      el.srcObject = this.stream;
+                    }
+                  }}
+                  autoPlay
+                  playsInline
+                  muted
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    display: __v?.cameraActive ? 'block' : 'none',
+                  }}
+                />
+
+                {/* Dark Vignette Overlay when Camera is Active */}
+                {__b(__v?.cameraActive) ? (
+                  <div
+                    aria-hidden="true"
                     style={{
                       position: 'absolute',
-                      left: '0',
-                      top: '0',
-                      width: '40px',
-                      height: '40px',
-                      borderLeft: '4px solid #ffffff',
-                      borderTop: '4px solid #ffffff',
-                      borderRadius: '12px 0 0 0',
-                    }}
-                  />{' '}
-                  <span
-                    style={{
-                      position: 'absolute',
-                      right: '0',
-                      top: '0',
-                      width: '40px',
-                      height: '40px',
-                      borderRight: '4px solid #ffffff',
-                      borderTop: '4px solid #ffffff',
-                      borderRadius: '0 12px 0 0',
-                    }}
-                  />{' '}
-                  <span
-                    style={{
-                      position: 'absolute',
-                      left: '0',
-                      bottom: '0',
-                      width: '40px',
-                      height: '40px',
-                      borderLeft: '4px solid #ffffff',
-                      borderBottom: '4px solid #ffffff',
-                      borderRadius: '0 0 0 12px',
-                    }}
-                  />{' '}
-                  <span
-                    style={{
-                      position: 'absolute',
-                      right: '0',
-                      bottom: '0',
-                      width: '40px',
-                      height: '40px',
-                      borderRight: '4px solid #ffffff',
-                      borderBottom: '4px solid #ffffff',
-                      borderRadius: '0 0 12px 0',
+                      inset: '0',
+                      background: 'radial-gradient(circle at center, transparent 45%, rgba(9, 13, 22, 0.7) 100%)',
+                      pointerEvents: 'none',
                     }}
                   />
-                </div>{' '}
-                <span
+                ) : null}
+
+                {/* Animated Targeting Reticle & Laser Sweep */}
+                {__b(__v?.cameraActive && !__v?.scannedSuccess) ? (
+                  <div
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute',
+                      width: '210px',
+                      height: '210px',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    {/* Top-Left Corner */}
+                    <span
+                      style={{
+                        position: 'absolute',
+                        left: '0',
+                        top: '0',
+                        width: '36px',
+                        height: '36px',
+                        borderLeft: '4px solid #ffffff',
+                        borderTop: '4px solid #ffffff',
+                        borderRadius: '12px 0 0 0',
+                        filter: 'drop-shadow(0 0 6px rgba(251, 169, 25, 0.8))',
+                      }}
+                    />
+                    {/* Top-Right Corner */}
+                    <span
+                      style={{
+                        position: 'absolute',
+                        right: '0',
+                        top: '0',
+                        width: '36px',
+                        height: '36px',
+                        borderRight: '4px solid #ffffff',
+                        borderTop: '4px solid #ffffff',
+                        borderRadius: '0 12px 0 0',
+                        filter: 'drop-shadow(0 0 6px rgba(251, 169, 25, 0.8))',
+                      }}
+                    />
+                    {/* Bottom-Left Corner */}
+                    <span
+                      style={{
+                        position: 'absolute',
+                        left: '0',
+                        bottom: '0',
+                        width: '36px',
+                        height: '36px',
+                        borderLeft: '4px solid #ffffff',
+                        borderBottom: '4px solid #ffffff',
+                        borderRadius: '0 0 0 12px',
+                        filter: 'drop-shadow(0 0 6px rgba(251, 169, 25, 0.8))',
+                      }}
+                    />
+                    {/* Bottom-Right Corner */}
+                    <span
+                      style={{
+                        position: 'absolute',
+                        right: '0',
+                        bottom: '0',
+                        width: '36px',
+                        height: '36px',
+                        borderRight: '4px solid #ffffff',
+                        borderBottom: '4px solid #ffffff',
+                        borderRadius: '0 0 12px 0',
+                        filter: 'drop-shadow(0 0 6px rgba(251, 169, 25, 0.8))',
+                      }}
+                    />
+                    {/* Center Crosshair Subtlety */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        width: '18px',
+                        height: '18px',
+                        opacity: 0.35,
+                      }}
+                    >
+                      <span style={{ position: 'absolute', left: '8px', top: '0', bottom: '0', width: '2px', background: '#ffffff' }} />
+                      <span style={{ position: 'absolute', top: '8px', left: '0', right: '0', height: '2px', background: '#ffffff' }} />
+                    </div>
+                    {/* Glowing Red-Gold Laser Sweep Line */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: '6px',
+                        right: '6px',
+                        height: '3px',
+                        background: 'linear-gradient(90deg, transparent, #e42330 25%, #fba919 50%, #e42330 75%, transparent)',
+                        boxShadow: '0 0 14px #e42330, 0 0 6px #fba919',
+                        borderRadius: '3px',
+                        animation: 'tmScanLaser 2.2s ease-in-out infinite',
+                      }}
+                    />
+                  </div>
+                ) : null}
+
+                {/* Top Overlay Controls Bar */}
+                <div
                   style={{
                     position: 'absolute',
-                    bottom: '16px',
-                    left: '0',
-                    right: '0',
-                    textAlign: 'center',
-                    color: '#ffffff',
-                    fontWeight: '600',
+                    top: '12px',
+                    left: '12px',
+                    right: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    zIndex: 10,
                   }}
                 >
-                  {"Point at the code on the customer's card"}
-                </span>
+                  {/* Status Indicator */}
+                  {__b(__v?.cameraActive) ? (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: 'rgba(16, 24, 39, 0.75)',
+                        backdropFilter: 'blur(8px)',
+                        padding: '4px 10px',
+                        borderRadius: '999px',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        color: '#ffffff',
+                        letterSpacing: '0.03em',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: '#10b981',
+                          boxShadow: '0 0 8px #10b981',
+                          animation: 'tmPulseDot 1.6s ease-in-out infinite',
+                        }}
+                      />
+                      <span>{'LIVE SCANNER'}</span>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        background: 'rgba(16, 24, 39, 0.75)',
+                        backdropFilter: 'blur(8px)',
+                        padding: '4px 10px',
+                        borderRadius: '999px',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        color: '#9ca3af',
+                      }}
+                    >
+                      {__b(__v?.cameraLoading) ? 'CONNECTING...' : 'CAMERA IDLE'}
+                    </div>
+                  )}
+
+                  {/* Camera Action Buttons */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {__b(__v?.torchSupported) ? (
+                      <button
+                        type="button"
+                        onClick={__v?.toggleTorch}
+                        title={__v?.torchOn ? 'Turn flashlight off' : 'Turn flashlight on'}
+                        style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '50%',
+                          border: '1px solid rgba(255, 255, 255, 0.2)',
+                          background: __v?.torchOn ? '#fba919' : 'rgba(16, 24, 39, 0.75)',
+                          color: __v?.torchOn ? '#101827' : '#ffffff',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backdropFilter: 'blur(8px)',
+                          boxShadow: __v?.torchOn ? '0 0 12px rgba(251, 169, 25, 0.6)' : 'none',
+                        }}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                        </svg>
+                      </button>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={__v?.flipCamera}
+                      title="Switch camera (rear / front)"
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '50%',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        background: 'rgba(16, 24, 39, 0.75)',
+                        color: '#ffffff',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backdropFilter: 'blur(8px)',
+                      }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 10c0-4.418-3.582-8-8-8s-8 3.582-8 8c0 1.25.29 2.43.8 3.49L3 15h5v-5L6.34 11.66A6 6 0 1 1 18 10z" />
+                      </svg>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={__v?.toggleCamera}
+                      title={__v?.cameraActive ? 'Pause camera' : 'Start camera'}
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '50%',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        background: __v?.cameraActive ? 'rgba(16, 24, 39, 0.75)' : '#e42330',
+                        color: '#ffffff',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backdropFilter: 'blur(8px)',
+                      }}
+                    >
+                      {__b(__v?.cameraActive) ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                          <rect x="6" y="4" width="4" height="16" rx="1" />
+                          <rect x="14" y="4" width="4" height="16" rx="1" />
+                        </svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                          <polygon points="5 3 19 12 5 21 5 3" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Instant Success Flash Animation */}
+                {__b(__v?.scannedSuccess) ? (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: '0',
+                      background: 'rgba(16, 185, 129, 0.92)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#ffffff',
+                      zIndex: 20,
+                      animation: 'tmSuccessFlash 0.35s ease-out forwards',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '64px',
+                        height: '64px',
+                        borderRadius: '50%',
+                        background: '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: '12px',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+                      }}
+                    >
+                      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </div>
+                    <span style={{ fontSize: '18px', fontWeight: '800' }}>{'Card Detected!'}</span>
+                    <span style={{ fontSize: '13px', opacity: 0.9, marginTop: '2px' }}>{'Opening customer profile...'}</span>
+                  </div>
+                ) : null}
+
+                {/* Camera Loading Spinner State */}
+                {__b(__v?.cameraLoading) ? (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: '0',
+                      background: '#090d16',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '12px',
+                      color: '#ffffff',
+                      zIndex: 5,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '40px',
+                        height: '40px',
+                        border: '3px solid rgba(255, 255, 255, 0.15)',
+                        borderTopColor: '#e42330',
+                        borderRadius: '50%',
+                        animation: 'spin 0.8s linear infinite',
+                      }}
+                    />
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#cbd5e1' }}>
+                      {'Starting camera stream...'}
+                    </span>
+                  </div>
+                ) : null}
+
+                {/* Camera Permission / Error Card */}
+                {__b(__v?.cameraError && !__v?.cameraLoading) ? (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: '0',
+                      background: '#090d16',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '24px',
+                      textAlign: 'center',
+                      zIndex: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '52px',
+                        height: '52px',
+                        borderRadius: '50%',
+                        background: 'rgba(239, 68, 68, 0.15)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#f87171',
+                        marginBottom: '10px',
+                      }}
+                    >
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="1" y1="1" x2="23" y2="23" />
+                        <path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v9.34m-7.72-2.06a4 4 0 1 1-5.56-5.56" />
+                      </svg>
+                    </div>
+                    <span style={{ fontSize: '15px', fontWeight: '700', color: '#ffffff', marginBottom: '6px' }}>
+                      {'Camera Unavailable'}
+                    </span>
+                    <span style={{ fontSize: '13px', color: '#94a3b8', lineHeight: '18px', maxWidth: '280px', marginBottom: '16px' }}>
+                      {`${__t(__v?.cameraError)}`}
+                    </span>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={__v?.startCamera}
+                        style={{
+                          background: '#e42330',
+                          color: '#ffffff',
+                          border: '0',
+                          borderRadius: '8px',
+                          padding: '8px 14px',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {'Try Again'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={__v?.triggerUpload}
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.12)',
+                          color: '#ffffff',
+                          border: '1px solid rgba(255, 255, 255, 0.2)',
+                          borderRadius: '8px',
+                          padding: '8px 14px',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {'Upload QR'}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Paused State */}
+                {__b(!__v?.cameraActive && !__v?.cameraLoading && !__v?.cameraError) ? (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: '0',
+                      background: '#090d16',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '12px',
+                      color: '#ffffff',
+                      zIndex: 6,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '50%',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#94a3b8',
+                      }}
+                    >
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                        <circle cx="12" cy="13" r="4" />
+                      </svg>
+                    </div>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#cbd5e1' }}>
+                      {'Scanner camera paused'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={__v?.startCamera}
+                      style={{
+                        background: '#e42330',
+                        color: '#ffffff',
+                        border: '0',
+                        borderRadius: '8px',
+                        padding: '10px 18px',
+                        fontSize: '14px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                      </svg>
+                      {'Start Camera'}
+                    </button>
+                  </div>
+                ) : null}
+
+                {/* Floating Bottom Instruction Banner */}
+                {__b(__v?.cameraActive) ? (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: '12px',
+                      left: '12px',
+                      right: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: 'rgba(9, 13, 22, 0.78)',
+                      backdropFilter: 'blur(8px)',
+                      padding: '8px 12px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      zIndex: 10,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: '13px',
+                        color: '#e2e8f0',
+                        fontWeight: '600',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {"Point at customer's card QR"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={__v?.triggerUpload}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.12)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        color: '#ffffff',
+                        borderRadius: '6px',
+                        padding: '4px 8px',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <polyline points="21 15 16 10 5 21" />
+                      </svg>
+                      {'Upload QR'}
+                    </button>
+                  </div>
+                ) : null}
               </div>{' '}
               {__b(__v?.scanError) ? (
                 <div
