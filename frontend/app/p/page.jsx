@@ -1,4 +1,4 @@
-import PublicLandingPage from '@/components/PublicLandingPage';
+import PublicLandingPage from '@/components/screens/customer/PublicLandingPage';
 
 export const metadata = {
   title: 'Merchant Landing Page — Temelash Card',

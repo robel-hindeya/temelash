@@ -1,4 +1,4 @@
-import StaffJoinFlow from '@/components/StaffJoinFlow';
+import StaffJoinFlow from '@/components/screens/staff/StaffJoinFlow';
 
 export const metadata = { title: 'Staff Invitation — Temelash Card' };
 
