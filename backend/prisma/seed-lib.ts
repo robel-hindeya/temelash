@@ -80,12 +80,12 @@ export async function runSeed(
 
   const merchant = await prisma.merchant.upsert({
     where: { slug: 'sample-cafe' },
-    update: {},
+    update: { joinReference: 'UXwJ9RwdyHs' },
     create: {
       slug: 'sample-cafe',
       nameEn: 'Sample Cafe',
       nameAm: 'ናሙና ቡና ቤት',
-      joinReference: 'sample-cafe-join-7f3a9c',
+      joinReference: 'UXwJ9RwdyHs',
       defaultLanguage: 'AM',
     },
   });

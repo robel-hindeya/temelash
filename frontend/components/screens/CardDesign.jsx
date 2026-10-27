@@ -6,7 +6,7 @@ import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
 import QRCodeDisplay from '../QRCodeDisplay';
 import ColorPicker from './ColorPicker';
-import api, { getAppOrigin } from '@/lib/api';
+import api, { getAppOrigin, getOrAssignMerchantCode } from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-topbar{display:flex !important}.tm-side{display:none !important}.tm-side.is-open{display:flex !important;min-height:0 !important;height:auto !important;border-right:0 !important;border-bottom:1px solid #e3e5ec !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}.tm-split{border-left:0 !important;padding-left:0 !important;border-top:1px solid #e3e5ec;padding-top:16px}.tm-hide-sm{display:none !important}.tm-table{min-width:480px !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #4661ad;outline-offset:2px}';
@@ -173,6 +173,8 @@ class CardDesignView extends DCLogic {
       web: 'Web card for phones without a wallet app.',
       join: 'What customers see after scanning your QR.',
     };
+    const merchantCode = getOrAssignMerchantCode(s.name);
+    const cardUrl = `${getAppOrigin()}/card?m=${merchantCode}`;
     return {
       name: s.name || 'Your business',
       nameAm: s.nameAm || 'ሳምፕል ካፌ',
@@ -239,12 +241,12 @@ class CardDesignView extends DCLogic {
       cover: !!s.cover,
       noCover: !s.cover,
       addCover: () => this.setState({ cover: true, tab: s.tab === 'join' ? 'web' : s.tab }),
-      cardUrl: `${getAppOrigin()}/card`,
+      cardUrl,
+      merchantCode,
       copied: s.copied,
       copyLink: () => {
-        const url = `${getAppOrigin()}/card`;
         if (typeof navigator !== 'undefined' && navigator.clipboard) {
-          navigator.clipboard.writeText(url).catch(() => {});
+          navigator.clipboard.writeText(cardUrl).catch(() => {});
         }
         this.setState({ copied: true });
         setTimeout(() => this.setState({ copied: false }), 2000);
@@ -2010,9 +2012,14 @@ CardDesignView.prototype.__template = function (__v) {
                 ✕
               </button>
             </div>
-            <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
-              Scan with any mobile camera to open your live customer loyalty card:
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
+                Scan with any mobile camera to open your live customer loyalty card:
+              </p>
+              <span style={{ fontSize: '11px', color: '#4661ad', background: '#eef2ff', padding: '2px 8px', borderRadius: '6px', fontWeight: '700', fontFamily: 'monospace' }}>
+                Merchant · {__v?.merchantCode}
+              </span>
+            </div>
             <div
               style={{
                 background: '#ffffff',

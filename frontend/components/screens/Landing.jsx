@@ -6,7 +6,7 @@ import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import QRCodeDisplay from '../QRCodeDisplay';
 import Sidebar from './Sidebar';
 import ColorPicker from './ColorPicker';
-import { getAppOrigin } from '@/lib/api';
+import { getAppOrigin, getOrAssignMerchantCode } from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-topbar{display:flex !important}.tm-side{display:none !important}.tm-side.is-open{display:flex !important;min-height:0 !important;height:auto !important;border-right:0 !important;border-bottom:1px solid #e3e5ec !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}.tm-split{border-left:0 !important;padding-left:0 !important;border-top:1px solid #e3e5ec;padding-top:16px}.tm-hide-sm{display:none !important}.tm-table{min-width:480px !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #4661ad;outline-offset:2px}\n@media (min-width: 1024px){.pv-sticky{position:sticky;top:24px;align-self:flex-start}}';
@@ -266,16 +266,17 @@ class LandingView extends DCLogic {
         qr.push({ c: on ? '#101827' : 'transparent' });
       }
     const titleText = (s.title || '').trim();
-    const slug = titleText.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'sample-cafe';
+    const merchantCode = getOrAssignMerchantCode(titleText);
     const origin = getAppOrigin();
-    const liveLandingUrl = `${origin}/p/${slug}`;
+    const liveLandingUrl = `${origin}/p/${merchantCode}`;
     const shownTitle = titleText || 'Sample Cafe';
     return {
       title: s.title,
       tagline: s.tagline,
       hasTagline: !!(s.tagline || '').trim(),
       shownTitle,
-      slug,
+      slug: merchantCode,
+      merchantCode,
       liveLandingUrl,
       copied: s.copied,
       copyLink: () => {
@@ -1947,9 +1948,14 @@ LandingView.prototype.__template = function (__v) {
                 ✕
               </button>
             </div>
-            <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
-              Scan with any mobile camera to open your live merchant landing page:
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
+                Scan with any mobile camera to open your live merchant landing page:
+              </p>
+              <span style={{ fontSize: '11px', color: '#4661ad', background: '#eef2ff', padding: '2px 8px', borderRadius: '6px', fontWeight: '700', fontFamily: 'monospace' }}>
+                Merchant · {__v?.merchantCode}
+              </span>
+            </div>
             <div
               style={{
                 background: '#ffffff',

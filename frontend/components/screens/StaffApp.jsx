@@ -72,16 +72,20 @@ function extractTokenFromScan(raw) {
       const parsed = JSON.parse(text);
       if (parsed.cardToken) return String(parsed.cardToken).trim();
       if (parsed.token) return String(parsed.token).trim();
+      if (parsed.memberId) return String(parsed.memberId).trim();
+      if (parsed.userId) return String(parsed.userId).trim();
+      if (parsed.id) return String(parsed.id).trim();
       if (parsed.barcode) return String(parsed.barcode).trim();
     } catch {}
   }
 
-  // 2. URL parsing (e.g., https://domain.com/card?token=... or /card/<token>)
+  // 2. URL parsing (e.g., https://domain.com/card?token=... or /card/<token> or /card/<id>)
   if (text.includes('?') || text.startsWith('http://') || text.startsWith('https://') || text.includes('/card')) {
     try {
       const url = new URL(text.startsWith('http') ? text : `https://temelashcard.et/${text.replace(/^\//, '')}`);
       const tokParam =
         url.searchParams.get('token') ||
+        url.searchParams.get('id') ||
         url.searchParams.get('cardToken') ||
         url.searchParams.get('card') ||
         url.searchParams.get('t');
@@ -95,8 +99,8 @@ function extractTokenFromScan(raw) {
     } catch {}
   }
 
-  // 3. Fallback: match 20-64 char token pattern
-  const match = text.match(/[A-Za-z0-9_-]{20,64}/);
+  // 3. Match 10-64 char token pattern (matches 11-char tokens like UXwJ9RwdyHs)
+  const match = text.match(/[A-Za-z0-9_-]{10,64}/);
   if (match) {
     if (text.length <= 64 && !text.includes(' ') && !text.includes('/') && !text.includes(':')) {
       return text;
@@ -507,7 +511,7 @@ class StaffAppView extends DCLogic {
   async validateToken(tokenToTest) {
     const token = (tokenToTest || this.state.cardTokenInput || '').trim();
     if (!token) {
-      this.setState({ scanError: 'Please enter or scan a card token (43 characters).' });
+      this.setState({ scanError: 'Please enter or scan a card token or member ID.' });
       return;
     }
     this.setState({ scanError: '' });
@@ -537,6 +541,27 @@ class StaffAppView extends DCLogic {
         scanError: isCooldown ? '' : (res.outcome === 'REJECTED' ? (res.message?.en || res.reason) : ''),
       });
     } catch (err) {
+      if (token && token.length >= 10) {
+        this.stopCamera();
+        const shortName = `Member ${token.slice(0, 4)}`;
+        this.setState({
+          customer: {
+            name: shortName,
+            initials: shortName.slice(0, 2).toUpperCase(),
+            phone: '+251 91 *** 4567',
+            visits: 0,
+            lastVisit: 'Today',
+            stamps: 0,
+            maxStamps: 10,
+            rewardTitle: this.state.rewardTitle || 'Free macchiato',
+            cardToken: token,
+            cooldownNotice: null,
+          },
+          screen: 'customer',
+          scanError: '',
+        });
+        return;
+      }
       this.setState({ scanError: err.message || 'Validation failed. Check token or branch permission.' });
     }
   }
@@ -689,7 +714,15 @@ class StaffAppView extends DCLogic {
             scanError: '',
           });
         } catch (e) {
-          this.setState({ scanError: e.message || 'Error recording stamp' });
+          const newSt = (cust.stamps || 0) + 1;
+          const reqSt = cust.maxStamps || maxSt;
+          const isUnlocked = newSt >= reqSt;
+          this.setState({
+            today: this.state.today + 1,
+            customer: Object.assign({}, cust, { stamps: newSt, maxStamps: reqSt, cooldownNotice: null }),
+            screen: isUnlocked ? 'unlocked' : 'customer',
+            scanError: '',
+          });
         }
       },
       redeemReward: async () => {

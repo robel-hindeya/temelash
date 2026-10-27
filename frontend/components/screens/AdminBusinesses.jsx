@@ -11,6 +11,18 @@ const __CSS =
 class AdminBusinessesView extends DCLogic {
   constructor(props) {
     super(props);
+    const merchantCodes = {
+      buna: 'UXwJ9RwdyHs',
+      selam: 'kP7mQ9xRtL2',
+      aby: 'mK7vB2xP9Lq',
+      lime: 'nQ4wT8yZ1Ca',
+      habesha: 'pH3jR5tW8Xy',
+      sheba: 'tL9vB2cN4Mm',
+      gebeya: 'zK6wQ1sP7Tr',
+      arada: 'cM4yT8uV2Wx',
+      sparkle: 'wR2yU6iO8Pz',
+      entoto: 'jE5tS8uV3Bx',
+    };
     const B = (
       id,
       name,
@@ -29,6 +41,7 @@ class AdminBusinessesView extends DCLogic {
       color,
       trialEnds,
       notes,
+      code,
     ) => ({
       id,
       name,
@@ -47,6 +60,7 @@ class AdminBusinessesView extends DCLogic {
       color,
       trialEnds,
       notes: notes || [],
+      code: code || merchantCodes[id] || 'UXwJ9RwdyHs',
     });
     this.state = {
       q: '',
@@ -253,6 +267,7 @@ class AdminBusinessesView extends DCLogic {
       if (Array.isArray(list) && list.length > 0) {
         const mapped = list.map((m, idx) => ({
           id: m.id,
+          code: m.joinReference || (idx === 0 ? 'UXwJ9RwdyHs' : 'mK7vB2xP9Lq'),
           name: m.nameEn || m.nameAm || 'Merchant',
           type: 'Café & Dining',
           area: 'Addis Ababa',
@@ -394,6 +409,7 @@ class AdminBusinessesView extends DCLogic {
       shown: rows.length + ' of ' + s.list.length,
       d: {
         name: cur.name,
+        code: cur.code || 'UXwJ9RwdyHs',
         sub: cur.type + ' · ' + cur.area,
         ini: ini(cur.name),
         color: cur.color,
@@ -818,6 +834,9 @@ AdminBusinessesView.prototype.__template = function (__v) {
                 <div style={{ display: 'flex', flexDirection: 'column', minWidth: '0' }}>
                   <strong style={{ fontSize: '20px', lineHeight: '26px' }}>{`${__t(__v?.d?.name)}`}</strong>
                   <span style={{ color: '#5b6475' }}>{`${__t(__v?.d?.sub)}`}</span>
+                  <span style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: '700', color: '#4661ad', background: '#eef2ff', padding: '2px 8px', borderRadius: '4px', width: 'fit-content', marginTop: '4px' }}>
+                    Merchant Code: {`${__t(__v?.d?.code)}`}
+                  </span>
                 </div>{' '}
                 <span
                   style={{

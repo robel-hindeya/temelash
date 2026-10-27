@@ -5,7 +5,7 @@ import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
 import QRCodeDisplay from '../QRCodeDisplay';
-import api from '@/lib/api';
+import api, { getAppOrigin, getOrAssignMerchantCode } from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}}\n@media (min-width:1024px){.pv-sticky{position:sticky;top:24px;align-self:flex-start}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #4661ad;outline-offset:2px}';
@@ -383,7 +383,7 @@ class RewardsView extends DCLogic {
       nextName: nextR ? nextR.name : 'Card complete',
       toGo: nextR ? left + (left === 1 ? ' visit' : ' visits') : '—',
       pvMs,
-      cardUrl: (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001') + '/card',
+      cardUrl: `${getAppOrigin()}/card?m=${getOrAssignMerchantCode()}`,
       notifTitle: justHit ? 'NOTIFICATION THEY GET NOW' : 'WHEN THE NEXT REWARD UNLOCKS',
       notifHead: unlockName + ' unlocked',
       notifText: unlockName + ' unlocked. Show this at the counter.',

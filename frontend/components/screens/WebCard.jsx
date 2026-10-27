@@ -3,7 +3,7 @@
 import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
-import api from '@/lib/api';
+import api, { getOrAssignUserCode, getOrAssignMerchantCode } from '@/lib/api';
 import QRCodeDisplay from '@/components/QRCodeDisplay';
 
 const __CSS =
@@ -33,21 +33,28 @@ class WebCardView extends DCLogic {
     try {
       let token = null;
       let memberId = null;
+      let merchantParam = null;
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
         token = params.get('token') || window.localStorage.getItem('tm-customer-token');
-        memberId = params.get('id') || window.localStorage.getItem('tm-customer-id');
+        memberId = params.get('id') || this.props?.id || window.localStorage.getItem('tm-user-code') || window.localStorage.getItem('tm-customer-id');
+        merchantParam = params.get('m') || params.get('merchant') || params.get('slug');
       }
 
-      // 1. If we already have a real stored token, try loading the card from the backend
+      // 1. Assign 11-char alphanumeric ID (like UXwJ9RwdyHs) for user
+      if (!memberId || memberId.startsWith('TC-')) {
+        memberId = getOrAssignUserCode();
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('tm-user-code', memberId);
+          window.localStorage.setItem('tm-customer-id', memberId);
+        }
+      }
+
+      // 2. If we already have a real stored token, try loading the card from the backend
       if (token && !token.startsWith('DEMO-')) {
         try {
           const card = await api.public.getWebCard(token);
           if (card) {
-            if (!memberId) {
-              memberId = card.customer?.id || ('TC-' + Math.abs(token.split('').reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0)).toString().slice(-8).padStart(8, '0').replace(/(\d{4})(\d{4})/, '$1-$2'));
-              if (typeof window !== 'undefined') window.localStorage.setItem('tm-customer-id', memberId);
-            }
             this.setState({ card, token, memberId, loading: false, error: null });
             return;
           }
@@ -56,22 +63,13 @@ class WebCardView extends DCLogic {
         }
       }
 
-      // 2. Assign unique ID for new user if not already set
-      if (!memberId) {
-        const rndA = Math.floor(1000 + Math.random() * 9000);
-        const rndB = Math.floor(1000 + Math.random() * 9000);
-        memberId = `TC-${rndA}-${rndB}`;
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem('tm-customer-id', memberId);
-        }
-      }
-
       // Determine active merchant / program slug
-      let joinSlug = 'sample-cafe';
+      const merchantCode = merchantParam || getOrAssignMerchantCode();
+      let joinSlug = merchantParam || merchantCode || 'sample-cafe';
       try {
         if (typeof window !== 'undefined') {
           const params = new URLSearchParams(window.location.search);
-          const pSlug = params.get('slug') || params.get('merchant');
+          const pSlug = params.get('slug') || params.get('merchant') || params.get('m');
           if (pSlug) joinSlug = pSlug;
         }
       } catch (e) {}
@@ -122,7 +120,7 @@ class WebCardView extends DCLogic {
       const merch = joinInfo?.merchant || {};
       const rw = prog.rewards && prog.rewards[0] ? prog.rewards[0] : null;
       const stampsReq = prog.stampsRequired || 10;
-      const fallbackToken = enrolledToken || ('tc_card_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Date.now().toString(36));
+      const fallbackToken = enrolledToken || memberId || getOrAssignUserCode();
       if (typeof window !== 'undefined' && !enrolledToken) {
         window.localStorage.setItem('tm-customer-token', fallbackToken);
       }
@@ -229,7 +227,12 @@ class WebCardView extends DCLogic {
       ? card?.reward?.nameAm || card?.reward?.nameEn || 'ነፃ ማኪያቶ'
       : card?.reward?.nameEn || 'free macchiato';
 
-    const memberId = this.state.memberId || (typeof window !== 'undefined' ? window.localStorage.getItem('tm-customer-id') : null) || 'TC-NEW-MEMBER';
+    const memberId =
+      this.state.memberId ||
+      (typeof window !== 'undefined'
+        ? window.localStorage.getItem('tm-user-code') || window.localStorage.getItem('tm-customer-id')
+        : null) ||
+      getOrAssignUserCode();
 
     const T = am
       ? {
@@ -274,7 +277,7 @@ class WebCardView extends DCLogic {
     const firstName = card?.customer?.firstName || 'Member';
     const memberLabel = am ? `አባል · ${memberId}` : `Member · ${memberId}`;
 
-    const barcodeValue = card?.barcode || this.state.token || 'A25rOmsw_h-cQ1DEXRuJ5pfuSstxAq7l_0pwMJtnZqo';
+    const barcodeValue = card?.barcode || this.state.token || memberId || 'UXwJ9RwdyHs';
     const isNew = n === 0;
     const lastVisitText = isNew ? (am ? 'አዲስ አባል' : 'New member') : (am ? 'የቅርብ ጊዜ' : 'Recent visit');
 

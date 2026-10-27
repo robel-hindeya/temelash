@@ -5,7 +5,7 @@ import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
 import QRCodeDisplay from '../QRCodeDisplay';
-import { getAppOrigin } from '@/lib/api';
+import { getAppOrigin, getOrAssignMerchantCode, getOrAssignUserCode } from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-topbar{display:flex !important}.tm-side{display:none !important}.tm-side.is-open{display:flex !important;min-height:0 !important;height:auto !important;border-right:0 !important;border-bottom:1px solid #e3e5ec !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}.tm-split{border-left:0 !important;padding-left:0 !important;border-top:1px solid #e3e5ec;padding-top:16px}.tm-hide-sm{display:none !important}.tm-table{min-width:480px !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #4661ad;outline-offset:2px}\n@media (min-width: 1024px){.pv-sticky{position:sticky;top:24px;align-self:flex-start;max-height:calc(100vh - 48px);overflow-y:auto}}';
@@ -243,8 +243,8 @@ class OffersView extends DCLogic {
         check: i < 7 ? '#101827' : i === 9 ? '#c81d29' : '#c9cdd6',
         path: i === 9 ? 'M3 8h18v4H3zM5 12v9h14v-9M12 8v13' : 'M5 12l5 5L20 7',
       })),
-      cardUrl: this.state.cardUrl || (typeof window !== 'undefined' ? `${window.location.origin}/card?token=demo-card-liya-01` : 'https://frontend-phi-one-57.vercel.app/card'),
-      memberCode: 'SAMPLE-8842',
+      cardUrl: this.state.cardUrl || `${getAppOrigin()}/card?m=${getOrAssignMerchantCode()}`,
+      memberCode: getOrAssignUserCode(),
       businessName: this.state.businessName || 'Sample Cafe',
       qrModalOpen: s.qrModalOpen,
       openQrModal: () => this.setState({ qrModalOpen: true }),

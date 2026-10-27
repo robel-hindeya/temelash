@@ -247,7 +247,7 @@ export default function PublicLandingPage({ slug = 'sample-cafe' }) {
             .map((b, i) => {
               const isCardButton = b.id === 'card';
               const targetUrl = isCardButton
-                ? '/card'
+                ? (slug ? `/card?m=${encodeURIComponent(slug)}` : '/card')
                 : (b.url ? (b.url.startsWith('http') || b.url.startsWith('/') || b.url.startsWith('#') ? b.url : `https://${b.url}`) : '#');
 
               return (
