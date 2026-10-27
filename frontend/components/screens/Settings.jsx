@@ -4,7 +4,7 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
-import api from '@/lib/api';
+import api, { getAppOrigin } from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}.tm-hide-sm{display:none !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #4661ad;outline-offset:2px}\n.bar:hover{background:#101827 !important}\n.srow:hover{background:#f7f7f9}';
@@ -188,7 +188,14 @@ class SettingsView extends DCLogic {
       statusColor: m.status === 'invited' ? '#4661ad' : '#5b6475',
       isInvited: m.status === 'invited',
       isActiveStaff: m.status === 'active' && m.id !== 'owner',
-      resend: () => this.setState({ lastInvite: { name: m.name, link: m.link }, copied: false }),
+      resend: () => {
+        const origin = getAppOrigin();
+        const link = m.link || `${origin}/staff/join/${(m.name || 'staff').toLowerCase().replace(/[^a-z0-9]+/g, '')}-${m.id}`;
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          navigator.clipboard.writeText(link).catch(() => {});
+        }
+        this.setState({ lastInvite: { name: m.name, link }, copied: true });
+      },
       cancel: () =>
         this.setState({
           team: s.team.filter((x) => x.id !== m.id),
@@ -562,8 +569,9 @@ class SettingsView extends DCLogic {
             branchIds,
             preferredLanguage: 'EN',
           });
+          const origin = getAppOrigin();
           const token = res?.invitation?.token || `${Date.now()}`;
-          const link = `temelash.card/staff/join/${token}`;
+          const link = `${origin}/staff/join/${token}`;
           const masked = '+251 ' + digits.slice(-9, -7) + ' *** ' + digits.slice(-4);
           const ini = name
             .split(/\s+/)
@@ -592,7 +600,8 @@ class SettingsView extends DCLogic {
           });
         } catch (err) {
           console.warn('Backend staff invite warning, adding locally:', err);
-          const link = 'temelash.card/staff/join/' + name.toLowerCase().replace(/[^a-z0-9]+/g, '') + '-' + (4810 + s.nextInv);
+          const origin = getAppOrigin();
+          const link = `${origin}/staff/join/` + name.toLowerCase().replace(/[^a-z0-9]+/g, '') + '-' + (4810 + s.nextInv);
           const masked = '+251 ' + digits.slice(-9, -7) + ' *** ' + digits.slice(-4);
           const ini = name
             .split(/\s+/)
@@ -642,7 +651,12 @@ class SettingsView extends DCLogic {
       },
       hasLastInvite: !!s.lastInvite,
       lastInvite: s.lastInvite || { name: '', link: '' },
-      copyInvite: () => this.setState({ copied: true }),
+      copyInvite: () => {
+        if (typeof navigator !== 'undefined' && navigator.clipboard && s.lastInvite?.link) {
+          navigator.clipboard.writeText(s.lastInvite.link).catch(() => {});
+        }
+        this.setState({ copied: true });
+      },
       copyLabel: s.copied ? 'Copied' : 'Copy link',
       dismissInvite: () => this.setState({ lastInvite: null }),
       team,

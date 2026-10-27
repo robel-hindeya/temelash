@@ -17,6 +17,13 @@ function getStorage() {
   return window.localStorage;
 }
 
+export function getAppOrigin() {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+  return process.env.NEXT_PUBLIC_APP_URL || 'https://frontend-phi-one-57.vercel.app';
+}
+
 export function getCurrentUser() {
   const s = getStorage();
   if (!s) return null;
@@ -270,6 +277,14 @@ export const api = {
     },
     async getMe(role = 'owner') {
       return request('/auth/me', { method: 'GET' }, role);
+    },
+    async acceptInvitation(token, password, displayName = undefined) {
+      const payload = { token, password };
+      if (displayName) payload.displayName = displayName;
+      return publicRequest('/auth/invitations/accept', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
     },
     logout(role = null) {
       clearStoredToken(role);
