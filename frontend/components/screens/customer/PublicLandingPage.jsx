@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import api, { checkCardPin, getCustomerSession, registerCustomer, signInCustomer } from '@/lib/api';
+import api, { checkCardPin, getCustomerSession, getTelegramCardLink, registerCustomer, signInCustomer } from '@/lib/api';
 
 // The page every merchant QR code opens. Shop, program and reward come from the backend join info;
 // customers join here (name, phone, PIN) or sign back in with phone + PIN, then their card opens.
@@ -170,6 +170,28 @@ export default function PublicLandingPage({ slug }) {
                     {`Open my card${existing.firstName ? `, ${existing.firstName}` : ''}`}
                   </Link>
                   <span style={{ fontSize: '13px', color: '#5b6475', textAlign: 'center' }}>Not you? Join or sign in below.</span>
+                </div>
+              ) : null}
+
+              {getTelegramCardLink(slug) ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '18px' }}>
+                  <a
+                    href={getTelegramCardLink(slug)}
+                    style={{
+                      background: '#2aabee',
+                      color: '#ffffff',
+                      borderRadius: '12px',
+                      padding: '14px',
+                      textAlign: 'center',
+                      fontWeight: '700',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    Open my card in Telegram
+                  </a>
+                  <span style={{ fontSize: '13px', color: '#5b6475', textAlign: 'center' }}>
+                    No PIN to remember. No Telegram? Use the form below.
+                  </span>
                 </div>
               ) : null}
 

@@ -1,6 +1,6 @@
 import DCLogic from '@/lib/DCLogic';
 import { A, withDCStyle } from '@/lib/dc-runtime';
-import api, { getOrAssignMerchantCode } from '@/lib/api';
+import api, { getOrAssignMerchantCode, getTelegramWebApp } from '@/lib/api';
 import jsQR from 'jsqr';
 import renderStaffApp from './StaffApp.view';
 
@@ -298,6 +298,16 @@ class StaffAppView extends DCLogic {
   }
 
   async startCamera() {
+    // Inside Telegram, its native scanner is faster and more reliable than the in-page camera.
+    const tg = getTelegramWebApp();
+    if (tg?.showScanQrPopup) {
+      this.stopCamera();
+      tg.showScanQrPopup({ text: 'Scan the customer’s card' }, (text) => {
+        this.validateToken(text);
+        return true; // close the popup after one code
+      });
+      return;
+    }
     if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       this.setState({
         cameraError: 'Camera is not supported on this browser or connection is not secure (HTTPS required).',

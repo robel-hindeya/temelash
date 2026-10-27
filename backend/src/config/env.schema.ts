@@ -45,18 +45,13 @@ export const envSchema = z
     RATE_LIMIT_TTL_SECONDS: z.coerce.number().int().positive().default(60),
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
     DATABASE_URL: (process.env.VERCEL
-      ? z
-          .string()
-          .default('postgresql://vercel_preview:vercel_preview@127.0.0.1:5432/temelash')
+      ? z.string().default('postgresql://vercel_preview:vercel_preview@127.0.0.1:5432/temelash')
       : z.string()
     ).refine((v) => v.startsWith('postgresql://') || v.startsWith('postgres://'), {
       message: 'must be a PostgreSQL URL',
     }),
     JWT_ACCESS_SECRET: process.env.VERCEL
-      ? z
-          .string()
-          .min(32)
-          .default('temelashcard-vercel-preview-jwt-secret-min-32chars')
+      ? z.string().min(32).default('temelashcard-vercel-preview-jwt-secret-min-32chars')
       : z.string().min(32),
     JWT_ISSUER: z.string().min(1).default('temelashcard'),
     ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
@@ -68,6 +63,16 @@ export const envSchema = z
     IDEMPOTENCY_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(48),
     ENROLL_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
     ENROLL_RATE_LIMIT_TTL_SECONDS: z.coerce.number().int().positive().default(60),
+    // ── Telegram Mini App ── (all optional: Telegram sign-in is off until the bot token is set)
+    /** Bot token from @BotFather. Verifies Mini App sign-ins and sends bot messages. */
+    TELEGRAM_BOT_TOKEN: optionalString,
+    /** Sent by Telegram in X-Telegram-Bot-Api-Secret-Token on every webhook call (set with setWebhook). */
+    TELEGRAM_WEBHOOK_SECRET: optionalString,
+    /** Public URL of the Mini App (the frontend /tg page); used for the bot's "Open card" button. */
+    TELEGRAM_MINI_APP_URL: optionalString,
+    TELEGRAM_API_BASE: z.string().url().default('https://api.telegram.org'),
+    /** How old a Mini App sign-in (initData auth_date) may be. */
+    TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(604800).default(86400),
     // ── Wallet passes ──
     // 'fake' runs everything with in-memory adapters (no credentials). 'live' talks to Apple and Google.
     WALLET_MODE: z.enum(['fake', 'live']).default('fake'),
@@ -78,10 +83,7 @@ export const envSchema = z
     /** Secret from which each pass's barcode is derived. Required when a provider is enabled. */
     WALLET_BARCODE_SECRET: optionalString.pipe(
       (process.env.VERCEL
-        ? z
-            .string()
-            .min(32)
-            .default('temelashcard-vercel-preview-barcode-secret-min-32chars')
+        ? z.string().min(32).default('temelashcard-vercel-preview-barcode-secret-min-32chars')
         : z.string().min(32)
       ).optional(),
     ),
@@ -137,6 +139,9 @@ export const envSchema = z
 
     // Wallet configuration is validated only for providers that are switched on.
     const anyWallet = env.WALLET_APPLE_ENABLED || env.WALLET_GOOGLE_ENABLED;
+    if (env.TELEGRAM_BOT_TOKEN && (env.TELEGRAM_WEBHOOK_SECRET ?? '').length < 16) {
+      issue('TELEGRAM_WEBHOOK_SECRET', 'required (min 16 chars) when TELEGRAM_BOT_TOKEN is set');
+    }
     if (anyWallet && !env.WALLET_BARCODE_SECRET) {
       issue('WALLET_BARCODE_SECRET', 'required (min 32 chars) when a wallet provider is enabled');
     }
@@ -169,7 +174,10 @@ export const envSchema = z
           );
         }
         if (!env.GOOGLE_WALLET_DEFAULT_LOGO_URL) {
-          issue('GOOGLE_WALLET_DEFAULT_LOGO_URL', 'required when Google Wallet is enabled in live mode');
+          issue(
+            'GOOGLE_WALLET_DEFAULT_LOGO_URL',
+            'required when Google Wallet is enabled in live mode',
+          );
         }
       }
     }

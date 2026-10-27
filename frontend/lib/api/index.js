@@ -6,10 +6,12 @@
 //   merchant-code.js        merchant join reference and the customer QR link
 //   merchant-card-local.js  legacy browser-only card settings
 //   customer-session.js     customer card session, join, phone + PIN sign-in
+//   telegram.js             Telegram Mini App detection, script loading, t.me card links
 export * from './browser';
 export * from './staff-session';
 export * from './merchant-code';
 export * from './merchant-card-local';
 export * from './customer-session';
+export * from './telegram';
 export { api } from './client';
 export { default } from './client';

@@ -6,7 +6,8 @@ NestJS 11, Prisma 6, PostgreSQL. Global prefix `/api/v1`. Design notes per topic
 
 | Module | Owns | Routes |
 | --- | --- | --- |
-| `memberships` | join page, enrollment, phone + PIN card sign-in, web card, card reissue | `join/*`, `card/*`, `merchant/memberships/*` |
+| `memberships` | join page, enrollment, phone + PIN and Telegram card sign-in, web card, card reissue | `join/*`, `card/*`, `merchant/memberships/*` |
+| `telegram` | Mini App initData verification, bot webhook (verified phone), Bot API client | `telegram/webhook` |
 | `customers` | customer records, consent, card PIN rules | `merchant/customers` |
 | `stamps` | scan validation, stamping, cooldowns | `scanner/validate`, `scanner/stamps` |
 | `redemptions` | reward lookup, redemption, reversals | `scanner/redemptions`, `merchant/.../reverse` |
@@ -22,6 +23,13 @@ Each module: `api/` (controllers + DTOs) → `application/` (services) → `doma
 → `infrastructure/` (repositories). Other modules import only from `index.ts` and application code
 never imports `api/` (`src/architecture.spec.ts` enforces this). Shared code: `src/common/`
 (errors, rate limiting in `http/app-throttler.guard.ts`, phone parsing), config in `src/config/env.schema.ts`.
+
+## Telegram
+
+Off unless `TELEGRAM_BOT_TOKEN` is set; then `TELEGRAM_WEBHOOK_SECRET` (16+ chars) is required, and
+`TELEGRAM_MINI_APP_URL` gives the bot's "Open" button. Register the webhook with Telegram's `setWebhook`
+(`url=<api>/api/v1/telegram/webhook`, `secret_token=<secret>`). `signInitData` (exported from the module)
+builds valid initData for tests and local simulation.
 
 ## Adding an endpoint
 

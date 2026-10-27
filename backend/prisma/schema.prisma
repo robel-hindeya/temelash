@@ -449,6 +449,8 @@ model Customer {
   pinHash           String?        @map("pin_hash")
   pinFailedAttempts Int            @default(0) @map("pin_failed_attempts")
   pinLockedUntil    DateTime?      @map("pin_locked_until") @db.Timestamptz(3)
+  /// Telegram user who opens this card in the Mini App (signed in by Telegram, phone verified by the bot).
+  telegramUserId    BigInt?        @map("telegram_user_id")
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -458,6 +460,7 @@ model Customer {
   memberships CustomerMembership[]
 
   @@unique([merchantId, phoneE164])
+  @@unique([merchantId, telegramUserId])
   @@unique([id, merchantId])
   @@index([merchantId, firstName])
   @@index([merchantId, email])
@@ -466,6 +469,16 @@ model Customer {
 }
 
 /// Append-only consent history. Current consent = latest row per (customer, type).
+/// A phone number a Telegram user shared with the bot as their own contact (Telegram vouches for it).
+/// Not merchant data: it only lets the Mini App join or link a card by phone.
+model TelegramContact {
+  telegramUserId BigInt   @id @map("telegram_user_id")
+  phoneE164      String   @map("phone_e164")
+  verifiedAt     DateTime @map("verified_at") @db.Timestamptz(3)
+
+  @@map("telegram_contacts")
+}
+
 model CustomerConsent {
   id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   merchantId String        @map("merchant_id") @db.Uuid

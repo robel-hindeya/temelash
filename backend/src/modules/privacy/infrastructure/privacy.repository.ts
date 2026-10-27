@@ -166,6 +166,7 @@ export class PrivacyRepository {
         pinHash: null,
         pinFailedAttempts: 0,
         pinLockedUntil: null,
+        telegramUserId: null,
         status: 'ANONYMIZED',
         anonymizedAt: now,
       },

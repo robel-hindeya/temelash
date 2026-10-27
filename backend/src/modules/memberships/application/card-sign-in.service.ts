@@ -12,8 +12,8 @@ import {
   PIN_MAX_FAILED_ATTEMPTS,
   isWellFormedPin,
 } from '../../customers';
-import { ProgramsRepository } from '../../loyalty-programs';
-import { MerchantDirectory } from '../../merchants';
+import { ProgramsRepository, type ProgramRecord } from '../../loyalty-programs';
+import { type JoinTarget, MerchantDirectory } from '../../merchants';
 import { newCardToken } from '../domain/card-token';
 import { MembershipsRepository } from '../infrastructure/memberships.repository';
 import { EnrollmentService, type JoinInfo } from './enrollment.service';
@@ -99,11 +99,29 @@ export class CardSignInService {
       throw invalidCredentials();
     }
 
+    const { program, token } = await this.reopenCard(target, credential.id, 'phone_pin', meta);
+    return {
+      ...this.enrollment.describe(target, program),
+      customer: { firstName: credential.firstName },
+      card: { token },
+    };
+  }
+
+  /**
+   * Issues a fresh token for the customer's card at this merchant (the old one stops working) and
+   * audits how the customer proved who they are. 404 when they have no active card here.
+   */
+  async reopenCard(
+    target: JoinTarget,
+    customerId: string,
+    source: 'phone_pin' | 'telegram',
+    meta: RequestMeta,
+  ): Promise<{ program: ProgramRecord; token: string }> {
     const issued = newCardToken();
     const program = await this.transactions.run(async (db) => {
       const active = await this.programs.findActiveDefault(target.id, db);
       const membership = active
-        ? await this.memberships.findByCustomerAndProgram(target.id, credential.id, active.id, db)
+        ? await this.memberships.findByCustomerAndProgram(target.id, customerId, active.id, db)
         : null;
       if (!active || !membership || membership.status !== 'ACTIVE') {
         throw new DomainError(
@@ -113,7 +131,7 @@ export class CardSignInService {
         );
       }
       await this.memberships.rotateToken(target.id, membership.id, issued.hash, db);
-      await this.customers.clearPinFailures(target.id, credential.id, db);
+      if (source === 'phone_pin') await this.customers.clearPinFailures(target.id, customerId, db);
       await this.audit.record(
         {
           action: 'membership.card_recovered',
@@ -122,17 +140,12 @@ export class CardSignInService {
           targetType: 'membership',
           targetId: membership.id,
           requestId: meta.requestId,
-          metadata: { source: 'phone_pin' },
+          metadata: { source },
         },
         db,
       );
       return active;
     });
-
-    return {
-      ...this.enrollment.describe(target, program),
-      customer: { firstName: credential.firstName },
-      card: { token: issued.token },
-    };
+    return { program, token: issued.token };
   }
 }

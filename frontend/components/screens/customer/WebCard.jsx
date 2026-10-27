@@ -2,7 +2,14 @@
 /* Generated from the Temelash Card design (WebCard.dc.html), integrated with live backend data. */
 import DCLogic from '@/lib/DCLogic';
 import { A, withDCStyle } from '@/lib/dc-runtime';
-import api, { getOrAssignMerchantCode, getCustomerSession, logoutCustomer, registerCustomer, signInCustomer } from '@/lib/api';
+import api, {
+  getOrAssignMerchantCode,
+  getCustomerSession,
+  isInTelegram,
+  logoutCustomer,
+  registerCustomer,
+  signInCustomer,
+} from '@/lib/api';
 import renderWebCard from './WebCard.view';
 
 const __CSS =
@@ -18,7 +25,12 @@ const INSTALL_DISMISSED_KEY = 'tm-install-dismissed';
 /** Opened from the home-screen icon rather than a browser tab. */
 function isStandalone() {
   if (typeof window === 'undefined') return false;
-  return window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  // Inside Telegram the card already lives in a chat, so there is nothing to install.
+  return (
+    isInTelegram() ||
+    window.matchMedia?.('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true
+  );
 }
 
 /** How this browser adds a web app to the home screen: its own prompt, Safari's Share menu, or the browser menu. */
@@ -147,8 +159,16 @@ class WebCardView extends DCLogic {
     }
   };
 
+  /** Inside Telegram, a missing or stale card goes back through Telegram sign-in (no PIN there). */
+  backToTelegramSignIn() {
+    if (!isInTelegram()) return false;
+    window.location.replace(`/tg?m=${encodeURIComponent(this.joinReference())}`);
+    return true;
+  }
+
   signedOutElsewhere() {
     logoutCustomer();
+    if (this.backToTelegramSignIn()) return;
     this.setState({
       card: null,
       token: null,
@@ -235,6 +255,7 @@ class WebCardView extends DCLogic {
   async loadCard() {
     const token = this.tokenFromUrl() || this.state.token || getCustomerSession()?.token || null;
     if (!token) {
+      if (this.backToTelegramSignIn()) return;
       this.setState({ loading: false, authModalOpen: true });
       return;
     }

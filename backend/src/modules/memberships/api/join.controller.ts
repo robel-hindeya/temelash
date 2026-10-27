@@ -26,6 +26,7 @@ import { Public } from '../../../common/decorators/access.decorators';
 import { ReqMeta, type RequestMeta } from '../../../common/decorators/request-context.decorator';
 import { CardSignInService } from '../application/card-sign-in.service';
 import { EnrollmentService } from '../application/enrollment.service';
+import { TelegramCardService } from '../application/telegram-card.service';
 
 // Printable names only: no control characters or markup.
 const SAFE_NAME = /^[\p{L}\p{M}\p{N} .'’/-]+$/u;
@@ -90,6 +91,30 @@ export class EnrollDto {
   pin?: string;
 }
 
+export class TelegramSessionDto {
+  @ApiProperty({
+    description: 'Telegram.WebApp.initData exactly as Telegram gave it to the Mini App.',
+  })
+  @IsString()
+  @MinLength(20)
+  @MaxLength(4096)
+  initData!: string;
+}
+
+export class TelegramJoinDto extends TelegramSessionDto {
+  @ApiPropertyOptional({ example: 'Abebe', description: 'Defaults to the Telegram first name.' })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  @Matches(SAFE_NAME, { message: 'firstName contains invalid characters' })
+  firstName?: string;
+
+  @ApiPropertyOptional({ default: false }) @IsOptional() @IsBoolean() marketingConsent?: boolean;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(40) consentVersion?: string;
+}
+
 export class CardSignInDto {
   @ApiProperty({ example: '0911 234 567' })
   @IsString()
@@ -147,6 +172,7 @@ export class JoinController {
   constructor(
     private readonly enrollment: EnrollmentService,
     private readonly signIn: CardSignInService,
+    private readonly telegram: TelegramCardService,
   ) {}
 
   @Public()
@@ -206,5 +232,46 @@ export class JoinController {
     @ReqMeta() meta: RequestMeta,
   ) {
     return this.signIn.signIn(joinReference, dto, meta);
+  }
+
+  @Public()
+  @Post(':joinReference/telegram/session')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Open the card inside the Telegram Mini App',
+    description:
+      'Verifies Telegram initData. SIGNED_IN returns a fresh card token (the old one stops working); NEEDS_PHONE asks ' +
+      'the user to share their number with the bot; READY_TO_JOIN means a verified number is on file. Rate limited per IP.',
+  })
+  @ApiUnauthorizedResponse({ description: 'TELEGRAM_AUTH_FAILED' })
+  @ApiNotFoundResponse({ description: 'Join link not available, or Telegram not configured' })
+  telegramSession(
+    @Param('joinReference') joinReference: string,
+    @Body() dto: TelegramSessionDto,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.telegram.session(joinReference, dto.initData, meta);
+  }
+
+  @Public()
+  @Post(':joinReference/telegram/join')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Join, or link a web card, from the Telegram Mini App',
+    description:
+      'Uses the phone number the Telegram user shared with the bot in the last 30 minutes. Creates the card, or links ' +
+      'the existing card for that phone and issues it a fresh token. A card linked to another Telegram account gives ' +
+      '409 TELEGRAM_CONFLICT. Rate limited per IP.',
+  })
+  @ApiConflictResponse({
+    description: 'PHONE_NOT_VERIFIED, TELEGRAM_CONFLICT or CONSENT_VERSION_STALE',
+  })
+  @ApiUnauthorizedResponse({ description: 'TELEGRAM_AUTH_FAILED' })
+  telegramJoin(
+    @Param('joinReference') joinReference: string,
+    @Body() dto: TelegramJoinDto,
+    @ReqMeta() meta: RequestMeta,
+  ) {
+    return this.telegram.join(joinReference, dto, meta);
   }
 }

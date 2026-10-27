@@ -29,6 +29,18 @@ export const publicApi = {
       body: JSON.stringify(data),
     });
   },
+  telegramSession(joinReference, initData) {
+    return publicRequest(`/join/${encodeURIComponent(joinReference)}/telegram/session`, {
+      method: 'POST',
+      body: JSON.stringify({ initData }),
+    });
+  },
+  telegramJoin(joinReference, data) {
+    return publicRequest(`/join/${encodeURIComponent(joinReference)}/telegram/join`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
   withdrawMarketing(cardToken) {
     return publicRequest('/card/consent/marketing/withdraw', {
       method: 'POST',

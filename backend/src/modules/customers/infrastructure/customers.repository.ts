@@ -158,6 +158,36 @@ export class CustomersRepository {
     });
   }
 
+  /** The customer at this merchant whose card this Telegram user opens. */
+  findByTelegramUser(
+    merchantId: string,
+    telegramUserId: string,
+    db: DbClient = this.prisma,
+  ): Promise<{ id: string; firstName: string | null; status: CustomerStatus } | null> {
+    return db.customer.findFirst({
+      where: { merchantId, telegramUserId: BigInt(telegramUserId) },
+      select: { id: true, firstName: true, status: true },
+    });
+  }
+
+  /** Links a Telegram user to the customer, unless another Telegram user is already linked. */
+  async linkTelegramUser(
+    merchantId: string,
+    id: string,
+    telegramUserId: string,
+    db: DbClient = this.prisma,
+  ): Promise<boolean> {
+    const res = await db.customer.updateMany({
+      where: {
+        id,
+        merchantId,
+        OR: [{ telegramUserId: null }, { telegramUserId: BigInt(telegramUserId) }],
+      },
+      data: { telegramUserId: BigInt(telegramUserId) },
+    });
+    return res.count === 1;
+  }
+
   /** Sets the PIN only when none exists, so re-enrolling a known phone can never replace it. */
   async setPinIfMissing(
     merchantId: string,
