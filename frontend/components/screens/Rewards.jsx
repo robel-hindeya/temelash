@@ -520,88 +520,50 @@ RewardsView.prototype.__template = function (__v) {
               </button>
             </div>
           </div>{' '}
-          {/* Card Selector Strip */}
+          {/* Active Card Program Indicator */}
           <div
             style={{
-              background: '#ffffff',
-              border: '1px solid #e3e5ec',
-              borderRadius: '16px',
-              padding: '16px 20px',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px',
+              padding: '12px 18px',
               display: 'flex',
-              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'space-between',
               gap: '12px',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <strong style={{ fontSize: '15px', color: '#101827' }}>
-                  Select Loyalty Card to Configure ({(__v?.loyaltyCards || []).length})
-                </strong>
-                <span style={{ fontSize: '12px', color: '#64748b', marginLeft: '8px' }}>
-                  Each card program has its own stamps & reward definition
-                </span>
-              </div>
-              <A
-                href="/business/card-design"
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '16px' }}>🎁</span>
+              <span style={{ fontSize: '13px', fontWeight: '700', color: '#1e293b' }}>
+                Configuring Rewards for Loyalty Card
+              </span>
+              <span
                 style={{
-                  fontSize: '13px',
+                  fontSize: '11px',
+                  fontFamily: 'monospace',
                   fontWeight: '700',
-                  color: '#4661ad',
-                  textDecoration: 'none',
+                  color: '#2563eb',
+                  background: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
                 }}
               >
-                + Manage / Add Cards ↗
-              </A>
+                ID: {__v?.selectedCardId || 'UXwJ9RwdyHs'}
+              </span>
             </div>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              {(__v?.loyaltyCards || []).map((card) => {
-                const isSelected = card.id === __v?.selectedCardId;
-                return (
-                  <button
-                    key={card.id}
-                    type="button"
-                    onClick={() => __v?.selectCard && __v.selectCard(card.id)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '8px 14px',
-                      borderRadius: '10px',
-                      border: isSelected ? '2px solid #101827' : '1px solid #e2e8f0',
-                      background: isSelected ? '#101827' : '#f8fafc',
-                      color: isSelected ? '#ffffff' : '#101827',
-                      cursor: 'pointer',
-                      fontWeight: isSelected ? '700' : '600',
-                      fontSize: '13px',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: '8px',
-                        height: '8px',
-                        borderRadius: '50%',
-                        background: card.accent || '#4661ad',
-                        display: 'inline-block',
-                      }}
-                    />
-                    <span>{card.name}</span>
-                    <span
-                      style={{
-                        fontSize: '10px',
-                        fontFamily: 'monospace',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        background: isSelected ? 'rgba(255,255,255,0.2)' : '#e2e8f0',
-                        color: isSelected ? '#ffffff' : '#475569',
-                      }}
-                    >
-                      ID: {card.id}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <A
+              href="/business/card-design"
+              style={{
+                fontSize: '12px',
+                fontWeight: '700',
+                color: '#4661ad',
+                textDecoration: 'none',
+              }}
+            >
+              Card Design & Settings ↗
+            </A>
           </div>{' '}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'flex-start' }}>
             <div style={{ flex: '3 1 460px', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '16px' }}>

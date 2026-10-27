@@ -12,6 +12,11 @@ import api, {
   resetUserCardStamps,
   fetchCloudCardStamps,
   getAppOrigin,
+  getCustomerSession,
+  setCustomerSession,
+  logoutCustomer,
+  registerCustomer,
+  loginCustomer,
 } from '@/lib/api';
 import QRCodeDisplay from '@/components/QRCodeDisplay';
 
@@ -21,6 +26,7 @@ const __CSS =
 class WebCardView extends DCLogic {
   constructor(props) {
     super(props);
+    const initialSession = getCustomerSession();
     this.state = {
       menu: false,
       lang: 'en',
@@ -29,18 +35,35 @@ class WebCardView extends DCLogic {
       error: null,
       walletLoading: false,
       walletMsg: null,
-      memberId: null,
-      token: null,
+      memberId: initialSession?.id || null,
+      token: initialSession?.token || null,
       activeCardId: 'UXwJ9RwdyHs',
       activeCard: null,
       loyaltyCards: [],
+      // Customer Auth modal state
+      authModalOpen: !initialSession, // If session exists, bypass modal (second-time scan and go)
+      authTab: 'register', // 'register' (first time) or 'login' (sign in)
+      authFirstName: '',
+      authPhone: '',
+      authPassword: '',
+      authError: '',
+      authLoading: false,
+      currentUser: initialSession,
     };
     this.pollTimer = null;
     this.broadcastChannel = null;
   }
 
   async componentDidMount() {
-    await this.loadCard();
+    const session = getCustomerSession();
+    if (session) {
+      // Second time scan and go: user is already logged in
+      this.setState({ currentUser: session, authModalOpen: false });
+    } else {
+      // First time scan: prompt user for phone and password
+      this.setState({ authModalOpen: true, authTab: 'register' });
+    }
+    await this.loadCard(session);
     if (typeof window !== 'undefined') {
       window.addEventListener('teme-card-stamp-updated', this.handleStampUpdate);
       window.addEventListener('storage', this.handleStorageUpdate);
@@ -183,9 +206,97 @@ class WebCardView extends DCLogic {
     }
   };
 
+  setAuthTab = (tab) => {
+    this.setState({ authTab: tab, authError: '' });
+  };
+
+  onAuthFirstName = (e) => {
+    this.setState({ authFirstName: e.target.value, authError: '' });
+  };
+
+  onAuthPhone = (e) => {
+    this.setState({ authPhone: e.target.value, authError: '' });
+  };
+
+  onAuthPassword = (e) => {
+    this.setState({ authPassword: e.target.value, authError: '' });
+  };
+
+  handleAuthSubmit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const { authTab, authFirstName, authPhone, authPassword } = this.state;
+    this.setState({ authLoading: true, authError: '' });
+
+    try {
+      if (authTab === 'register') {
+        if (!authFirstName || !authFirstName.trim()) {
+          throw new Error('Please enter your first name.');
+        }
+        if (!authPhone || !authPhone.trim()) {
+          throw new Error('Please enter your phone number.');
+        }
+        if (!authPassword || authPassword.trim().length < 4) {
+          throw new Error('Please choose a password with at least 4 characters.');
+        }
+        const customer = await registerCustomer({
+          firstName: authFirstName.trim(),
+          phone: authPhone.trim(),
+          password: authPassword.trim(),
+        });
+        this.setState({
+          currentUser: customer,
+          memberId: customer.id,
+          token: customer.token,
+          authModalOpen: false,
+          authLoading: false,
+          authError: '',
+        });
+        await this.loadCard(customer);
+      } else {
+        if (!authPhone || !authPhone.trim()) {
+          throw new Error('Please enter your phone number.');
+        }
+        if (!authPassword || !authPassword.trim()) {
+          throw new Error('Please enter your password.');
+        }
+        const customer = await loginCustomer({
+          phone: authPhone.trim(),
+          password: authPassword.trim(),
+        });
+        this.setState({
+          currentUser: customer,
+          memberId: customer.id,
+          token: customer.token,
+          authModalOpen: false,
+          authLoading: false,
+          authError: '',
+        });
+        await this.loadCard(customer);
+      }
+    } catch (err) {
+      this.setState({
+        authError: err.message || 'Authentication failed. Please check your credentials.',
+        authLoading: false,
+      });
+    }
+  };
+
+  handleLogout = () => {
+    const prevPhone = this.state.currentUser?.phone || '';
+    logoutCustomer();
+    this.setState({
+      currentUser: null,
+      menu: false,
+      authModalOpen: true,
+      authTab: 'login',
+      authPhone: prevPhone,
+      authPassword: '',
+      authError: '',
+    });
+  };
+
   switchCard = (cardId) => {
-    const cards = getMerchantLoyaltyCards();
-    const card = cards.find((c) => c.id === cardId);
+    const card = getMerchantLoyaltyCard(cardId);
     if (card) {
       const nextStamps = getUserCardStamps(card.id, this.state.memberId || this.state.token);
       const req = card.stampsRequired || 10;
@@ -219,27 +330,24 @@ class WebCardView extends DCLogic {
           card: updatedCard,
         };
       });
-      if (typeof window !== 'undefined' && window.history?.pushState) {
-        const url = new URL(window.location.href);
-        url.searchParams.set('c', card.id);
-        window.history.pushState({}, '', url.toString());
-      }
     }
   };
 
-
-
-  async loadCard() {
+  async loadCard(givenSession = null) {
     try {
-      let token = null;
-      let memberId = null;
+      const session = givenSession || this.state.currentUser || getCustomerSession();
+      let token = session?.token || null;
+      let memberId = session?.id || session?.userId || null;
+      const customerName = session?.firstName || null;
+      const customerPhone = session?.phone || null;
+      const customerEmail = session?.email || null;
       let merchantParam = null;
       let cardIdParam = null;
       const allLoyaltyCards = getMerchantLoyaltyCards();
 
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
-        token = params.get('token') || window.localStorage.getItem('tm-customer-token');
+        token = token || params.get('token') || window.localStorage.getItem('tm-customer-token');
         cardIdParam = params.get('c') || params.get('card') || params.get('cardId');
         merchantParam = params.get('m') || params.get('merchant') || params.get('slug');
 
@@ -247,7 +355,7 @@ class WebCardView extends DCLogic {
         const matchingCard = allLoyaltyCards.find((c) => c.id === routeOrParamId);
         if (matchingCard) {
           cardIdParam = matchingCard.id;
-        } else if (routeOrParamId) {
+        } else if (routeOrParamId && !memberId) {
           memberId = routeOrParamId;
         }
       }
@@ -260,7 +368,7 @@ class WebCardView extends DCLogic {
       const activeCardId = cardIdParam || allLoyaltyCards[0]?.id || 'UXwJ9RwdyHs';
       const activeCard = getMerchantLoyaltyCard(activeCardId) || allLoyaltyCards[0];
 
-      // 1. Assign 11-char alphanumeric ID (like UXwJ9RwdyHs) for user
+      // 1. Assign 11-char alphanumeric ID for user
       if (!memberId || memberId.startsWith('TC-')) {
         memberId = getOrAssignUserCode();
         if (typeof window !== 'undefined') {
@@ -299,6 +407,14 @@ class WebCardView extends DCLogic {
                   nameAm: activeCard.rewardNameAm || card.reward?.nameAm,
                 };
               }
+            }
+            if (customerName) {
+              card.customer = {
+                ...card.customer,
+                firstName: customerName,
+                phone: customerPhone || card.customer?.phone,
+                email: customerEmail || card.customer?.email,
+              };
             }
             card.progress = {
               ...card.progress,
@@ -345,12 +461,13 @@ class WebCardView extends DCLogic {
 
       if (!enrolledToken || enrolledToken.startsWith('DEMO-')) {
         try {
-          const rndPhone = '+2519' + Math.floor(10000000 + Math.random() * 90000000);
-          const rndEmail = 'member_' + Date.now().toString().slice(-6) + '@customer.temelash.et';
+          const digits = (customerPhone || memberId).replace(/[^0-9]/g, '');
+          const rndPhone = customerPhone || ('+2519' + Math.floor(10000000 + Math.random() * 90000000));
+          const autoEmail = customerEmail || (`${digits || 'member'}@customer.temelash.et`);
           const enrollRes = await api.public.enroll(joinSlug, {
-            firstName: 'Member ' + memberId.slice(-4),
+            firstName: customerName || ('Member ' + memberId.slice(-4)),
             phone: rndPhone,
-            email: rndEmail,
+            email: autoEmail,
             acceptTerms: true,
             preferredLanguage: 'EN',
             marketingConsent: true,
@@ -388,6 +505,14 @@ class WebCardView extends DCLogic {
                 };
               }
             }
+            if (customerName) {
+              card.customer = {
+                ...card.customer,
+                firstName: customerName,
+                phone: customerPhone || card.customer?.phone,
+                email: customerEmail || card.customer?.email,
+              };
+            }
             card.progress = {
               ...card.progress,
               current,
@@ -421,6 +546,9 @@ class WebCardView extends DCLogic {
         window.localStorage.setItem('tm-customer-token', fallbackToken);
       }
 
+      const digits = (customerPhone || memberId).replace(/[^0-9]/g, '');
+      const autoEmail = customerEmail || (`${digits || 'member'}@customer.temelash.et`);
+
       this.setState({
         card: {
           merchant: { nameEn: merch.nameEn || 'Sample Cafe', nameAm: merch.nameAm || 'ሳምፕል ካፌ' },
@@ -431,7 +559,13 @@ class WebCardView extends DCLogic {
             termsEn: prog.termsEn || 'One stamp per visit. Valid 30 days.',
             termsAm: prog.termsAm || 'በአንድ ጉብኝት አንድ ማህተም።',
           },
-          customer: { firstName: 'Member ' + memberId.slice(-4), preferredLanguage: 'EN', id: memberId },
+          customer: {
+            firstName: customerName || ('Member ' + memberId.slice(-4)),
+            phone: customerPhone || '',
+            email: autoEmail,
+            preferredLanguage: 'EN',
+            id: memberId,
+          },
           progress: {
             current: savedStamps,
             required: stampsReq,
@@ -611,6 +745,20 @@ class WebCardView extends DCLogic {
         : card?.program?.nameEn || 'Loyalty Card',
       loyaltyCards: this.state.loyaltyCards || getMerchantLoyaltyCards(),
       switchCard: this.switchCard,
+      authModalOpen: this.state.authModalOpen,
+      authTab: this.state.authTab,
+      authFirstName: this.state.authFirstName,
+      authPhone: this.state.authPhone,
+      authPassword: this.state.authPassword,
+      authError: this.state.authError,
+      authLoading: this.state.authLoading,
+      currentUser: this.state.currentUser,
+      setAuthTab: this.setAuthTab,
+      onAuthFirstName: this.onAuthFirstName,
+      onAuthPhone: this.onAuthPhone,
+      onAuthPassword: this.onAuthPassword,
+      handleAuthSubmit: this.handleAuthSubmit,
+      logout: this.handleLogout,
       rewardDescription: am
         ? card?.reward?.nameAm || `${maxStamps} ማህተም ሲሞላ`
         : `${card?.reward?.nameEn || 'Reward'} at ${maxStamps} stamps`,
@@ -1020,60 +1168,6 @@ WebCardView.prototype.__template = function (__v) {
               }}
             >{`${__t(__v?.t?.google)}`}</button>
           </div>
-
-          {/* Multi-Card Switcher for Customer */}
-          {(__v?.loyaltyCards || []).length > 1 ? (
-            <div
-              style={{
-                background: '#ffffff',
-                borderRadius: '16px',
-                padding: '14px 16px',
-                border: '1px solid #e3e5ec',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Cards from this Business
-                </span>
-                <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-                  {__v?.loyaltyCards.length} Cards
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-                {__v?.loyaltyCards.map((c) => {
-                  const isCur = c.id === __v?.cardId;
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => __v?.switchCard && __v.switchCard(c.id)}
-                      style={{
-                        padding: '6px 12px',
-                        borderRadius: '8px',
-                        border: isCur ? '2px solid #101827' : '1px solid #cbd5e1',
-                        background: isCur ? '#101827' : '#f8fafc',
-                        color: isCur ? '#ffffff' : '#101827',
-                        fontSize: '12px',
-                        fontWeight: isCur ? '700' : '600',
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                      }}
-                    >
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: c.accent || '#4661ad' }} />
-                      <span>{c.name}</span>
-                      <span style={{ fontSize: '10px', opacity: 0.8, fontFamily: 'monospace' }}>[{c.id}]</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
         </main>{' '}
         {__b(__v?.menuOpen) ? (
           <>
@@ -1084,6 +1178,7 @@ WebCardView.prototype.__template = function (__v) {
                 background: 'rgba(16,24,39,0.45)',
                 display: 'flex',
                 alignItems: 'flex-end',
+                zIndex: 9000,
               }}
             >
               <div
@@ -1120,6 +1215,46 @@ WebCardView.prototype.__template = function (__v) {
                     {'Done'}
                   </button>
                 </div>{' '}
+
+                {__v?.currentUser ? (
+                  <div
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '12px',
+                      padding: '12px 14px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#101827' }}>
+                        👤 {__v?.currentUser?.firstName || 'Member'}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>
+                        {__v?.currentUser?.phone} · {__v?.currentUser?.email}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={__v?.logout}
+                      style={{
+                        background: '#fee2e2',
+                        color: '#b91c1c',
+                        border: '1px solid #fecaca',
+                        borderRadius: '8px',
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                ) : null}
+
                 <dl
                   style={{
                     margin: '0',
@@ -1158,6 +1293,241 @@ WebCardView.prototype.__template = function (__v) {
               </div>
             </div>
           </>
+        ) : null}
+
+        {/* Customer Auth Modal (First-time scan OR after Logout) */}
+        {__v?.authModalOpen ? (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(15, 23, 42, 0.78)',
+              backdropFilter: 'blur(8px)',
+              zIndex: 99999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px',
+            }}
+          >
+            <div
+              style={{
+                background: '#ffffff',
+                borderRadius: '24px',
+                padding: '28px 24px',
+                maxWidth: '380px',
+                width: '100%',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+                boxSizing: 'border-box',
+              }}
+            >
+              <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <div
+                  style={{
+                    width: '52px',
+                    height: '52px',
+                    borderRadius: '16px',
+                    background: __v?.brandColor || '#8a4b2a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '26px',
+                    boxShadow: '0 4px 12px rgba(138, 75, 42, 0.25)',
+                    color: '#ffffff',
+                  }}
+                >
+                  ☕
+                </div>
+                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#101827' }}>
+                  {__v?.programTitle || 'Coffee Stamp Card'}
+                </h2>
+                <p style={{ margin: 0, fontSize: '13px', color: '#64748b', lineHeight: '18px' }}>
+                  {__v?.authTab === 'register'
+                    ? 'First time scan? Enter your name, phone and password to get your loyalty card!'
+                    : 'Sign in with your phone & password to see your loyalty stamps.'}
+                </p>
+              </div>
+
+              {/* Tabs */}
+              <div
+                style={{
+                  display: 'flex',
+                  background: '#f1f5f9',
+                  padding: '4px',
+                  borderRadius: '12px',
+                  gap: '4px',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => __v?.setAuthTab && __v.setAuthTab('register')}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    border: 'none',
+                    borderRadius: '8px',
+                    background: __v?.authTab === 'register' ? '#ffffff' : 'transparent',
+                    color: __v?.authTab === 'register' ? '#101827' : '#64748b',
+                    fontWeight: '700',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    boxShadow: __v?.authTab === 'register' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  }}
+                >
+                  New Member
+                </button>
+                <button
+                  type="button"
+                  onClick={() => __v?.setAuthTab && __v.setAuthTab('login')}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    border: 'none',
+                    borderRadius: '8px',
+                    background: __v?.authTab === 'login' ? '#ffffff' : 'transparent',
+                    color: __v?.authTab === 'login' ? '#101827' : '#64748b',
+                    fontWeight: '700',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    boxShadow: __v?.authTab === 'login' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  }}
+                >
+                  Sign In
+                </button>
+              </div>
+
+              {__v?.authError ? (
+                <div
+                  style={{
+                    background: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    color: '#b91c1c',
+                    borderRadius: '10px',
+                    padding: '10px 14px',
+                    fontSize: '13px',
+                    lineHeight: '18px',
+                  }}
+                >
+                  {__v?.authError}
+                </div>
+              ) : null}
+
+              <form onSubmit={__v?.handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {__v?.authTab === 'register' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '700', color: '#374151' }}>
+                      Your First Name *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Abebe"
+                      value={__v?.authFirstName || ''}
+                      onChange={__v?.onAuthFirstName}
+                      required
+                      style={{
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '10px',
+                        padding: '11px 14px',
+                        fontSize: '14px',
+                        outline: 'none',
+                        width: '100%',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                ) : null}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#374151' }}>
+                    Phone Number {__v?.authTab === 'login' ? '(Username)' : ''} *
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="e.g. 0912 345 678"
+                    value={__v?.authPhone || ''}
+                    onChange={__v?.onAuthPhone}
+                    required
+                    style={{
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '10px',
+                      padding: '11px 14px',
+                      fontSize: '14px',
+                      outline: 'none',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#374151' }}>
+                    {__v?.authTab === 'register' ? 'Create Password *' : 'Password *'}
+                  </label>
+                  <input
+                    type="password"
+                    placeholder={__v?.authTab === 'register' ? 'Create password' : 'Enter password'}
+                    value={__v?.authPassword || ''}
+                    onChange={__v?.onAuthPassword}
+                    required
+                    style={{
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '10px',
+                      padding: '11px 14px',
+                      fontSize: '14px',
+                      outline: 'none',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                {__v?.authTab === 'register' ? (
+                  <div
+                    style={{
+                      background: '#f0fdf4',
+                      border: '1px solid #bbf7d0',
+                      borderRadius: '10px',
+                      padding: '8px 12px',
+                      fontSize: '12px',
+                      color: '#166534',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <span>⚡</span>
+                    <span>No email needed! Your card is linked to your phone.</span>
+                  </div>
+                ) : null}
+
+                <button
+                  type="submit"
+                  disabled={__v?.authLoading}
+                  style={{
+                    background: '#101827',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '12px',
+                    padding: '13px',
+                    fontSize: '15px',
+                    fontWeight: '700',
+                    cursor: __v?.authLoading ? 'wait' : 'pointer',
+                    boxShadow: '0 4px 12px rgba(16,24,39,0.2)',
+                    marginTop: '4px',
+                  }}
+                >
+                  {__v?.authLoading
+                    ? 'Processing...'
+                    : __v?.authTab === 'register'
+                      ? 'Get My Loyalty Card ➔'
+                      : 'Sign In to My Card ➔'}
+                </button>
+              </form>
+            </div>
+          </div>
         ) : null}
       </div>
     </>

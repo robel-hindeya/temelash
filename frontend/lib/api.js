@@ -619,121 +619,262 @@ export function getOrAssignUserCode() {
 }
 
 /**
- * Default merchant loyalty cards if none saved
+ * The single merchant loyalty card program (ID: UXwJ9RwdyHs)
  */
-export const DEFAULT_MERCHANT_CARDS = [
-  {
-    id: 'UXwJ9RwdyHs',
-    name: 'Coffee Stamp Card',
-    nameAm: 'የቡና ማህተም ካርድ',
-    accent: '#8a4b2a',
-    icon: 'coffee',
-    stampsRequired: 10,
-    rewardName: 'Free macchiato',
-    rewardNameAm: 'ነፃ ማኪያቶ',
-    description: 'Collect 10 stamps for a fresh hot macchiato',
-    isDefault: true,
-  },
-  {
-    id: 'kP7mQ9xRtL2',
-    name: 'Pastry & Breakfast Card',
-    nameAm: 'የቁርስ እና ኬክ ካርድ',
-    accent: '#c2410c',
-    icon: 'croissant',
-    stampsRequired: 8,
-    rewardName: 'Free croissant or pastry',
-    rewardNameAm: 'ነፃ ክሩአሳን ወይም ኬክ',
-    description: '8 morning visits earns any specialty pastry',
-    isDefault: false,
-  },
-  {
-    id: 'mK7vB2xP9Lq',
-    name: 'Lunch Combo Loyalty',
-    nameAm: 'የምሳ ኮምቦ ካርድ',
-    accent: '#2f6b4f',
-    icon: 'fork',
-    stampsRequired: 6,
-    rewardName: 'Free combo meal',
-    rewardNameAm: 'ነፃ የምሳ ኮምቦ ምግብ',
-    description: 'Order 6 lunch combos and get the 7th on the house',
-    isDefault: false,
-  },
-];
+export const DEFAULT_MERCHANT_CARD = {
+  id: 'UXwJ9RwdyHs',
+  name: 'Coffee Stamp Card',
+  nameAm: 'የቡና ማህተም ካርድ',
+  accent: '#8a4b2a',
+  icon: 'coffee',
+  stampsRequired: 10,
+  rewardName: 'Free macchiato',
+  rewardNameAm: 'ነፃ ማኪያቶ',
+  description: 'Collect 10 stamps for a fresh hot macchiato',
+  isDefault: true,
+};
 
-let _memoryMerchantCards = [...DEFAULT_MERCHANT_CARDS];
+export const DEFAULT_MERCHANT_CARDS = [DEFAULT_MERCHANT_CARD];
+
+let _memoryMerchantCard = { ...DEFAULT_MERCHANT_CARD };
 
 /**
- * Get all loyalty cards for the merchant
+ * Get the merchant's single loyalty card program
  */
-export function getMerchantLoyaltyCards() {
-  if (typeof window === 'undefined') return _memoryMerchantCards;
+export function getMerchantLoyaltyCard(cardId = null) {
+  if (typeof window === 'undefined') return _memoryMerchantCard;
   try {
-    const raw = window.localStorage.getItem('tm-merchant-cards');
+    const raw = window.localStorage.getItem('tm-merchant-card');
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        _memoryMerchantCards = parsed;
+      if (parsed && parsed.id) {
+        _memoryMerchantCard = parsed;
         return parsed;
       }
     }
-    window.localStorage.setItem('tm-merchant-cards', JSON.stringify(DEFAULT_MERCHANT_CARDS));
-    return DEFAULT_MERCHANT_CARDS;
-  } catch {
-    return _memoryMerchantCards;
-  }
+  } catch {}
+  return _memoryMerchantCard;
 }
 
 /**
- * Add a new loyalty card with an assigned 11-character ID like UXwJ9RwdyHs
+ * Get merchant loyalty cards list (returns array with the single card)
  */
-export function addMerchantLoyaltyCard(data) {
-  const cards = getMerchantLoyaltyCards();
-  const id = data?.id || generateShortId(11);
-  const newCard = {
-    id,
-    name: data?.name || 'New Loyalty Card',
-    nameAm: data?.nameAm || 'አዲስ የማህተም ካርድ',
-    accent: data?.accent || '#4661ad',
-    icon: data?.icon || 'star',
-    stampsRequired: Number(data?.stampsRequired) || 10,
-    rewardName: data?.rewardName || 'Special Reward',
-    rewardNameAm: data?.rewardNameAm || 'ልዩ ሽልማት',
-    description: data?.description || 'Collect stamps to unlock rewards',
-    isDefault: false,
-    createdAt: new Date().toISOString(),
+export function getMerchantLoyaltyCards() {
+  const card = getMerchantLoyaltyCard();
+  return [card];
+}
+
+/**
+ * Update the merchant's single loyalty card
+ */
+export function updateMerchantLoyaltyCard(cardIdOrUpdates, maybeUpdates = null) {
+  const updates = (maybeUpdates && typeof maybeUpdates === 'object') ? maybeUpdates : (cardIdOrUpdates || {});
+  const current = getMerchantLoyaltyCard();
+  const updated = {
+    ...current,
+    ...updates,
+    id: current.id || 'UXwJ9RwdyHs',
   };
-  const updated = [...cards, newCard];
-  _memoryMerchantCards = updated;
+  _memoryMerchantCard = updated;
   if (typeof window !== 'undefined') {
     try {
-      window.localStorage.setItem('tm-merchant-cards', JSON.stringify(updated));
+      window.localStorage.setItem('tm-merchant-card', JSON.stringify(updated));
+      window.localStorage.setItem('tm-merchant-cards', JSON.stringify([updated]));
     } catch {}
   }
-  return newCard;
+  return updated;
+}
+
+export function addMerchantLoyaltyCard(data) {
+  return updateMerchantLoyaltyCard(data);
+}
+
+// ──────────────────────────────────────────
+// CUSTOMER AUTH & DATA REGISTRY
+// ──────────────────────────────────────────
+
+/**
+ * Get list of all customers enrolled in this merchant's loyalty program
+ */
+export function getRegisteredCustomers() {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem('tm-merchant-customers');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
 }
 
 /**
- * Update an existing loyalty card by its 11-char ID
+ * Save / update customer in the merchant's customer registry
  */
-export function updateMerchantLoyaltyCard(cardId, updates) {
-  const cards = getMerchantLoyaltyCards();
-  const updated = cards.map((c) => (c.id === cardId ? { ...c, ...updates } : c));
-  _memoryMerchantCards = updated;
-  if (typeof window !== 'undefined') {
-    try {
-      window.localStorage.setItem('tm-merchant-cards', JSON.stringify(updated));
-    } catch {}
-  }
-  return updated.find((c) => c.id === cardId) || null;
+export function saveRegisteredCustomer(customer) {
+  if (typeof window === 'undefined' || !customer) return;
+  try {
+    const existing = getRegisteredCustomers();
+    const idx = existing.findIndex((c) => (customer.phone && c.phone === customer.phone) || (customer.id && c.id === customer.id));
+    const updatedCustomer = {
+      ...customer,
+      updatedAt: new Date().toISOString(),
+    };
+    let list;
+    if (idx >= 0) {
+      list = existing.map((c, i) => (i === idx ? { ...c, ...updatedCustomer } : c));
+    } else {
+      list = [updatedCustomer, ...existing];
+    }
+    window.localStorage.setItem('tm-merchant-customers', JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('tm-customers-updated', { detail: list }));
+  } catch {}
 }
 
 /**
- * Get a specific loyalty card by its 11-char ID
+ * Get active customer session (if customer is logged in on this browser)
  */
-export function getMerchantLoyaltyCard(cardId) {
-  if (!cardId) return null;
-  const cards = getMerchantLoyaltyCards();
-  return cards.find((c) => c.id === cardId) || null;
+export function getCustomerSession() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem('tm-customer-session');
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+/**
+ * Set active customer session (or null on logout)
+ */
+export function setCustomerSession(user) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (user) {
+      window.localStorage.setItem('tm-customer-session', JSON.stringify(user));
+      window.localStorage.setItem('tm-user-code', user.id || user.userId);
+      window.localStorage.setItem('tm-customer-id', user.id || user.userId);
+      window.localStorage.setItem('tm-customer-token', user.token || user.id);
+    } else {
+      window.localStorage.removeItem('tm-customer-session');
+    }
+    window.dispatchEvent(new CustomEvent('tm-customer-session-change', { detail: user }));
+  } catch {}
+}
+
+/**
+ * Customer sign-out: logs user out without deleting their account or stamps
+ */
+export function logoutCustomer() {
+  setCustomerSession(null);
+}
+
+/**
+ * Customer registration with phone and password
+ * Automatically derives email (user never enters email)
+ */
+export async function registerCustomer({ firstName, phone, password }) {
+  if (!phone || !password) throw new Error('Phone number and password are required');
+  const cleanPhone = String(phone).replace(/[\s-]/g, '').trim();
+  const digitsOnly = cleanPhone.replace(/[^0-9]/g, '');
+  
+  // Auto-generate email without asking user
+  const autoEmail = `${digitsOnly || 'user'}@customer.temelash.et`;
+  const name = (firstName || 'Customer').trim();
+  const userId = getOrAssignUserCode();
+  const token = userId;
+
+  const newCustomer = {
+    id: userId,
+    firstName: name,
+    phone: cleanPhone,
+    email: autoEmail,
+    password: String(password).trim(),
+    token,
+    stamps: 0,
+    visits: 1,
+    joinedAt: new Date().toISOString(),
+    status: 'ACTIVE',
+  };
+
+  if (typeof window !== 'undefined') {
+    try {
+      const accountsRaw = window.localStorage.getItem('tm-customer-accounts') || '{}';
+      const accounts = JSON.parse(accountsRaw);
+      accounts[cleanPhone] = newCustomer;
+      accounts[digitsOnly] = newCustomer;
+      window.localStorage.setItem('tm-customer-accounts', JSON.stringify(accounts));
+    } catch {}
+  }
+
+  // Cloud KV backup for cross-device authentication
+  try {
+    const cleanKey = `user_acc_${digitsOnly}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/${CLOUD_SYNC_APP_KEY}/${cleanKey}/${encodeURIComponent(JSON.stringify(newCustomer))}`, {
+      method: 'POST',
+    }).catch(() => null);
+  } catch {}
+
+  // Save to merchant registry and create session
+  saveRegisteredCustomer(newCustomer);
+  setCustomerSession(newCustomer);
+
+  // Auto-enroll in backend database if reachable
+  try {
+    api.public.enroll('sample-cafe', {
+      firstName: name,
+      phone: cleanPhone,
+      email: autoEmail,
+      acceptTerms: true,
+      preferredLanguage: 'EN',
+      marketingConsent: true,
+    }).catch(() => null);
+  } catch {}
+
+  return newCustomer;
+}
+
+/**
+ * Customer login with phone and password
+ */
+export async function loginCustomer({ phone, password }) {
+  if (!phone || !password) throw new Error('Phone number and password are required');
+  const cleanPhone = String(phone).replace(/[\s-]/g, '').trim();
+  const digitsOnly = cleanPhone.replace(/[^0-9]/g, '');
+  const pass = String(password).trim();
+
+  let user = null;
+  if (typeof window !== 'undefined') {
+    try {
+      const accountsRaw = window.localStorage.getItem('tm-customer-accounts') || '{}';
+      const accounts = JSON.parse(accountsRaw);
+      user = accounts[cleanPhone] || accounts[digitsOnly] || null;
+    } catch {}
+  }
+
+  // Fallback to cloud KV if on a different device
+  if (!user) {
+    try {
+      const cleanKey = `user_acc_${digitsOnly}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/${CLOUD_SYNC_APP_KEY}/${cleanKey}`);
+      if (res.ok) {
+        const raw = await res.text();
+        const clean = (raw || '').replace(/^"|"$/g, '').trim();
+        user = JSON.parse(decodeURIComponent(clean));
+      }
+    } catch {}
+  }
+
+  if (!user) {
+    throw new Error('No account found for this phone number. Please click "New Member? Join" to create your card.');
+  }
+
+  if (user.password && user.password !== pass) {
+    throw new Error('Incorrect password. Please try again.');
+  }
+
+  setCustomerSession(user);
+  saveRegisteredCustomer(user);
+  return user;
 }
 
 let _memoryStamps = {};

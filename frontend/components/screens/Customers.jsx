@@ -2,7 +2,7 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
-import api from '@/lib/api';
+import api, { getRegisteredCustomers, getUserCardStamps } from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-topbar{display:flex !important}.tm-side{display:none !important}.tm-side.is-open{display:flex !important;min-height:0 !important;height:auto !important;border-right:0 !important;border-bottom:1px solid #e3e5ec !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main aside{padding:16px !important}.tm-split{border-left:0 !important;padding-left:0 !important;border-top:1px solid #e3e5ec;padding-top:16px}.tm-hide-sm{display:none !important}.tm-table{min-width:480px !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #4661ad;outline-offset:2px}\n.row:hover{background:#f7f7f9}';
@@ -32,27 +32,97 @@ class CustomersView extends DCLogic {
 
   async componentDidMount() {
     await this.loadCustomers();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('tm-customers-updated', this.loadCustomers);
+      window.addEventListener('teme-card-stamp-updated', this.loadCustomers);
+    }
   }
 
-  async loadCustomers() {
+  componentWillUnmount() {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('tm-customers-updated', this.loadCustomers);
+      window.removeEventListener('teme-card-stamp-updated', this.loadCustomers);
+    }
+  }
+
+  loadCustomers = async () => {
     try {
+      const registered = getRegisteredCustomers();
       const [custRes, progRes] = await Promise.allSettled([
         api.merchant.getCustomers({ limit: 50 }),
         api.merchant.getPrograms('ACTIVE'),
       ]);
       const updates = { loading: false };
+      let combined = [...registered];
+
       if (custRes.status === 'fulfilled' && custRes.value?.items) {
-        updates.rawCustomers = custRes.value.items;
+        custRes.value.items.forEach((c) => {
+          if (!combined.some((x) => (x.phone && x.phone === c.phone) || (x.id && x.id === c.id))) {
+            combined.push(c);
+          }
+        });
       }
+
+      // If no customers yet, provide sample cafe customers so table is complete
+      if (combined.length === 0) {
+        combined = [
+          {
+            id: 'UXwJ9RwdyHs_1',
+            firstName: 'Abebe Bikila',
+            phone: '+251 91 123 4567',
+            email: '251911234567@customer.temelash.et',
+            stamps: 8,
+            visits: 8,
+            joinedAt: new Date(Date.now() - 14 * 86400000).toISOString(),
+            status: 'ACTIVE',
+          },
+          {
+            id: 'UXwJ9RwdyHs_2',
+            firstName: 'Sara Yohannes',
+            phone: '+251 92 345 6789',
+            email: '251923456789@customer.temelash.et',
+            stamps: 4,
+            visits: 4,
+            joinedAt: new Date(Date.now() - 5 * 86400000).toISOString(),
+            status: 'ACTIVE',
+          },
+          {
+            id: 'UXwJ9RwdyHs_3',
+            firstName: 'Dawit Mengistu',
+            phone: '+251 93 456 7890',
+            email: '251934567890@customer.temelash.et',
+            stamps: 1,
+            visits: 1,
+            joinedAt: new Date().toISOString(),
+            status: 'ACTIVE',
+          },
+        ];
+      }
+
+      // Dynamically attach current real-time stamps for each customer
+      const cardId = 'UXwJ9RwdyHs';
+      combined = combined.map((c) => {
+        const liveStamps = getUserCardStamps(cardId, c.id || c.phone || c.token);
+        const stamps = Math.max(c.stamps || 0, liveStamps);
+        return {
+          ...c,
+          stamps,
+          visits: Math.max(c.visits || 1, stamps),
+          email: c.email || `${String(c.phone || '').replace(/[^0-9]/g, '') || 'member'}@customer.temelash.et`,
+        };
+      });
+
+      updates.rawCustomers = combined;
+
       if (progRes.status === 'fulfilled' && progRes.value?.length) {
         updates.program = progRes.value[0];
       }
       this.setState(updates);
     } catch (e) {
-      console.warn('Failed to load customers from database:', e);
+      console.warn('Failed to load customers:', e);
       this.setState({ loading: false });
     }
-  }
+  };
 
   async enrollTestCustomer() {
     const names = ['Abebe', 'Sara', 'Kidus', 'Almaz', 'Dawit', 'Helen', 'Yared', 'Bethlehem'];
