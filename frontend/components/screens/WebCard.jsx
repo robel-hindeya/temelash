@@ -4,24 +4,20 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import api, {
-  getOrAssignUserCode,
   getOrAssignMerchantCode,
-  getMerchantLoyaltyCards,
-  getMerchantLoyaltyCard,
-  getUserCardStamps,
-  resetUserCardStamps,
-  fetchCloudCardStamps,
-  getAppOrigin,
   getCustomerSession,
-  setCustomerSession,
   logoutCustomer,
   registerCustomer,
-  loginCustomer,
 } from '@/lib/api';
 import QRCodeDisplay from '@/components/QRCodeDisplay';
 
 const __CSS =
   'body{margin:0}\nbutton,a{font:inherit}\nbutton:focus-visible,a:focus-visible{outline:2px solid #4661ad;outline-offset:2px}';
+
+// How often a visible card re-reads its stamps from the backend. The public card endpoint is rate limited
+// per IP (10 a minute by default), so the card also refreshes when the customer returns to the page instead
+// of polling fast.
+const REFRESH_MS = 30000;
 
 class WebCardView extends DCLogic {
   constructor(props) {
@@ -35,179 +31,66 @@ class WebCardView extends DCLogic {
       error: null,
       walletLoading: false,
       walletMsg: null,
-      memberId: initialSession?.id || null,
       token: initialSession?.token || null,
-      activeCardId: 'UXwJ9RwdyHs',
-      activeCard: null,
-      loyaltyCards: [],
-      // Customer Auth modal state
-      authModalOpen: !initialSession, // If session exists, bypass modal (second-time scan and go)
-      authTab: 'register', // 'register' (first time) or 'login' (sign in)
+      // Customer join modal state
+      authModalOpen: false,
       authFirstName: '',
-      authPhone: '',
-      authPassword: '',
+      authPhone: initialSession?.phone || '',
       authError: '',
       authLoading: false,
       currentUser: initialSession,
     };
-    this.pollTimer = null;
-    this.broadcastChannel = null;
+    this.refreshTimer = null;
   }
 
   async componentDidMount() {
-    const session = getCustomerSession();
-    if (session) {
-      // Second time scan and go: user is already logged in
-      this.setState({ currentUser: session, authModalOpen: false });
-    } else {
-      // First time scan: prompt user for phone and password
-      this.setState({ authModalOpen: true, authTab: 'register' });
-    }
-    await this.loadCard(session);
+    await this.loadCard();
     if (typeof window !== 'undefined') {
-      window.addEventListener('teme-card-stamp-updated', this.handleStampUpdate);
-      window.addEventListener('storage', this.handleStorageUpdate);
-      try {
-        this.broadcastChannel = new window.BroadcastChannel('teme_loyalty_sync');
-        this.broadcastChannel.onmessage = this.handleBroadcastUpdate;
-      } catch {}
-      this.pollTimer = setInterval(this.pollCloudStamps, 1500);
+      this.refreshTimer = setInterval(() => {
+        if (document.visibilityState === 'visible') this.refreshCard();
+      }, REFRESH_MS);
+      document.addEventListener('visibilitychange', this.handleVisibility);
     }
   }
 
   componentWillUnmount() {
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
-    }
-    if (this.broadcastChannel) {
-      try { this.broadcastChannel.close(); } catch {}
-      this.broadcastChannel = null;
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
     }
     if (typeof window !== 'undefined') {
-      window.removeEventListener('teme-card-stamp-updated', this.handleStampUpdate);
-      window.removeEventListener('storage', this.handleStorageUpdate);
+      document.removeEventListener('visibilitychange', this.handleVisibility);
     }
   }
 
-  pollCloudStamps = async () => {
+  handleVisibility = () => {
+    if (document.visibilityState === 'visible') this.refreshCard();
+  };
+
+  /** The shop this page joins: from the QR link (?m=), else the shop of the saved card. */
+  joinReference() {
+    let fromUrl = null;
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      fromUrl = params.get('m') || params.get('merchant') || params.get('slug');
+    }
+    return fromUrl || this.state.currentUser?.joinReference || getOrAssignMerchantCode();
+  }
+
+  /** A card token passed in the link (?token=) opens that card on this browser. */
+  tokenFromUrl() {
+    if (typeof window === 'undefined') return null;
+    const t = new URLSearchParams(window.location.search).get('token');
+    return t && t.length >= 20 ? t : null;
+  }
+
+  refreshCard = async () => {
+    const token = this.state.token;
+    if (!token || this.state.authModalOpen) return;
     try {
-      const activeCardId = this.state.activeCardId;
-      const memberId = this.state.memberId || this.state.token;
-      if (!activeCardId || !memberId) return;
-
-      const cloudSt = await fetchCloudCardStamps(activeCardId, memberId);
-      if (typeof cloudSt === 'number') {
-        const cur = this.state.card?.progress?.current ?? 0;
-        if (cloudSt !== cur) {
-          this.setState((prev) => {
-            if (!prev.card) return null;
-            const req = prev.card.progress?.required || 10;
-            return {
-              card: {
-                ...prev.card,
-                progress: {
-                  ...prev.card.progress,
-                  current: cloudSt,
-                  remaining: Math.max(0, req - cloudSt),
-                  completedCards: Math.floor(cloudSt / req),
-                },
-                rewardsAvailable: cloudSt >= req ? 1 : 0,
-              },
-            };
-          });
-        }
-      }
+      const card = await api.public.getWebCard(token);
+      if (card) this.setState({ card, error: null });
     } catch {}
-  };
-
-  handleBroadcastUpdate = (e) => {
-    const data = e?.data;
-    if (!data) return;
-    const { cardId, userId, cardToken, newStamps } = data;
-    const myCardId = this.state.activeCardId;
-    const myUser = this.state.memberId;
-    const myToken = this.state.token;
-
-    if (!cardId || cardId === myCardId || userId === myUser || cardToken === myToken) {
-      if (typeof newStamps === 'number') {
-        this.setState((prev) => {
-          if (!prev.card) return null;
-          const req = prev.card.progress?.required || 10;
-          return {
-            card: {
-              ...prev.card,
-              progress: {
-                ...prev.card.progress,
-                current: newStamps,
-                remaining: Math.max(0, req - newStamps),
-                completedCards: Math.floor(newStamps / req),
-              },
-              rewardsAvailable: newStamps >= req ? 1 : 0,
-            },
-          };
-        });
-      }
-    }
-  };
-
-  handleStampUpdate = (e) => {
-    const detail = e?.detail;
-    const myCardId = this.state.activeCardId;
-    const myUser = this.state.memberId;
-    const myToken = this.state.token;
-
-    if (!detail) {
-      this.loadCard();
-      return;
-    }
-
-    const { cardId, userId, cardToken, newStamps } = detail;
-    if (!cardId || cardId === myCardId || userId === myUser || cardToken === myToken) {
-      const nextStamps = typeof newStamps === 'number' ? newStamps : getUserCardStamps(myCardId, myUser || myToken);
-      this.setState((prev) => {
-        if (!prev.card) return null;
-        const req = prev.card.progress?.required || 10;
-        return {
-          card: {
-            ...prev.card,
-            progress: {
-              ...prev.card.progress,
-              current: nextStamps,
-              remaining: Math.max(0, req - nextStamps),
-              completedCards: Math.floor(nextStamps / req),
-            },
-            rewardsAvailable: nextStamps >= req ? 1 : 0,
-          },
-        };
-      });
-    }
-  };
-
-  handleStorageUpdate = (e) => {
-    if (e.key && (e.key.startsWith('tm-stamps-') || e.key === 'tm-last-stamp-time')) {
-      const nextStamps = getUserCardStamps(this.state.activeCardId, this.state.memberId || this.state.token);
-      this.setState((prev) => {
-        if (!prev.card) return null;
-        const req = prev.card.progress?.required || 10;
-        return {
-          card: {
-            ...prev.card,
-            progress: {
-              ...prev.card.progress,
-              current: nextStamps,
-              remaining: Math.max(0, req - nextStamps),
-              completedCards: Math.floor(nextStamps / req),
-            },
-            rewardsAvailable: nextStamps >= req ? 1 : 0,
-          },
-        };
-      });
-    }
-  };
-
-  setAuthTab = (tab) => {
-    this.setState({ authTab: tab, authError: '' });
   };
 
   onAuthFirstName = (e) => {
@@ -218,395 +101,72 @@ class WebCardView extends DCLogic {
     this.setState({ authPhone: e.target.value, authError: '' });
   };
 
-  onAuthPassword = (e) => {
-    this.setState({ authPassword: e.target.value, authError: '' });
-  };
-
   handleAuthSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
-    const { authTab, authFirstName, authPhone, authPassword } = this.state;
+    const { authFirstName, authPhone, lang } = this.state;
     this.setState({ authLoading: true, authError: '' });
-
     try {
-      if (authTab === 'register') {
-        if (!authFirstName || !authFirstName.trim()) {
-          throw new Error('Please enter your first name.');
-        }
-        if (!authPhone || !authPhone.trim()) {
-          throw new Error('Please enter your phone number.');
-        }
-        if (!authPassword || authPassword.trim().length < 4) {
-          throw new Error('Please choose a password with at least 4 characters.');
-        }
-        const customer = await registerCustomer({
-          firstName: authFirstName.trim(),
-          phone: authPhone.trim(),
-          password: authPassword.trim(),
-        });
-        this.setState({
-          currentUser: customer,
-          memberId: customer.id,
-          token: customer.token,
-          authModalOpen: false,
-          authLoading: false,
-          authError: '',
-        });
-        await this.loadCard(customer);
-      } else {
-        if (!authPhone || !authPhone.trim()) {
-          throw new Error('Please enter your phone number.');
-        }
-        if (!authPassword || !authPassword.trim()) {
-          throw new Error('Please enter your password.');
-        }
-        const customer = await loginCustomer({
-          phone: authPhone.trim(),
-          password: authPassword.trim(),
-        });
-        this.setState({
-          currentUser: customer,
-          memberId: customer.id,
-          token: customer.token,
-          authModalOpen: false,
-          authLoading: false,
-          authError: '',
-        });
-        await this.loadCard(customer);
-      }
+      let consentVersion;
+      try {
+        consentVersion = (await api.public.getJoinInfo(this.joinReference()))?.consent?.version;
+      } catch {}
+      const session = await registerCustomer({
+        joinReference: this.joinReference(),
+        firstName: authFirstName,
+        phone: authPhone,
+        preferredLanguage: lang === 'am' ? 'AM' : 'EN',
+        consentVersion,
+      });
+      this.setState({ currentUser: session, token: session.token, authModalOpen: false, authLoading: false });
+      await this.loadCard();
     } catch (err) {
       this.setState({
-        authError: err.message || 'Authentication failed. Please check your credentials.',
+        authError: err.message || 'Could not create your card. Please try again.',
         authLoading: false,
       });
     }
   };
 
   handleLogout = () => {
-    const prevPhone = this.state.currentUser?.phone || '';
+    const ok = window.confirm(
+      'Remove this card from this phone? Your stamps stay with the shop, but you will need your card link to open it here again.',
+    );
+    if (!ok) return;
     logoutCustomer();
     this.setState({
       currentUser: null,
+      token: null,
+      card: null,
       menu: false,
       authModalOpen: true,
-      authTab: 'login',
-      authPhone: prevPhone,
-      authPassword: '',
       authError: '',
     });
   };
 
-  switchCard = (cardId) => {
-    const card = getMerchantLoyaltyCard(cardId);
-    if (card) {
-      const nextStamps = getUserCardStamps(card.id, this.state.memberId || this.state.token);
-      const req = card.stampsRequired || 10;
-      this.setState((prev) => {
-        const existingCard = prev.card || {};
-        const updatedCard = {
-          ...existingCard,
-          program: {
-            ...existingCard.program,
-            nameEn: card.name,
-            nameAm: card.nameAm || existingCard.program?.nameAm,
-            brandColor: card.accent || existingCard.program?.brandColor,
-          },
-          progress: {
-            ...existingCard.progress,
-            current: nextStamps,
-            required: req,
-            remaining: Math.max(0, req - nextStamps),
-            completedCards: Math.floor(nextStamps / req),
-          },
-          rewardsAvailable: nextStamps >= req ? 1 : 0,
-          reward: {
-            ...existingCard.reward,
-            nameEn: card.rewardName || 'Special Reward',
-            nameAm: card.rewardNameAm || '',
-          },
-        };
-        return {
-          activeCardId: card.id,
-          activeCard: card,
-          card: updatedCard,
-        };
-      });
+  async loadCard() {
+    const token = this.tokenFromUrl() || this.state.token || getCustomerSession()?.token || null;
+    if (!token) {
+      this.setState({ loading: false, authModalOpen: true });
+      return;
     }
-  };
-
-  async loadCard(givenSession = null) {
     try {
-      const session = givenSession || this.state.currentUser || getCustomerSession();
-      let token = session?.token || null;
-      let memberId = session?.id || session?.userId || null;
-      const customerName = session?.firstName || null;
-      const customerPhone = session?.phone || null;
-      const customerEmail = session?.email || null;
-      let merchantParam = null;
-      let cardIdParam = null;
-      const allLoyaltyCards = getMerchantLoyaltyCards();
-
-      if (typeof window !== 'undefined') {
-        const params = new URLSearchParams(window.location.search);
-        token = token || params.get('token') || window.localStorage.getItem('tm-customer-token');
-        cardIdParam = params.get('c') || params.get('card') || params.get('cardId');
-        merchantParam = params.get('m') || params.get('merchant') || params.get('slug');
-
-        const routeOrParamId = params.get('id') || this.props?.id;
-        const matchingCard = allLoyaltyCards.find((c) => c.id === routeOrParamId);
-        if (matchingCard) {
-          cardIdParam = matchingCard.id;
-        } else if (routeOrParamId && !memberId) {
-          memberId = routeOrParamId;
-        }
+      const card = await api.public.getWebCard(token);
+      this.setState({ card, token, loading: false, error: null, authModalOpen: false });
+    } catch (err) {
+      // An unknown or revoked token: forget it and offer to join again.
+      if (err.status === 404 || err.status === 400 || err.status === 410) {
+        logoutCustomer();
+        this.setState({ card: null, token: null, currentUser: null, loading: false, authModalOpen: true });
+        return;
       }
-
-      if (!cardIdParam && this.props?.id) {
-        const matchingCard = allLoyaltyCards.find((c) => c.id === this.props.id);
-        if (matchingCard) cardIdParam = matchingCard.id;
-      }
-
-      const activeCardId = cardIdParam || allLoyaltyCards[0]?.id || 'UXwJ9RwdyHs';
-      const activeCard = getMerchantLoyaltyCard(activeCardId) || allLoyaltyCards[0];
-
-      // 1. Assign 11-char alphanumeric ID for user
-      if (!memberId || memberId.startsWith('TC-')) {
-        memberId = getOrAssignUserCode();
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem('tm-user-code', memberId);
-          window.localStorage.setItem('tm-customer-id', memberId);
-        }
-      }
-
-      // Check current recorded stamp count for this user and card
-      let savedStamps = getUserCardStamps(activeCardId, memberId || token);
-      try {
-        const cloudSt = await fetchCloudCardStamps(activeCardId, memberId || token);
-        if (typeof cloudSt === 'number' && cloudSt > savedStamps) {
-          savedStamps = cloudSt;
-        }
-      } catch {}
-
-      // 2. If we already have a real stored token, try loading the card from the backend
-      if (token && !token.startsWith('DEMO-')) {
-        try {
-          const card = await api.public.getWebCard(token);
-          if (card) {
-            const current = Math.max(card.progress?.current || 0, savedStamps);
-            const req = activeCard?.stampsRequired || card.progress?.required || 10;
-            if (activeCard) {
-              card.program = {
-                ...card.program,
-                nameEn: activeCard.name || card.program?.nameEn,
-                nameAm: activeCard.nameAm || card.program?.nameAm,
-                brandColor: activeCard.accent || card.program?.brandColor,
-              };
-              if (activeCard.rewardName) {
-                card.reward = {
-                  ...card.reward,
-                  nameEn: activeCard.rewardName,
-                  nameAm: activeCard.rewardNameAm || card.reward?.nameAm,
-                };
-              }
-            }
-            if (customerName) {
-              card.customer = {
-                ...card.customer,
-                firstName: customerName,
-                phone: customerPhone || card.customer?.phone,
-                email: customerEmail || card.customer?.email,
-              };
-            }
-            card.progress = {
-              ...card.progress,
-              current,
-              required: req,
-              remaining: Math.max(0, req - current),
-              completedCards: Math.floor(current / req),
-            };
-            card.rewardsAvailable = current >= req ? 1 : 0;
-            this.setState({
-              card,
-              token,
-              memberId,
-              activeCardId,
-              activeCard,
-              loyaltyCards: allLoyaltyCards,
-              loading: false,
-              error: null,
-            });
-            return;
-          }
-        } catch (err) {
-          console.warn('WebCard load error with stored token:', err);
-        }
-      }
-
-      // Determine active merchant / program slug
-      const merchantCode = merchantParam || getOrAssignMerchantCode();
-      let joinSlug = merchantParam || merchantCode || 'sample-cafe';
-      try {
-        if (typeof window !== 'undefined') {
-          const params = new URLSearchParams(window.location.search);
-          const pSlug = params.get('slug') || params.get('merchant') || params.get('m');
-          if (pSlug) joinSlug = pSlug;
-        }
-      } catch (e) {}
-
-      // Attempt to auto-enroll new user in the database so staff scanner can validate and stamp real membership
-      let enrolledToken = token;
-      let joinInfo = null;
-      try {
-        joinInfo = await api.public.getJoinInfo(joinSlug).catch(() => null);
-      } catch (e) {}
-
-      if (!enrolledToken || enrolledToken.startsWith('DEMO-')) {
-        try {
-          const digits = (customerPhone || memberId).replace(/[^0-9]/g, '');
-          const rndPhone = customerPhone || ('+2519' + Math.floor(10000000 + Math.random() * 90000000));
-          const autoEmail = customerEmail || (`${digits || 'member'}@customer.temelash.et`);
-          const enrollRes = await api.public.enroll(joinSlug, {
-            firstName: customerName || ('Member ' + memberId.slice(-4)),
-            phone: rndPhone,
-            email: autoEmail,
-            acceptTerms: true,
-            preferredLanguage: 'EN',
-            marketingConsent: true,
-          });
-          if (enrollRes?.card?.token) {
-            enrolledToken = enrollRes.card.token;
-            if (typeof window !== 'undefined') {
-              window.localStorage.setItem('tm-customer-token', enrolledToken);
-            }
-          }
-        } catch (enrollErr) {
-          console.warn('Auto-enrollment fallback:', enrollErr);
-        }
-      }
-
-      // If enrolled token exists, fetch live web card
-      if (enrolledToken && !enrolledToken.startsWith('DEMO-')) {
-        try {
-          const card = await api.public.getWebCard(enrolledToken);
-          if (card) {
-            const current = Math.max(card.progress?.current || 0, savedStamps);
-            const req = activeCard?.stampsRequired || card.progress?.required || 10;
-            if (activeCard) {
-              card.program = {
-                ...card.program,
-                nameEn: activeCard.name || card.program?.nameEn,
-                nameAm: activeCard.nameAm || card.program?.nameAm,
-                brandColor: activeCard.accent || card.program?.brandColor,
-              };
-              if (activeCard.rewardName) {
-                card.reward = {
-                  ...card.reward,
-                  nameEn: activeCard.rewardName,
-                  nameAm: activeCard.rewardNameAm || card.reward?.nameAm,
-                };
-              }
-            }
-            if (customerName) {
-              card.customer = {
-                ...card.customer,
-                firstName: customerName,
-                phone: customerPhone || card.customer?.phone,
-                email: customerEmail || card.customer?.email,
-              };
-            }
-            card.progress = {
-              ...card.progress,
-              current,
-              required: req,
-              remaining: Math.max(0, req - current),
-              completedCards: Math.floor(current / req),
-            };
-            card.rewardsAvailable = current >= req ? 1 : 0;
-            this.setState({
-              card,
-              token: enrolledToken,
-              memberId,
-              activeCardId,
-              activeCard,
-              loyaltyCards: allLoyaltyCards,
-              loading: false,
-              error: null,
-            });
-            return;
-          }
-        } catch (e) {}
-      }
-
-      // 3. Fallback: Uses savedStamps for this user & card
-      const prog = joinInfo?.program || {};
-      const merch = joinInfo?.merchant || {};
-      const rw = prog.rewards && prog.rewards[0] ? prog.rewards[0] : null;
-      const stampsReq = activeCard?.stampsRequired || prog.stampsRequired || 10;
-      const fallbackToken = enrolledToken || memberId || getOrAssignUserCode();
-      if (typeof window !== 'undefined' && !enrolledToken) {
-        window.localStorage.setItem('tm-customer-token', fallbackToken);
-      }
-
-      const digits = (customerPhone || memberId).replace(/[^0-9]/g, '');
-      const autoEmail = customerEmail || (`${digits || 'member'}@customer.temelash.et`);
-
-      this.setState({
-        card: {
-          merchant: { nameEn: merch.nameEn || 'Sample Cafe', nameAm: merch.nameAm || 'ሳምፕል ካፌ' },
-          program: {
-            nameEn: activeCard?.name || prog.nameEn || 'Coffee Stamp Card',
-            nameAm: activeCard?.nameAm || prog.nameAm || 'የቡና ማህተም ካርድ',
-            brandColor: activeCard?.accent || prog.brandColor || '#8a4b2a',
-            termsEn: prog.termsEn || 'One stamp per visit. Valid 30 days.',
-            termsAm: prog.termsAm || 'በአንድ ጉብኝት አንድ ማህተም።',
-          },
-          customer: {
-            firstName: customerName || ('Member ' + memberId.slice(-4)),
-            phone: customerPhone || '',
-            email: autoEmail,
-            preferredLanguage: 'EN',
-            id: memberId,
-          },
-          progress: {
-            current: savedStamps,
-            required: stampsReq,
-            remaining: Math.max(0, stampsReq - savedStamps),
-            completedCards: Math.floor(savedStamps / stampsReq),
-          },
-          rewardsAvailable: savedStamps >= stampsReq ? 1 : 0,
-          reward: {
-            nameEn: activeCard?.rewardName || rw?.nameEn || rw?.name || 'Free macchiato',
-            nameAm: activeCard?.rewardNameAm || rw?.nameAm || 'ነፃ ማኪያቶ',
-            descriptionEn: rw?.descriptionEn || 'Free item when completed',
-            descriptionAm: rw?.descriptionAm || '',
-          },
-          barcode: fallbackToken,
-          status: 'ACTIVE',
-        },
-        token: fallbackToken,
-        memberId,
-        activeCardId,
-        activeCard,
-        loyaltyCards: allLoyaltyCards,
-        loading: false,
-      });
-    } catch (e) {
-      console.error('Failed to load card:', e);
-      this.setState({ loading: false, error: e.message });
+      this.setState({ loading: false, error: 'Could not load your card. Check your connection and try again.' });
     }
   }
 
   handleWallet = async (provider) => {
-    let token = this.state.card?.barcode;
-    if (!token && typeof window !== 'undefined') {
-      token = window.localStorage.getItem('tm-customer-token');
-    }
-    if (!token || token.startsWith('DEMO-')) {
-      this.setState({
-        walletMsg:
-          this.state.lang === 'am'
-            ? 'እባክዎ መጀመሪያ ካርዱን ይቀላቀሉ (በ /join)'
-            : 'Please enroll first at /join to save a live wallet pass.',
-      });
+    const token = this.state.token;
+    if (!token) {
+      this.setState({ authModalOpen: true });
       return;
     }
     this.setState({ walletLoading: true, walletMsg: null });
@@ -622,13 +182,13 @@ class WebCardView extends DCLogic {
       } else {
         this.setState({
           walletLoading: false,
-          walletMsg: `${provider} pass link generated successfully.`,
+          walletMsg: `${provider === 'APPLE' ? 'Apple' : 'Google'} Wallet is not available for this card yet.`,
         });
       }
     } catch (err) {
       this.setState({
         walletLoading: false,
-        walletMsg: `${provider} Wallet: ${err.message || 'Pass generation note.'}`,
+        walletMsg: `${provider === 'APPLE' ? 'Apple' : 'Google'} Wallet: ${err.message || 'not available right now.'}`,
       });
     }
   };
@@ -658,12 +218,9 @@ class WebCardView extends DCLogic {
       ? card?.reward?.nameAm || card?.reward?.nameEn || 'ነፃ ማኪያቶ'
       : card?.reward?.nameEn || 'free macchiato';
 
-    const memberId =
-      this.state.memberId ||
-      (typeof window !== 'undefined'
-        ? window.localStorage.getItem('tm-user-code') || window.localStorage.getItem('tm-customer-id')
-        : null) ||
-      getOrAssignUserCode();
+    const token = this.state.token || '';
+    // Last characters of the card token: enough for staff to read out, useless to anyone else.
+    const memberId = token ? token.slice(-6).toUpperCase() : '—';
 
     const T = am
       ? {
@@ -708,9 +265,9 @@ class WebCardView extends DCLogic {
     const firstName = card?.customer?.firstName || 'Member';
     const memberLabel = am ? `አባል · ${memberId}` : `Member · ${memberId}`;
 
-    const barcodeValue = card?.barcode || this.state.token || memberId || 'UXwJ9RwdyHs';
-    const origin = getAppOrigin();
-    const qrValue = `${origin}/card?c=${this.state.activeCardId}&id=${memberId}`;
+    // The QR carries the opaque card token itself: it is what the staff scanner validates.
+    const barcodeValue = token;
+    const qrValue = token;
     const isNew = n === 0;
     const lastVisitText = isNew ? (am ? 'አዲስ አባል' : 'New member') : (am ? 'የቅርብ ጊዜ' : 'Recent visit');
 
@@ -739,24 +296,19 @@ class WebCardView extends DCLogic {
       brandColor,
       memberLabel,
       merchantFullName: businessName,
-      cardId: this.state.activeCardId || 'UXwJ9RwdyHs',
+      cardId: card?.program?.nameEn || 'Loyalty card',
       programTitle: am
         ? card?.program?.nameAm || card?.program?.nameEn || 'የታማኝነት ካርድ'
         : card?.program?.nameEn || 'Loyalty Card',
-      loyaltyCards: this.state.loyaltyCards || getMerchantLoyaltyCards(),
-      switchCard: this.switchCard,
       authModalOpen: this.state.authModalOpen,
-      authTab: this.state.authTab,
+      authTab: 'register',
       authFirstName: this.state.authFirstName,
       authPhone: this.state.authPhone,
-      authPassword: this.state.authPassword,
       authError: this.state.authError,
       authLoading: this.state.authLoading,
       currentUser: this.state.currentUser,
-      setAuthTab: this.setAuthTab,
       onAuthFirstName: this.onAuthFirstName,
       onAuthPhone: this.onAuthPhone,
-      onAuthPassword: this.onAuthPassword,
       handleAuthSubmit: this.handleAuthSubmit,
       logout: this.handleLogout,
       rewardDescription: am
@@ -1233,7 +785,7 @@ WebCardView.prototype.__template = function (__v) {
                         👤 {__v?.currentUser?.firstName || 'Member'}
                       </div>
                       <div style={{ fontSize: '12px', color: '#64748b' }}>
-                        {__v?.currentUser?.phone} · {__v?.currentUser?.email}
+                        {__v?.currentUser?.phone}
                       </div>
                     </div>
                     <button
@@ -1250,7 +802,7 @@ WebCardView.prototype.__template = function (__v) {
                         cursor: 'pointer',
                       }}
                     >
-                      Sign Out
+                      Remove from this phone
                     </button>
                   </div>
                 ) : null}
@@ -1345,58 +897,8 @@ WebCardView.prototype.__template = function (__v) {
                   {__v?.programTitle || 'Coffee Stamp Card'}
                 </h2>
                 <p style={{ margin: 0, fontSize: '13px', color: '#64748b', lineHeight: '18px' }}>
-                  {__v?.authTab === 'register'
-                    ? 'First time scan? Enter your name, phone and password to get your loyalty card!'
-                    : 'Sign in with your phone & password to see your loyalty stamps.'}
+                  {'Enter your first name and phone number to get your loyalty card. No password needed.'}
                 </p>
-              </div>
-
-              {/* Tabs */}
-              <div
-                style={{
-                  display: 'flex',
-                  background: '#f1f5f9',
-                  padding: '4px',
-                  borderRadius: '12px',
-                  gap: '4px',
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => __v?.setAuthTab && __v.setAuthTab('register')}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    border: 'none',
-                    borderRadius: '8px',
-                    background: __v?.authTab === 'register' ? '#ffffff' : 'transparent',
-                    color: __v?.authTab === 'register' ? '#101827' : '#64748b',
-                    fontWeight: '700',
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    boxShadow: __v?.authTab === 'register' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                  }}
-                >
-                  New Member
-                </button>
-                <button
-                  type="button"
-                  onClick={() => __v?.setAuthTab && __v.setAuthTab('login')}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    border: 'none',
-                    borderRadius: '8px',
-                    background: __v?.authTab === 'login' ? '#ffffff' : 'transparent',
-                    color: __v?.authTab === 'login' ? '#101827' : '#64748b',
-                    fontWeight: '700',
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    boxShadow: __v?.authTab === 'login' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                  }}
-                >
-                  Sign In
-                </button>
               </div>
 
               {__v?.authError ? (
@@ -1442,35 +944,13 @@ WebCardView.prototype.__template = function (__v) {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{ fontSize: '12px', fontWeight: '700', color: '#374151' }}>
-                    Phone Number {__v?.authTab === 'login' ? '(Username)' : ''} *
+                    Phone Number *
                   </label>
                   <input
                     type="tel"
                     placeholder="e.g. 0912 345 678"
                     value={__v?.authPhone || ''}
                     onChange={__v?.onAuthPhone}
-                    required
-                    style={{
-                      border: '1px solid #cbd5e1',
-                      borderRadius: '10px',
-                      padding: '11px 14px',
-                      fontSize: '14px',
-                      outline: 'none',
-                      width: '100%',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#374151' }}>
-                    {__v?.authTab === 'register' ? 'Create Password *' : 'Password *'}
-                  </label>
-                  <input
-                    type="password"
-                    placeholder={__v?.authTab === 'register' ? 'Create password' : 'Enter password'}
-                    value={__v?.authPassword || ''}
-                    onChange={__v?.onAuthPassword}
                     required
                     style={{
                       border: '1px solid #cbd5e1',
@@ -1499,7 +979,7 @@ WebCardView.prototype.__template = function (__v) {
                     }}
                   >
                     <span>⚡</span>
-                    <span>No email needed! Your card is linked to your phone.</span>
+                    <span>Your card is saved on this phone. Bookmark this page or add it to your wallet to keep it.</span>
                   </div>
                 ) : null}
 
@@ -1521,9 +1001,7 @@ WebCardView.prototype.__template = function (__v) {
                 >
                   {__v?.authLoading
                     ? 'Processing...'
-                    : __v?.authTab === 'register'
-                      ? 'Get My Loyalty Card ➔'
-                      : 'Sign In to My Card ➔'}
+                    : 'Get My Loyalty Card ➔'}
                 </button>
               </form>
             </div>

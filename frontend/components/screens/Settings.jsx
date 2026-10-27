@@ -727,6 +727,7 @@ class SettingsView extends DCLogic {
       toggleInvite: () => this.setState({ inviteOpen: !s.inviteOpen, ivTried: false }),
       iv: s.iv,
       ivErr,
+      inviteError: s.inviteError || '',
       roleOpts,
       onIvName: (e) => this.setState({ iv: Object.assign({}, s.iv, { name: e.target.value }) }),
       onIvPhone: (e) => this.setState({ iv: Object.assign({}, s.iv, { phone: e.target.value }) }),
@@ -735,6 +736,7 @@ class SettingsView extends DCLogic {
           this.setState({ ivTried: true });
           return;
         }
+        this.setState({ inviteError: '' });
         const name = s.iv.name.trim();
         const roleKey = s.iv.role === 'manager' ? 'MANAGER' : 'STAFF';
         const email = `${name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'staff'}${Date.now().toString().slice(-4)}@sample-cafe.test`;
@@ -748,9 +750,12 @@ class SettingsView extends DCLogic {
             preferredLanguage: 'EN',
           });
           const origin = getAppOrigin();
-          const token = res?.invitation?.token || `${Date.now()}`;
-          const roleQuery = s.iv.role === 'manager' ? '?role=manager' : '';
-          const link = `${origin}/staff/join/${token}${roleQuery}`;
+          const token = res?.invitation?.token;
+          if (!token) throw new Error('The invitation was created without a link. Try again.');
+          // The link carries the sign-in email so the new member knows how to log in later.
+          const params = new URLSearchParams({ email });
+          if (s.iv.role === 'manager') params.set('role', 'manager');
+          const link = `${origin}/staff/join/${token}?${params.toString()}`;
           const masked = '+251 ' + digits.slice(-9, -7) + ' *** ' + digits.slice(-4);
           const ini = name
             .split(/\s+/)
@@ -783,41 +788,7 @@ class SettingsView extends DCLogic {
             copied: false,
           });
         } catch (err) {
-          console.warn('Backend staff invite warning, adding locally:', err);
-          const origin = getAppOrigin();
-          const roleQuery = s.iv.role === 'manager' ? '?role=manager' : '';
-          const link = `${origin}/staff/join/` + name.toLowerCase().replace(/[^a-z0-9]+/g, '') + '-' + (4810 + s.nextInv) + roleQuery;
-          const masked = '+251 ' + digits.slice(-9, -7) + ' *** ' + digits.slice(-4);
-          const ini = name
-            .split(/\s+/)
-            .map((p) => p.charAt(0))
-            .join('')
-            .slice(0, 2)
-            .toUpperCase();
-          const newTeam = s.team.concat([
-            {
-              id: 'inv' + s.nextInv,
-              name,
-              ini,
-              phone: masked,
-              role: s.iv.role === 'manager' ? 'Manager' : 'Staff',
-              status: 'invited',
-              link,
-            },
-          ]);
-          try {
-            window.localStorage.setItem('tm-team-members', JSON.stringify(newTeam));
-            window.localStorage.setItem('tm-last-invite', JSON.stringify({ name, link }));
-          } catch (e) {}
-          this.setState({
-            team: newTeam,
-            nextInv: s.nextInv + 1,
-            inviteOpen: false,
-            ivTried: false,
-            iv: { name: '', phone: '', role: 'staff' },
-            lastInvite: { name, link },
-            copied: false,
-          });
+          this.setState({ inviteError: err.message || 'Could not create the invitation. Please try again.' });
         }
       },
       bizProfile: s.bizProfile,
@@ -1099,6 +1070,11 @@ SettingsView.prototype.__template = function (__v) {
                                   {'Enter a phone number with at least 9 digits.'}
                                 </span>
                               </>
+                            ) : null}
+                            {__b(__v?.inviteError) ? (
+                              <span role="alert" style={{ fontSize: '14px', color: '#c81d29' }}>
+                                {`${__t(__v?.inviteError)}`}
+                              </span>
                             ) : null}
                           </div>{' '}
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

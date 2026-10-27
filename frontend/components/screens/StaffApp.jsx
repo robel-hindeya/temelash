@@ -1,14 +1,7 @@
 import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
-import api, {
-  getMerchantLoyaltyCard,
-  getMerchantLoyaltyCards,
-  getUserCardStamps,
-  recordCardStamp,
-  resetUserCardStamps,
-  fetchCloudCardStamps,
-} from '@/lib/api';
+import api, { getOrAssignMerchantCode } from '@/lib/api';
 import jsQR from 'jsqr';
 
 const __CSS = `
@@ -34,6 +27,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid #4661ad; outline-
   to { transform: rotate(360deg); }
 }
 `;
+
+const SHOW_TEST_TOOLS = process.env.NODE_ENV !== 'production';
 
 function playScanBeep() {
   try {
@@ -126,12 +121,12 @@ class StaffAppView extends DCLogic {
       screen: 'scan',
       today: 0,
       bizName: 'Sample Cafe',
-      staffSubtitle: 'Bole Staff · Bole branch',
+      staffSubtitle: 'Staff',
       phoneInput: '',
       cardTokenInput: '',
       scanError: '',
       testCards: [],
-      rewardTitle: 'Free macchiato',
+      rewardTitle: 'Reward',
       customer: null,
       cameraActive: false,
       cameraLoading: false,
@@ -178,7 +173,7 @@ class StaffAppView extends DCLogic {
       const [profRes, meRes, progRes, analyticsRes] = await Promise.allSettled([
         api.merchant.getProfile(),
         api.auth.getMe('staff'),
-        api.merchant.getPrograms('ACTIVE'),
+        api.merchant.getPrograms('ACTIVE', 'staff'),
         api.merchant.getAnalyticsOverview(),
       ]);
       const updates = {};
@@ -186,38 +181,16 @@ class StaffAppView extends DCLogic {
         updates.bizName = profRes.value.nameEn || 'Sample Cafe';
       }
       if (meRes.status === 'fulfilled' && meRes.value) {
-        const staffName = meRes.value.displayName || 'Bole Staff';
-        updates.staffSubtitle = `${staffName} · Bole branch`;
+        updates.staffSubtitle = meRes.value.displayName || 'Staff';
       }
       if (progRes.status === 'fulfilled' && progRes.value?.length) {
         const p = progRes.value[0];
-        const r = p.rewardDefinitions?.[0] || p.rewards?.[0];
-        updates.rewardTitle = r?.nameEn || 'Free macchiato';
+        updates.rewardTitle = p.reward?.nameEn || 'Reward';
       }
       if (analyticsRes.status === 'fulfilled' && analyticsRes.value) {
         updates.today = analyticsRes.value.stampsIssued?.count || 0;
       }
 
-      // Check for available test cards from localStorage
-      const cards = [];
-      try {
-        const lastCard = localStorage.getItem('teme_last_enrolled_card');
-        if (lastCard) {
-          const parsed = JSON.parse(lastCard);
-          if (parsed?.token) {
-            cards.push({ name: parsed.customerName || 'Recent Customer', token: parsed.token, phone: parsed.phone });
-          }
-        }
-        const activeTok = localStorage.getItem('teme_active_card_token');
-        if (activeTok && !cards.some((c) => c.token === activeTok)) {
-          cards.push({ name: 'Active Web Card', token: activeTok });
-        }
-      } catch {}
-
-      updates.testCards = cards;
-      if (cards.length > 0) {
-        updates.cardTokenInput = cards[0].token;
-      }
       this.setState(updates);
     } catch (e) {
       console.warn('Failed to load staff app context:', e);
@@ -530,124 +503,91 @@ class StaffAppView extends DCLogic {
     });
   };
 
+  /** Customer state for the screen, built only from a backend scanner response. */
+  customerFromScan(res, cardToken, extra = {}) {
+    const p = res?.progress || {};
+    const name = res?.customer?.firstName || 'Customer';
+    return {
+      name,
+      initials: name.slice(0, 2).toUpperCase(),
+      phone: '',
+      visits: p.current ?? 0,
+      lastVisit: 'Today',
+      stamps: p.current ?? 0,
+      maxStamps: p.required || 10,
+      rewardsAvailable: p.rewardsAvailable ?? 0,
+      rewardTitle: res?.reward?.nameEn || this.state.rewardTitle || 'Reward',
+      cardToken,
+      cardName: 'Loyalty Card',
+      cooldownNotice: null,
+      canStamp: true,
+      ...extra,
+    };
+  }
+
   async validateToken(tokenToTest) {
-    let token = '';
-    let cardId = null;
-    let userId = null;
+    const raw =
+      typeof tokenToTest === 'object' && tokenToTest
+        ? tokenToTest.token || ''
+        : tokenToTest || this.state.cardTokenInput || '';
+    const token = extractTokenFromScan(String(raw).trim());
 
-    if (tokenToTest && typeof tokenToTest === 'object') {
-      token = (tokenToTest.token || '').trim();
-      cardId = tokenToTest.cardId || null;
-      userId = tokenToTest.userId || null;
-    } else {
-      const raw = (tokenToTest || this.state.cardTokenInput || '').trim();
-      const parsed = extractScanInfo(raw);
-      token = parsed.token || raw;
-      cardId = parsed.cardId || null;
-      userId = parsed.userId || null;
+    if (!token) {
+      this.setState({ scanError: 'Please scan or enter the code on the customer’s card.' });
+      return;
     }
-
-    if (!token && !cardId && !userId) {
-      this.setState({ scanError: 'Please enter or scan a card token or member ID.' });
+    // Real card tokens are long opaque strings; anything shorter is not a Temelash card.
+    if (token.length < 20) {
+      this.isProcessingScan = false;
+      this.setState({ scanError: 'This is not a Temelash card code. Ask the customer to open their card.' });
       return;
     }
     this.setState({ scanError: '' });
 
-    const allCards = getMerchantLoyaltyCards();
-    const matchedCard =
-      (cardId && getMerchantLoyaltyCard(cardId)) ||
-      (token && getMerchantLoyaltyCard(token)) ||
-      allCards[0];
-
-    const effCardId = matchedCard?.id || cardId || 'UXwJ9RwdyHs';
-    const effUserId = userId || (matchedCard && token === matchedCard.id ? null : token) || 'MEMBER_1';
-
-    let localSt = getUserCardStamps(effCardId, effUserId);
+    let res;
     try {
-      const cloudSt = await fetchCloudCardStamps(effCardId, effUserId);
-      if (typeof cloudSt === 'number' && cloudSt > localSt) {
-        localSt = cloudSt;
-      }
-    } catch {}
-
-    try {
-      const res = await api.scanner.validate({ cardToken: token || effUserId });
-      const current = Math.max(res.progress?.current ?? 0, localSt);
-      const required = matchedCard?.stampsRequired || res.progress?.required || 10;
-      const custName = res.customer?.firstName || `Member ${effUserId.slice(-4)}`;
-      const isCooldown = res.outcome === 'REJECTED' && res.reason === 'COOLDOWN_ACTIVE';
-
-      this.stopCamera();
-
-      this.setState({
-        customer: {
-          name: custName,
-          initials: (matchedCard ? matchedCard.name : custName || 'CU').slice(0, 2).toUpperCase(),
-          phone: res.customer?.phone || '',
-          visits: current || 1,
-          lastVisit: 'Today',
-          stamps: current,
-          maxStamps: required,
-          rewardTitle: matchedCard?.rewardName || this.state.rewardTitle || 'Free macchiato',
-          cardToken: token || effUserId,
-          cardId: effCardId,
-          userId: effUserId,
-          cardName: matchedCard?.name || 'Loyalty Card',
-          cooldownNotice: isCooldown ? res.message?.en || 'Cooldown active: stamp already recorded recently.' : null,
-        },
-        screen: 'customer',
-        stampCounter: 1,
-        scanError: isCooldown ? '' : (res.outcome === 'REJECTED' ? (res.message?.en || res.reason) : ''),
-      });
+      res = await api.scanner.validate({ cardToken: token });
     } catch (err) {
-      this.stopCamera();
-      const shortName = `Member ${effUserId.slice(-4)}`;
-      this.setState({
-        customer: {
-          name: shortName,
-          initials: (matchedCard ? matchedCard.name : shortName).slice(0, 2).toUpperCase(),
-          phone: '+251 91 *** 4567',
-          visits: localSt || 1,
-          lastVisit: 'Today',
-          stamps: localSt,
-          maxStamps: matchedCard?.stampsRequired || 10,
-          rewardTitle: matchedCard?.rewardName || this.state.rewardTitle || 'Free macchiato',
-          cardToken: token || effUserId,
-          cardId: effCardId,
-          userId: effUserId,
-          cardName: matchedCard?.name || 'Loyalty Card',
-          cooldownNotice: null,
-        },
-        screen: 'customer',
-        stampCounter: 1,
-        scanError: '',
-      });
+      this.isProcessingScan = false;
+      this.setState({ scanError: err.message || 'Could not check this card. Try again.' });
+      return;
     }
+
+    const isCooldown = res.outcome === 'REJECTED' && res.reason === 'COOLDOWN_ACTIVE';
+    if (res.outcome === 'REJECTED' && !isCooldown) {
+      this.isProcessingScan = false;
+      this.setState({ scanError: res.message?.en || 'This card cannot be stamped.' });
+      return;
+    }
+
+    this.stopCamera();
+    const customer = this.customerFromScan(res, token, {
+      cooldownNotice: isCooldown ? res.message?.en || 'Already stamped recently. Try again later.' : null,
+      canStamp: !isCooldown,
+    });
+    this.setState({
+      customer,
+      screen: customer.rewardsAvailable > 0 ? 'unlocked' : 'customer',
+      stampCounter: 1,
+      scanError: '',
+    });
   }
 
   async createQuickTestCard() {
     try {
       const rndPhone = '+2519' + Math.floor(10000000 + Math.random() * 90000000);
       const rndEmail = 'test' + Date.now().toString().slice(-5) + '@customer.test';
-      const res = await api.public.enroll('sample-cafe', {
+      const res = await api.public.enroll(getOrAssignMerchantCode(), {
         firstName: 'Test Customer',
         phone: rndPhone,
         email: rndEmail,
         acceptTerms: true,
         preferredLanguage: 'EN',
-        marketingConsent: true,
+        marketingConsent: false,
       });
       if (res?.card?.token) {
         const newCard = { name: 'Test Customer', token: res.card.token, phone: rndPhone };
-        const updated = [newCard, ...this.state.testCards];
-        try {
-          localStorage.setItem('teme_last_enrolled_card', JSON.stringify({
-            token: res.card.token,
-            customerName: 'Test Customer',
-            phone: rndPhone,
-          }));
-        } catch {}
-        this.setState({ testCards: updated, cardTokenInput: res.card.token });
+        this.setState({ testCards: [newCard, ...this.state.testCards], cardTokenInput: res.card.token });
         await this.validateToken(res.card.token);
       }
     } catch (e) {
@@ -704,7 +644,9 @@ class StaffAppView extends DCLogic {
       onPhoneChange: (e) => this.setState({ phoneInput: e.target.value, scanError: '' }),
       cardTokenInput: this.state.cardTokenInput,
       onCardTokenChange: (e) => this.setState({ cardTokenInput: e.target.value, scanError: '' }),
-      testCards: this.state.testCards,
+      // Test-customer shortcuts exist for local development only.
+      showTestTools: SHOW_TEST_TOOLS,
+      testCards: SHOW_TEST_TOOLS ? this.state.testCards : [],
       onPickTestCard: (tok) => {
         this.setState({ cardTokenInput: tok });
         this.validateToken(tok);
@@ -716,93 +658,90 @@ class StaffAppView extends DCLogic {
       scanCardNow: () => this.validateToken(),
       toCustomer: async () => {
         const q = (this.state.phoneInput || '').trim();
-        if (q) {
-          try {
-            const res = await api.merchant.getCustomers({ q });
-            if (res?.items && res.items.length > 0) {
-              const c = res.items[0];
-              this.stopCamera();
-              this.setState({
-                customer: {
-                  name: c.firstName || 'Customer',
-                  initials: (c.firstName || 'CU').slice(0, 2).toUpperCase(),
-                  phone: c.phone || q,
-                  visits: 1,
-                  lastVisit: 'Today',
-                  stamps: 1,
-                  maxStamps: 10,
-                  rewardTitle: this.state.rewardTitle || 'Free macchiato',
-                  cardToken: this.state.cardTokenInput || '',
-                },
-                screen: 'customer',
-                scanError: '',
-              });
-              return;
-            } else {
-              this.setState({ scanError: 'No customer found for ' + q });
-              return;
-            }
-          } catch (e) {
-            console.warn('Customer query error:', e);
-            this.setState({ scanError: e.message || 'Lookup failed' });
-            return;
-          }
+        if (!q) {
+          await this.validateToken();
+          return;
         }
-        await this.validateToken();
+        try {
+          const res = await api.merchant.getCustomers({ q });
+          const c = res?.items?.[0];
+          this.setState({
+            scanError: c
+              ? `${c.firstName || 'Customer'} is a member. Ask them to show their card QR to add a stamp.`
+              : 'No customer found for ' + q,
+          });
+        } catch (e) {
+          this.setState({ scanError: e.message || 'Lookup failed' });
+        }
       },
       addStamp: async (countToAdd) => {
-        const count = typeof countToAdd === 'number' ? countToAdd : (this.state.stampCounter || 1);
+        const count = typeof countToAdd === 'number' ? countToAdd : this.state.stampCounter || 1;
         if (!cust) {
           this.setState({ scanError: 'No active customer card loaded.' });
           return;
         }
-
-        const reqSt = cust.maxStamps || maxSt;
-        const newSt = (cust.stamps || 0) + count;
-
-        try {
-          if (cust.cardToken && !cust.cardToken.startsWith('DEMO-')) {
-            for (let i = 0; i < count; i++) {
-              await api.scanner.stamp({ cardToken: cust.cardToken }).catch(() => null);
-            }
-          }
-        } catch (e) {
-          console.warn('Backend scanner sync note:', e);
+        if (!cust.canStamp) {
+          this.setState({ scanError: cust.cooldownNotice || 'This card cannot be stamped right now.' });
+          return;
         }
 
-        recordCardStamp({
-          cardId: cust.cardId || 'UXwJ9RwdyHs',
-          userId: cust.userId || cust.cardToken || cust.name,
-          cardToken: cust.cardToken,
-          count,
-          maxStamps: reqSt,
-        });
+        // Each stamp is its own backend call; stop at the first one the backend refuses.
+        let added = 0;
+        let last = null;
+        let problem = '';
+        for (let i = 0; i < count; i++) {
+          try {
+            const res = await api.scanner.stamp({ cardToken: cust.cardToken });
+            if (res.outcome !== 'STAMPED') {
+              problem = res.message?.en || 'The stamp was not added.';
+              break;
+            }
+            added += 1;
+            last = res;
+          } catch (err) {
+            problem = err.message || 'The stamp was not added. Check the connection and try again.';
+            break;
+          }
+        }
+
+        if (!added) {
+          this.setState({ scanError: problem });
+          return;
+        }
 
         triggerHaptic();
         playScanBeep();
 
-        const isUnlocked = newSt >= reqSt;
+        const next = this.customerFromScan(last, cust.cardToken, { name: cust.name, initials: cust.initials });
+        const unlocked = !!last.reward?.unlocked || next.rewardsAvailable > 0;
         this.setState({
-          today: (this.state.today || 0) + count,
-          customer: Object.assign({}, cust, { stamps: newSt, maxStamps: reqSt, cooldownNotice: null }),
-          screen: isUnlocked ? 'unlocked' : 'customer',
+          today: (this.state.today || 0) + added,
+          customer: next,
+          screen: unlocked ? 'unlocked' : 'customer',
           stampCounter: 1,
-          scanError: '',
+          scanError: problem ? `${added} of ${count} stamps added. ${problem}` : '',
         });
       },
       redeemReward: async () => {
         if (!cust) return;
         try {
-          if (cust.cardToken && !cust.cardToken.startsWith('DEMO-')) {
-            await api.scanner.redeem({ cardToken: cust.cardToken }).catch(() => null);
+          const res = await api.scanner.redeem({ cardToken: cust.cardToken });
+          if (res.outcome !== 'REDEEMED') {
+            this.setState({ scanError: res.message?.en || 'The reward could not be redeemed.' });
+            return;
           }
-        } catch (e) {}
-        resetUserCardStamps(cust.cardId || 'UXwJ9RwdyHs', cust.userId || cust.cardToken || cust.phone);
-        this.setState({
-          customer: Object.assign({}, cust, { stamps: 0 }),
-          screen: 'redeemed',
-          scanError: '',
-        });
+          const p = res.progress || {};
+          this.setState({
+            customer: Object.assign({}, cust, {
+              stamps: p.current ?? cust.stamps,
+              rewardsAvailable: p.rewardsAvailable ?? 0,
+            }),
+            screen: 'redeemed',
+            scanError: '',
+          });
+        } catch (err) {
+          this.setState({ scanError: err.message || 'The reward could not be redeemed. Try again.' });
+        }
       },
       custName: cust?.name || 'Customer',
       custCardName: cust?.cardName || 'Loyalty Card',
@@ -811,7 +750,7 @@ class StaffAppView extends DCLogic {
       custInitials: cust?.initials || 'CU',
       custMeta: `${cust?.visits || 1} visits · last visit ${cust?.lastVisit || 'Today'}`,
       custStampsFraction: `${currentSt}/${maxSt}`,
-      rewardTitle: cust?.rewardTitle || 'Free macchiato',
+      rewardTitle: cust?.rewardTitle || this.state.rewardTitle || 'Reward',
       stampsToGo: Math.max(0, maxSt - currentSt),
       slots9: mkSlots(currentSt, false),
       slots10: mkSlots(maxSt, true),
@@ -874,7 +813,7 @@ StaffAppView.prototype.__template = function (__v) {
           </svg>{' '}
           <span style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', lineHeight: '18px' }}>
             <strong>{`${__t(__v?.bizName || 'Sample Cafe')}`}</strong>
-            <span style={{ fontSize: '14px', color: '#5b6475' }}>{`${__t(__v?.staffSubtitle || 'Bole Staff · Bole branch')}`}</span>
+            <span style={{ fontSize: '14px', color: '#5b6475' }}>{`${__t(__v?.staffSubtitle || 'Staff')}`}</span>
           </span>{' '}
           <span
             style={{
@@ -1628,22 +1567,24 @@ StaffAppView.prototype.__template = function (__v) {
                   </div>
                 </div>
               ) : null}
-              <button
-                type="button"
-                onClick={__v?.createQuickTestCard}
-                style={{
-                  border: '1px dashed #4661ad',
-                  background: 'transparent',
-                  color: '#4661ad',
-                  fontWeight: '700',
-                  fontSize: '13px',
-                  borderRadius: '8px',
-                  padding: '8px 12px',
-                  cursor: 'pointer',
-                }}
-              >
-                {'+ Enroll New Customer for Testing'}
-              </button>
+              {__b(__v?.showTestTools) ? (
+                <button
+                  type="button"
+                  onClick={__v?.createQuickTestCard}
+                  style={{
+                    border: '1px dashed #4661ad',
+                    background: 'transparent',
+                    color: '#4661ad',
+                    fontWeight: '700',
+                    fontSize: '13px',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {'+ Enroll New Customer for Testing'}
+                </button>
+              ) : null}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label htmlFor="sa-phone" style={{ fontWeight: '700', fontSize: '14px' }}>
                   {'Or find by registered phone'}
@@ -1799,7 +1740,7 @@ StaffAppView.prototype.__template = function (__v) {
                   ))}
                 </div>{' '}
                 <div style={{ background: '#fff3dc', borderRadius: '12px', padding: '12px 14px', fontWeight: '600' }}>
-                  {`${__t(__v?.stampsToGo)} more visits to a free ${__t(__v?.rewardTitle || 'macchiato')}`}
+                  {`${__t(__v?.stampsToGo)} more ${__v?.stampsToGo === 1 ? 'visit' : 'visits'} to ${__t(__v?.rewardTitle || 'the reward')}`}
                 </div>
               </div>{' '}
               {__b(__v?.cooldownNotice) ? (
@@ -1978,7 +1919,7 @@ StaffAppView.prototype.__template = function (__v) {
                   {`STAMP ADDED · ${__t(__v?.custName || 'CUSTOMER')}`}
                 </span>{' '}
                 <h1 style={{ margin: '0', fontSize: '28px', lineHeight: '34px', fontWeight: '700' }}>
-                  {`${__t(__v?.rewardTitle || 'Free macchiato')} unlocked`}
+                  {`${__t(__v?.rewardTitle || 'Reward')} unlocked`}
                 </h1>
               </div>{' '}
               <div
@@ -2012,7 +1953,7 @@ StaffAppView.prototype.__template = function (__v) {
                       fontVariantNumeric: 'tabular-nums',
                     }}
                   >
-                    {'10/10'}
+                    {`${__v?.maxStamps}/${__v?.maxStamps}`}
                   </span>
                 </div>{' '}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '10px' }}>
@@ -2144,7 +2085,7 @@ StaffAppView.prototype.__template = function (__v) {
                 {'Reward redeemed'}
               </h1>{' '}
               <p style={{ margin: '0', color: '#5b6475', maxWidth: '280px' }}>
-                {`Hand ${__t(__v?.custName || 'customer')} their ${__t(__v?.rewardTitle || 'free reward')}. Card starts again at 0/10.`}
+                {`Hand ${__t(__v?.custName || 'customer')} their ${__t(__v?.rewardTitle || 'reward')}. Their card is now at ${__v?.currentStamps}/${__v?.maxStamps}.`}
               </p>{' '}
               <p
                 style={{

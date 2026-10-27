@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import api, { setStoredToken } from '@/lib/api';
+import api from '@/lib/api';
 
 export default function StaffJoinFlow({ initialCode = '' }) {
   const router = useRouter();
@@ -17,55 +17,17 @@ export default function StaffJoinFlow({ initialCode = '' }) {
   const [role, setRole] = useState('STAFF'); // 'STAFF' | 'MANAGER'
 
   useEffect(() => {
-    let detectedRole = 'STAFF';
-
-    // 1. Check URL query parameter ?role=manager
+    // The invite link carries the staff member's sign-in email and, as a display hint only, the role.
+    // The real role always comes from the backend after sign-in.
     if (typeof window !== 'undefined') {
       try {
         const searchParams = new URLSearchParams(window.location.search);
-        const qRole = searchParams.get('role');
-        if (qRole && qRole.toLowerCase() === 'manager') {
-          detectedRole = 'MANAGER';
-        }
+        const qEmail = searchParams.get('email');
+        if (qEmail) setEmail(qEmail);
+        if ((searchParams.get('role') || '').toLowerCase() === 'manager') setRole('MANAGER');
       } catch (e) {}
     }
-
-    // 2. Check local team members list
-    if (typeof window !== 'undefined') {
-      try {
-        const rawTeam = window.localStorage.getItem('tm-team-members');
-        if (rawTeam) {
-          const parsedTeam = JSON.parse(rawTeam);
-          if (Array.isArray(parsedTeam)) {
-            const match = parsedTeam.find(
-              (m) =>
-                (m.link && m.link.includes(initialCode)) ||
-                (m.id && initialCode.includes(m.id)) ||
-                (initialCode.toLowerCase().includes((m.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '')))
-            );
-            if (match && (match.role === 'Manager' || match.role === 'MANAGER')) {
-              detectedRole = 'MANAGER';
-            }
-          }
-        }
-      } catch (e) {}
-    }
-
-    // 3. Check code keywords
-    if (initialCode && (initialCode.toLowerCase().includes('manager') || initialCode.toLowerCase().includes('mng'))) {
-      detectedRole = 'MANAGER';
-    }
-
-    setRole(detectedRole);
-
-    if (initialCode) {
-      setCode(initialCode);
-      const prefix = initialCode.split('-')[0];
-      if (prefix && prefix.length > 2 && prefix.toLowerCase() !== 'inv') {
-        const capitalized = prefix.charAt(0).toUpperCase() + prefix.slice(1);
-        setDisplayName((prev) => prev || capitalized);
-      }
-    }
+    if (initialCode) setCode(initialCode);
   }, [initialCode]);
 
   const handleSubmit = async (e) => {
@@ -73,81 +35,49 @@ export default function StaffJoinFlow({ initialCode = '' }) {
     setError('');
 
     const token = (code || '').trim();
-    if (!token) {
-      setError('Please provide a valid invitation code.');
+    if (token.length < 20) {
+      setError('This invitation link is not valid. Ask your manager to send a new one.');
       return;
     }
-    if (!pin || pin.length < 4) {
-      setError('Please set a PIN or password (at least 4 characters).');
+    if (!email.trim()) {
+      setError('Please enter the email address your invitation was sent for.');
+      return;
+    }
+    if (pin.length < 12 || !/[A-Za-z]/.test(pin) || !/[0-9]/.test(pin)) {
+      setError('Choose a password of at least 12 characters with at least one letter and one number.');
       return;
     }
 
     setLoading(true);
-    const isManager = role === 'MANAGER';
-    const roleKey = isManager ? 'MANAGER' : 'STAFF';
-
     try {
-      // Try accepting via backend API if available
       try {
         await api.auth.acceptInvitation(token, pin, displayName.trim() || undefined);
-      } catch (backendErr) {
-        console.warn('Backend invitation accept note (proceeding with local activation):', backendErr);
+      } catch (acceptErr) {
+        setError(
+          acceptErr.status === 400
+            ? 'This invitation is invalid, expired or already used, or the password is too weak. Ask your manager for a new link.'
+            : acceptErr.message || 'Could not accept the invitation. Please try again.',
+        );
+        return;
       }
 
-      // Activate session
-      const sessionUser = {
-        id: `${isManager ? 'manager' : 'staff'}-${Date.now()}`,
-        displayName: displayName.trim() || (isManager ? 'Manager' : 'Staff Cashier'),
-        email: email.trim() || `${token.toLowerCase()}@sample-cafe.test`,
-        role: roleKey,
-        accountType: 'MERCHANT_USER',
-        branchName: isManager ? 'All branches' : 'Bole branch',
-        inviteToken: token,
-      };
-
-      if (isManager) {
-        setStoredToken(`manager-session-${Date.now()}`, 'manager', sessionUser);
-        setStoredToken(`manager-session-${Date.now()}`, 'owner', sessionUser);
-      } else {
-        setStoredToken(`staff-session-${Date.now()}`, 'staff', sessionUser);
-      }
-
-      // Update team member in tm-team-members so Settings screen reflects active status and proper role
+      // The invitation is accepted: sign in for real so the session carries a backend token.
+      let data;
       try {
-        const rawTeam = window.localStorage.getItem('tm-team-members');
-        if (rawTeam) {
-          const parsedTeam = JSON.parse(rawTeam);
-          if (Array.isArray(parsedTeam)) {
-            const updatedTeam = parsedTeam.map((m) => {
-              if (
-                (m.link && m.link.includes(token)) ||
-                (m.id && token.includes(m.id)) ||
-                (displayName.trim() && m.name?.toLowerCase() === displayName.trim().toLowerCase())
-              ) {
-                return Object.assign({}, m, {
-                  name: displayName.trim() || m.name,
-                  role: isManager ? 'Manager' : (m.role || 'Staff'),
-                  status: 'active',
-                });
-              }
-              return m;
-            });
-            window.localStorage.setItem('tm-team-members', JSON.stringify(updatedTeam));
-          }
-        }
-      } catch (x) {}
+        data = await api.auth.login(email.trim(), pin);
+      } catch (loginErr) {
+        setError(
+          `Your account is active, but signing in failed (${loginErr.message}). Sign in on the login page with ${email.trim()}.`,
+        );
+        return;
+      }
 
+      const backendRole = data?.user?.role;
+      setRole(backendRole === 'MANAGER' || backendRole === 'OWNER' ? 'MANAGER' : 'STAFF');
       setSuccess(true);
-
       setTimeout(() => {
-        if (isManager) {
-          router.push('/business'); // Open Business Dashboard for Manager!
-        } else {
-          router.push('/staff'); // Open Staff Terminal for Staff!
-        }
+        router.push(backendRole === 'MANAGER' || backendRole === 'OWNER' ? '/business' : '/staff');
       }, 1200);
-    } catch (err) {
-      setError(err.message || 'Could not accept invitation. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -443,20 +373,20 @@ export default function StaffJoinFlow({ initialCode = '' }) {
                   />
                 </div>
 
-                {/* Email (Optional) */}
+                {/* Sign-in email */}
                 <div>
                   <label
                     htmlFor="staff-email"
                     style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#101827', marginBottom: '6px' }}
                   >
-                    Email Address (Optional)
+                    Sign-in Email *
                   </label>
                   <input
                     id="staff-email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder={isManager ? "manager@sample-cafe.test" : "staff@sample-cafe.test"}
+                    placeholder="you@example.com"
                     style={{
                       width: '100%',
                       padding: '12px 14px',
@@ -475,7 +405,7 @@ export default function StaffJoinFlow({ initialCode = '' }) {
                       htmlFor="staff-pin"
                       style={{ fontSize: '13px', fontWeight: '700', color: '#101827' }}
                     >
-                      {isManager ? 'Set Manager Password or PIN *' : 'Set Staff PIN or Password *'}
+                      {isManager ? 'Set Manager Password *' : 'Set Staff Password *'}
                     </label>
                     <button
                       type="button"
@@ -498,7 +428,7 @@ export default function StaffJoinFlow({ initialCode = '' }) {
                     type={showPin ? 'text' : 'password'}
                     value={pin}
                     onChange={(e) => setPin(e.target.value)}
-                    placeholder="e.g. 1234 or your secure password"
+                    placeholder="At least 12 characters, a letter and a number"
                     style={{
                       width: '100%',
                       padding: '12px 14px',
@@ -512,7 +442,7 @@ export default function StaffJoinFlow({ initialCode = '' }) {
                   <span style={{ fontSize: '12px', color: '#64748b', marginTop: '4px', display: 'block' }}>
                     {isManager
                       ? 'You will use this password to sign in to your Business Dashboard.'
-                      : 'You will use this PIN to quickly sign in to the QR stamp scanner.'}
+                      : 'You will use this password to sign in to the QR stamp scanner.'}
                   </span>
                 </div>
 

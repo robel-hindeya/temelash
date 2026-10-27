@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import api, { setStoredToken, DEMO_ACCOUNTS } from '@/lib/api';
+import api, { DEMO_ACCOUNTS, SHOW_DEMO_LOGINS } from '@/lib/api';
 
 export default function DemoModal({ isOpen, onClose }) {
   const router = useRouter();
@@ -74,11 +74,8 @@ export default function DemoModal({ isOpen, onClose }) {
     try {
       await api.auth.login(creds.email, creds.password);
     } catch {
-      setStoredToken(`demo-owner-${Date.now()}`, 'owner', {
-        email: creds.email,
-        displayName: creds.label,
-        role: 'OWNER',
-      });
+      setInstantLoading(false);
+      return;
     }
     setTimeout(() => {
       setInstantLoading(false);
@@ -226,6 +223,7 @@ export default function DemoModal({ isOpen, onClose }) {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {SHOW_DEMO_LOGINS ? (
                 <button
                   type="button"
                   onClick={handleInstantDemo}
@@ -247,6 +245,7 @@ export default function DemoModal({ isOpen, onClose }) {
                 >
                   ⚡ Want to test right now? Launch Instant Demo
                 </button>
+                ) : null}
 
                 <button
                   type="button"
@@ -273,6 +272,7 @@ export default function DemoModal({ isOpen, onClose }) {
               </p>
 
               {/* Instant Live Demo Callout */}
+              {SHOW_DEMO_LOGINS ? (
               <div
                 style={{
                   background: '#fef2f2',
@@ -312,6 +312,7 @@ export default function DemoModal({ isOpen, onClose }) {
                   {instantLoading ? 'Loading...' : 'Launch Live Demo →'}
                 </button>
               </div>
+              ) : null}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>

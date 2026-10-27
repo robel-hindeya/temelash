@@ -5,13 +5,16 @@
 
 const API_BASE = '/api/v1';
 
+// One-click demo sign-ins for local development only. Production builds ship no demo credentials.
+export const SHOW_DEMO_LOGINS = process.env.NODE_ENV !== 'production';
+
 // Seed demo accounts matching backend .seed-output.json
-export const DEMO_ACCOUNTS = {
+export const DEMO_ACCOUNTS = SHOW_DEMO_LOGINS ? {
   owner: { email: 'owner@sample-cafe.test', password: 'password123', label: 'Sample Owner (Merchant)' },
   manager: { email: 'manager@sample-cafe.test', password: 'password123', label: 'Dawit Manager (Merchant)' },
   staff: { email: 'staff.bole@sample-cafe.test', password: 'password123', label: 'Bole Staff' },
   admin: { email: 'admin@temelashcard.test', password: 'password123', label: 'Platform Admin' },
-};
+} : {};
 
 function getStorage() {
   if (typeof window === 'undefined') return null;
@@ -321,9 +324,10 @@ export const api = {
     },
 
     // Loyalty Programs
-    getPrograms(status) {
+    // Staff may read programs too (program:read), so the staff app passes its own role.
+    getPrograms(status, role = 'owner') {
       const q = status ? `?status=${status}` : '';
-      return request(`/merchant/programs${q}`, { method: 'GET' }, 'owner');
+      return request(`/merchant/programs${q}`, { method: 'GET' }, role);
     },
     getProgram(id) {
       return request(`/merchant/programs/${id}`, { method: 'GET' }, 'owner');
@@ -690,398 +694,123 @@ export function addMerchantLoyaltyCard(data) {
 }
 
 // ──────────────────────────────────────────
-// CUSTOMER AUTH & DATA REGISTRY
+// CUSTOMER CARD SESSION
 // ──────────────────────────────────────────
+//
+// A customer has no password. The backend issues an opaque card token at enrollment; this browser keeps
+// that token (and the first name and phone the customer typed) so the card opens again on the next visit.
+// Stamps and rewards always come from the backend web card, never from local storage.
 
-/**
- * Get list of all customers enrolled in this merchant's loyalty program
- */
-export function getRegisteredCustomers() {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem('tm-merchant-customers');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch {}
-  return [];
-}
+const CUSTOMER_SESSION_KEY = 'tm-customer-session';
 
-/**
- * Save / update customer in the merchant's customer registry
- */
-export function saveRegisteredCustomer(customer) {
-  if (typeof window === 'undefined' || !customer) return;
+// Keys written by the old client-side account system, which kept plaintext passwords and local stamp counts.
+const LEGACY_CUSTOMER_KEYS = [
+  'tm-customer-accounts',
+  'tm-merchant-customers',
+  'tm-customer-id',
+  'tm-user-code',
+  'tm-last-stamp-time',
+];
+
+function purgeLegacyCustomerData(s) {
   try {
-    const existing = getRegisteredCustomers();
-    const idx = existing.findIndex((c) => (customer.phone && c.phone === customer.phone) || (customer.id && c.id === customer.id));
-    const updatedCustomer = {
-      ...customer,
-      updatedAt: new Date().toISOString(),
-    };
-    let list;
-    if (idx >= 0) {
-      list = existing.map((c, i) => (i === idx ? { ...c, ...updatedCustomer } : c));
-    } else {
-      list = [updatedCustomer, ...existing];
+    LEGACY_CUSTOMER_KEYS.forEach((k) => s.removeItem(k));
+    for (let i = s.length - 1; i >= 0; i--) {
+      const k = s.key(i);
+      if (k && k.startsWith('tm-stamps-')) s.removeItem(k);
     }
-    window.localStorage.setItem('tm-merchant-customers', JSON.stringify(list));
-    window.dispatchEvent(new CustomEvent('tm-customers-updated', { detail: list }));
   } catch {}
 }
 
 /**
- * Get active customer session (if customer is logged in on this browser)
+ * The card session on this browser: { token, firstName, phone, joinReference }, or null.
  */
 export function getCustomerSession() {
-  if (typeof window === 'undefined') return null;
+  const s = getStorage();
+  if (!s) return null;
+  purgeLegacyCustomerData(s);
   try {
-    const raw = window.localStorage.getItem('tm-customer-session');
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return null;
-}
-
-/**
- * Set active customer session (or null on logout)
- */
-export function setCustomerSession(user) {
-  if (typeof window === 'undefined') return;
-  try {
-    if (user) {
-      window.localStorage.setItem('tm-customer-session', JSON.stringify(user));
-      window.localStorage.setItem('tm-user-code', user.id || user.userId);
-      window.localStorage.setItem('tm-customer-id', user.id || user.userId);
-      window.localStorage.setItem('tm-customer-token', user.token || user.id);
-    } else {
-      window.localStorage.removeItem('tm-customer-session');
+    const raw = s.getItem(CUSTOMER_SESSION_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    // Sessions from the old account system carry a password and a client-made token: drop them.
+    if (!parsed || parsed.password !== undefined || typeof parsed.token !== 'string' || parsed.token.length < 20) {
+      if (raw) s.removeItem(CUSTOMER_SESSION_KEY);
+      return null;
     }
-    window.dispatchEvent(new CustomEvent('tm-customer-session-change', { detail: user }));
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function setCustomerSession(session) {
+  const s = getStorage();
+  if (!s) return;
+  try {
+    if (session) {
+      const { token, firstName, phone, joinReference } = session;
+      s.setItem(CUSTOMER_SESSION_KEY, JSON.stringify({ token, firstName, phone, joinReference }));
+      s.setItem('tm-customer-token', token);
+    } else {
+      s.removeItem(CUSTOMER_SESSION_KEY);
+      s.removeItem('tm-customer-token');
+    }
+    window.dispatchEvent(new CustomEvent('tm-customer-session-change', { detail: session }));
   } catch {}
 }
 
 /**
- * Customer sign-out: logs user out without deleting their account or stamps
+ * Forget the card on this browser. The membership and its stamps stay in the backend.
  */
 export function logoutCustomer() {
   setCustomerSession(null);
 }
 
 /**
- * Customer registration with phone and password
- * Automatically derives email (user never enters email)
+ * Join a merchant's program. Returns the new card session.
+ * The backend returns a card token only for a new membership; an existing member gets no token back.
  */
-export async function registerCustomer({ firstName, phone, password }) {
-  if (!phone || !password) throw new Error('Phone number and password are required');
-  const cleanPhone = String(phone).replace(/[\s-]/g, '').trim();
-  const digitsOnly = cleanPhone.replace(/[^0-9]/g, '');
-  
-  // Auto-generate email without asking user
-  const autoEmail = `${digitsOnly || 'user'}@customer.temelash.et`;
-  const name = (firstName || 'Customer').trim();
-  const userId = getOrAssignUserCode();
-  const token = userId;
+export async function registerCustomer({
+  joinReference,
+  firstName,
+  phone,
+  email,
+  preferredLanguage = 'EN',
+  marketingConsent = false,
+  consentVersion,
+}) {
+  const name = String(firstName || '').trim();
+  const cleanPhone = String(phone || '').replace(/[\s-]/g, '').trim();
+  if (!name) throw new Error('Please enter your first name.');
+  if (!cleanPhone) throw new Error('Please enter your phone number.');
+  if (!joinReference) throw new Error('This join link is missing the shop. Please scan the shop QR code again.');
 
-  const newCustomer = {
-    id: userId,
+  // The backend requires an email; customers are not asked for one, so a per-phone placeholder is used.
+  const digits = cleanPhone.replace(/[^0-9]/g, '');
+  const payload = {
     firstName: name,
     phone: cleanPhone,
-    email: autoEmail,
-    password: String(password).trim(),
-    token,
-    stamps: 0,
-    visits: 1,
-    joinedAt: new Date().toISOString(),
-    status: 'ACTIVE',
+    email: email || `${digits}@customer.temelash.et`,
+    preferredLanguage,
+    acceptTerms: true,
+    marketingConsent: !!marketingConsent,
   };
+  if (consentVersion) payload.consentVersion = consentVersion;
 
-  if (typeof window !== 'undefined') {
-    try {
-      const accountsRaw = window.localStorage.getItem('tm-customer-accounts') || '{}';
-      const accounts = JSON.parse(accountsRaw);
-      accounts[cleanPhone] = newCustomer;
-      accounts[digitsOnly] = newCustomer;
-      window.localStorage.setItem('tm-customer-accounts', JSON.stringify(accounts));
-    } catch {}
-  }
-
-  // Cloud KV backup for cross-device authentication
-  try {
-    const cleanKey = `user_acc_${digitsOnly}`.replace(/[^a-zA-Z0-9_-]/g, '_');
-    fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/${CLOUD_SYNC_APP_KEY}/${cleanKey}/${encodeURIComponent(JSON.stringify(newCustomer))}`, {
-      method: 'POST',
-    }).catch(() => null);
-  } catch {}
-
-  // Save to merchant registry and create session
-  saveRegisteredCustomer(newCustomer);
-  setCustomerSession(newCustomer);
-
-  // Auto-enroll in backend database if reachable
-  try {
-    api.public.enroll('sample-cafe', {
-      firstName: name,
-      phone: cleanPhone,
-      email: autoEmail,
-      acceptTerms: true,
-      preferredLanguage: 'EN',
-      marketingConsent: true,
-    }).catch(() => null);
-  } catch {}
-
-  return newCustomer;
-}
-
-/**
- * Customer login with phone and password
- */
-export async function loginCustomer({ phone, password }) {
-  if (!phone || !password) throw new Error('Phone number and password are required');
-  const cleanPhone = String(phone).replace(/[\s-]/g, '').trim();
-  const digitsOnly = cleanPhone.replace(/[^0-9]/g, '');
-  const pass = String(password).trim();
-
-  let user = null;
-  if (typeof window !== 'undefined') {
-    try {
-      const accountsRaw = window.localStorage.getItem('tm-customer-accounts') || '{}';
-      const accounts = JSON.parse(accountsRaw);
-      user = accounts[cleanPhone] || accounts[digitsOnly] || null;
-    } catch {}
-  }
-
-  // Fallback to cloud KV if on a different device
-  if (!user) {
-    try {
-      const cleanKey = `user_acc_${digitsOnly}`.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/${CLOUD_SYNC_APP_KEY}/${cleanKey}`);
-      if (res.ok) {
-        const raw = await res.text();
-        const clean = (raw || '').replace(/^"|"$/g, '').trim();
-        user = JSON.parse(decodeURIComponent(clean));
-      }
-    } catch {}
-  }
-
-  if (!user) {
-    throw new Error('No account found for this phone number. Please click "New Member? Join" to create your card.');
-  }
-
-  if (user.password && user.password !== pass) {
-    throw new Error('Incorrect password. Please try again.');
-  }
-
-  setCustomerSession(user);
-  saveRegisteredCustomer(user);
-  return user;
-}
-
-let _memoryStamps = {};
-export const CLOUD_SYNC_APP_KEY = 'dev93l7w';
-
-function getStampStorageKeys(cardId, userId) {
-  const keys = [];
-  if (cardId && userId) keys.push(`tm-stamps-${cardId}-${userId}`);
-  if (userId) keys.push(`tm-stamps-${userId}`);
-  if (cardId) keys.push(`tm-stamps-${cardId}`);
-  return keys;
-}
-
-/**
- * Broadcast channel for instant cross-tab / cross-window sync on the same device
- */
-let _loyaltyBroadcastChannel = null;
-function getLoyaltyChannel() {
-  if (typeof window === 'undefined' || typeof window.BroadcastChannel === 'undefined') return null;
-  if (!_loyaltyBroadcastChannel) {
-    try {
-      _loyaltyBroadcastChannel = new window.BroadcastChannel('teme_loyalty_sync');
-    } catch {
-      _loyaltyBroadcastChannel = null;
-    }
-  }
-  return _loyaltyBroadcastChannel;
-}
-
-/**
- * Fetch stamp count from cloud KV store for cross-device real-time sync
- */
-export async function fetchCloudCardStamps(cardId, userId) {
-  if (!cardId && !userId) return null;
-  const cleanKey = (cardId && userId ? `stamp_${cardId}_${userId}` : `stamp_${userId || cardId}`).replace(/[^a-zA-Z0-9_-]/g, '_');
-  try {
-    const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/${CLOUD_SYNC_APP_KEY}/${cleanKey}`, {
-      cache: 'no-store',
-    });
-    if (res.ok) {
-      const raw = await res.text();
-      const clean = (raw || '').replace(/"/g, '').trim();
-      const num = parseInt(clean, 10);
-      if (!isNaN(num) && num >= 0) {
-        // Cache locally
-        const memKey = cardId && userId ? `${cardId}-${userId}` : cardId || userId || 'default';
-        _memoryStamps[memKey] = num;
-        if (typeof window !== 'undefined') {
-          const keys = getStampStorageKeys(cardId, userId);
-          keys.forEach((k) => {
-            try { window.localStorage.setItem(k, String(num)); } catch {}
-          });
-        }
-        return num;
-      }
-    }
-  } catch (e) {
-    // Graceful offline fallback
-  }
-  return null;
-}
-
-/**
- * Save stamp count to cloud KV store for cross-device real-time sync
- */
-export async function syncCardStampsToCloud(cardId, userId, stamps) {
-  if (!cardId && !userId) return;
-  const val = String(Math.max(0, Number(stamps) || 0));
-  const keysToUpdate = [];
-  if (cardId && userId) {
-    keysToUpdate.push(`stamp_${cardId}_${userId}`);
-  }
-  if (userId) {
-    keysToUpdate.push(`stamp_${userId}`);
-  }
-  if (cardId && !userId) {
-    keysToUpdate.push(`stamp_${cardId}`);
-  }
-
-  for (const k of keysToUpdate) {
-    const cleanKey = k.replace(/[^a-zA-Z0-9_-]/g, '_');
-    try {
-      fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/${CLOUD_SYNC_APP_KEY}/${cleanKey}/${val}`, {
-        method: 'POST',
-      }).catch(() => null);
-    } catch {}
-  }
-}
-
-/**
- * Get current recorded stamp count for a user and loyalty card
- */
-export function getUserCardStamps(cardId, userId) {
-  if (typeof window === 'undefined') {
-    const key = cardId && userId ? `${cardId}-${userId}` : cardId || userId || 'default';
-    return _memoryStamps[key] || 0;
-  }
-  try {
-    const keys = getStampStorageKeys(cardId, userId);
-    for (const k of keys) {
-      const val = window.localStorage.getItem(k);
-      if (val !== null && val !== undefined) {
-        const num = parseInt(val, 10);
-        if (!isNaN(num) && num >= 0) return num;
-      }
-    }
-  } catch {}
-  const memKey = cardId && userId ? `${cardId}-${userId}` : cardId || userId || 'default';
-  return _memoryStamps[memKey] || 0;
-}
-
-/**
- * Record stamps added by staff scanner for a user's loyalty card
- */
-export function recordCardStamp({ cardId, userId, cardToken, count = 1, maxStamps = 10 }) {
-  const addCount = Math.max(1, Number(count) || 1);
-  const cur = getUserCardStamps(cardId, userId || cardToken);
-  const newTotal = cur + addCount;
-
-  const memKey = cardId && (userId || cardToken) ? `${cardId}-${userId || cardToken}` : cardId || userId || cardToken || 'default';
-  _memoryStamps[memKey] = newTotal;
-
-  if (typeof window !== 'undefined') {
-    try {
-      const keys = getStampStorageKeys(cardId, userId || cardToken);
-      if (cardToken && !keys.includes(`tm-stamps-${cardToken}`)) {
-        keys.push(`tm-stamps-${cardToken}`);
-      }
-      keys.forEach((k) => {
-        window.localStorage.setItem(k, String(newTotal));
-      });
-      window.localStorage.setItem('tm-last-stamp-time', String(Date.now()));
-
-      // 1. Dispatch custom event for same window
-      window.dispatchEvent(
-        new CustomEvent('teme-card-stamp-updated', {
-          detail: {
-            cardId,
-            userId: userId || cardToken,
-            cardToken,
-            count: addCount,
-            newStamps: newTotal,
-            maxStamps,
-          },
-        })
+  const res = await api.public.enroll(joinReference, payload);
+  const token = res?.card?.token;
+  if (!token) {
+    if (res?.status === 'EXISTING') {
+      throw new Error(
+        'This phone number already has a card at this shop. Open it from the link you saved when you joined, or ask staff for help.',
       );
-
-      // 2. Broadcast across tabs/windows
-      const channel = getLoyaltyChannel();
-      if (channel) {
-        channel.postMessage({
-          type: 'STAMP_RECORDED',
-          cardId,
-          userId: userId || cardToken,
-          cardToken,
-          count: addCount,
-          newStamps: newTotal,
-          maxStamps,
-          timestamp: Date.now(),
-        });
-      }
-    } catch {}
+    }
+    throw new Error('Could not create your card. Please try again.');
   }
 
-  // 3. Sync to cloud KV store for cross-device support (fire-and-forget)
-  syncCardStampsToCloud(cardId, userId || cardToken, newTotal);
-
-  return newTotal;
-}
-
-/**
- * Reset stamps upon reward redemption
- */
-export function resetUserCardStamps(cardId, userId) {
-  const memKey = cardId && userId ? `${cardId}-${userId}` : cardId || userId || 'default';
-  _memoryStamps[memKey] = 0;
-
-  if (typeof window !== 'undefined') {
-    try {
-      const keys = getStampStorageKeys(cardId, userId);
-      keys.forEach((k) => {
-        window.localStorage.setItem(k, '0');
-      });
-      window.dispatchEvent(
-        new CustomEvent('teme-card-stamp-updated', {
-          detail: { cardId, userId, count: 0, newStamps: 0 },
-        })
-      );
-      const channel = getLoyaltyChannel();
-      if (channel) {
-        channel.postMessage({
-          type: 'STAMPS_RESET',
-          cardId,
-          userId,
-          newStamps: 0,
-          timestamp: Date.now(),
-        });
-      }
-    } catch {}
-  }
-
-  syncCardStampsToCloud(cardId, userId, 0);
-
-  return 0;
+  const session = { token, firstName: name, phone: cleanPhone, joinReference };
+  setCustomerSession(session);
+  return session;
 }
 
 export default api;
-
-
-

@@ -3,7 +3,7 @@
 import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
-import api from '@/lib/api';
+import api, { getOrAssignMerchantCode, setCustomerSession } from '@/lib/api';
 import QRCodeDisplay from '@/components/QRCodeDisplay';
 
 const __CSS =
@@ -22,7 +22,7 @@ class CustomerFlowView extends DCLogic {
       wallet: 'web',
       stamps: 1,
       notif: true,
-      f: { name: '', phone: '', email: '', bday: '', consent: true },
+      f: { name: '', phone: '', email: '', bday: '', consent: false },
       tried: false,
       toast: '',
       lastUpdate: '10:42 21/10',
@@ -30,7 +30,7 @@ class CustomerFlowView extends DCLogic {
       cfg: { email: 'optional', birthday: 'optional', name: 'Sample Cafe' },
       rw: { count: 10, reward: 'Free macchiato', ms: [{ at: 5, name: 'Free cookie', days: 30 }] },
       unlockName: '',
-      joinReference: 'sample-cafe',
+      joinReference: props.slug || getOrAssignMerchantCode(),
     };
   }
   async componentDidMount() {
@@ -56,7 +56,7 @@ class CustomerFlowView extends DCLogic {
       ]);
       const updates = {};
       if (profRes.status === 'fulfilled' && profRes.value) {
-        updates.joinReference = profRes.value.joinReference || profRes.value.slug || 'sample-cafe';
+        if (!this.props.slug && profRes.value.joinReference) updates.joinReference = profRes.value.joinReference;
         updates.cfg = Object.assign({}, this.state.cfg, { name: profRes.value.nameEn || 'Sample Cafe' });
       }
       if (progRes.status === 'fulfilled' && progRes.value?.length) {
@@ -425,7 +425,7 @@ class CustomerFlowView extends DCLogic {
         const bdayOk = s.cfg.birthday !== 'required' || !!(s.f.bday || '').trim();
         const ok = (s.f.name || '').trim() && digits.length >= 9 && emailOk && bdayOk;
         if (ok) {
-          const joinRef = s.joinReference || 'sample-cafe';
+          const joinRef = s.joinReference;
           const payload = {
             firstName: (s.f.name || '').trim(),
             phone: s.f.phone.startsWith('+251') ? s.f.phone : `+251${digits.slice(-9)}`,
@@ -438,22 +438,18 @@ class CustomerFlowView extends DCLogic {
             const enrollRes = await api.public.enroll(joinRef, payload);
             const token = enrollRes?.card?.token || enrollRes?.cardToken;
             if (token) {
-              try {
-                window.localStorage.setItem('tm-customer-token', token);
-                window.localStorage.setItem('teme_active_card_token', token);
-                window.localStorage.setItem('teme_last_enrolled_card', JSON.stringify({
-                  token,
-                  customerName: payload.firstName,
-                  phone: payload.phone,
-                }));
-              } catch (e) {}
+              setCustomerSession({ token, firstName: payload.firstName, phone: payload.phone, joinReference: joinRef });
               this.setState({ cardToken: token, joined: true, tried: false });
               return;
             }
+            this.flash(
+              enrollRes?.status === 'EXISTING'
+                ? 'You already have a card here. Open it from the link you saved when you joined.'
+                : 'Could not create your card. Please try again.',
+            );
           } catch (e) {
-            console.warn('Backend enrollment note (proceeding):', e);
+            this.flash(e.message || 'Could not create your card. Please try again.');
           }
-          this.setState({ joined: true, tried: false });
         } else {
           this.setState({ tried: true });
         }
@@ -590,7 +586,7 @@ class CustomerFlowView extends DCLogic {
           screen: 'landing',
           stamps: 1,
           wallet: 'web',
-          f: { name: '', phone: '', email: '', bday: '', consent: true },
+          f: { name: '', phone: '', email: '', bday: '', consent: false },
           tried: false,
           sheet: null,
           menu: false,
