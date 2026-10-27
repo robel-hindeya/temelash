@@ -17,10 +17,108 @@ function getStorage() {
   return window.localStorage;
 }
 
+export function getCurrentUser() {
+  const s = getStorage();
+  if (!s) return null;
+  try {
+    const raw = s.getItem('tc_current_user');
+    if (raw) return JSON.parse(raw);
+    for (const r of ['admin', 'owner', 'staff']) {
+      const u = s.getItem(`tc_user_${r}`);
+      if (u) return JSON.parse(u);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function getCurrentRole() {
+  const s = getStorage();
+  if (!s) return null;
+  const active = s.getItem('tc_active_role');
+  if (active) return active;
+  const user = getCurrentUser();
+  if (user) {
+    if (user.accountType === 'PLATFORM_ADMIN' || user.role === 'PLATFORM_ADMIN' || user.role === 'ADMIN') return 'admin';
+    if (user.role === 'STAFF') return 'staff';
+    if (user.role === 'OWNER' || user.role === 'MANAGER') return 'owner';
+  }
+  if (s.getItem('tc_token_admin')) return 'admin';
+  if (s.getItem('tc_token_staff')) return 'staff';
+  if (s.getItem('tc_token_owner')) return 'owner';
+  return null;
+}
+
+export function hasRolePermission(requiredRole = 'owner') {
+  const s = getStorage();
+  if (!s) return false;
+
+  const user = getCurrentUser();
+  const token = getStoredToken(requiredRole);
+
+  if (!token && !user) return false;
+
+  if (requiredRole === 'admin') {
+    if (user?.accountType === 'PLATFORM_ADMIN' || user?.role === 'PLATFORM_ADMIN' || user?.role === 'ADMIN') {
+      return true;
+    }
+    if (s.getItem('tc_token_admin')) return true;
+    return false;
+  }
+
+  if (requiredRole === 'staff') {
+    if (user) {
+      const r = (user.role || '').toUpperCase();
+      if (r === 'STAFF' || r === 'MANAGER' || r === 'OWNER') return true;
+      if (user.accountType === 'PLATFORM_ADMIN') return true;
+    }
+    if (s.getItem('tc_token_staff') || s.getItem('tc_token_owner')) return true;
+    return false;
+  }
+
+  if (requiredRole === 'owner') {
+    if (user) {
+      const r = (user.role || '').toUpperCase();
+      if (r === 'OWNER' || r === 'MANAGER') return true;
+      if (user.accountType === 'PLATFORM_ADMIN') return true;
+    }
+    if (s.getItem('tc_token_owner')) return true;
+    if (s.getItem('tc_registered_merchant')) return true;
+    return false;
+  }
+
+  return false;
+}
+
 export function getStoredToken(role = 'owner') {
   const s = getStorage();
   if (!s) return null;
-  return s.getItem(`tc_token_${role}`) || s.getItem('tc_access_token');
+
+  const roleTok = s.getItem(`tc_token_${role}`);
+  if (roleTok) return roleTok;
+
+  const activeRole = s.getItem('tc_active_role');
+  const user = getCurrentUser();
+  const genericTok = s.getItem('tc_access_token');
+
+  if (genericTok) {
+    if (role === 'admin') {
+      if (activeRole === 'admin' || user?.accountType === 'PLATFORM_ADMIN' || user?.role === 'PLATFORM_ADMIN' || user?.role === 'ADMIN') {
+        return genericTok;
+      }
+    } else if (role === 'staff') {
+      if (activeRole === 'staff' || activeRole === 'owner' || ['STAFF', 'MANAGER', 'OWNER'].includes((user?.role || '').toUpperCase())) {
+        return genericTok;
+      }
+    } else if (role === 'owner') {
+      if (activeRole === 'owner' || ['OWNER', 'MANAGER'].includes((user?.role || '').toUpperCase())) {
+        return genericTok;
+      }
+    }
+  }
+
+  return null;
 }
 
 export function setStoredToken(token, role = 'owner', user = null) {
@@ -28,17 +126,39 @@ export function setStoredToken(token, role = 'owner', user = null) {
   if (!s) return;
   s.setItem(`tc_token_${role}`, token);
   s.setItem('tc_access_token', token);
+  s.setItem('tc_active_role', role);
   if (user) {
     s.setItem(`tc_user_${role}`, JSON.stringify(user));
     s.setItem('tc_current_user', JSON.stringify(user));
   }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('tc_auth_change'));
+  }
 }
 
-export function clearStoredToken(role = 'owner') {
+export function clearStoredToken(role = null) {
   const s = getStorage();
   if (!s) return;
-  s.removeItem(`tc_token_${role}`);
-  s.removeItem(`tc_user_${role}`);
+  if (role) {
+    s.removeItem(`tc_token_${role}`);
+    s.removeItem(`tc_user_${role}`);
+    if (s.getItem('tc_active_role') === role) {
+      s.removeItem('tc_active_role');
+      s.removeItem('tc_current_user');
+      s.removeItem('tc_access_token');
+    }
+  } else {
+    ['admin', 'owner', 'staff'].forEach((r) => {
+      s.removeItem(`tc_token_${r}`);
+      s.removeItem(`tc_user_${r}`);
+    });
+    s.removeItem('tc_active_role');
+    s.removeItem('tc_current_user');
+    s.removeItem('tc_access_token');
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('tc_auth_change'));
+  }
 }
 
 export function getStoredUser(role = 'owner') {
@@ -53,28 +173,11 @@ export function getStoredUser(role = 'owner') {
 }
 
 /**
- * Ensures a valid token exists for the given role, logging in automatically if not cached.
+ * Returns stored token for the given role.
+ * Does not auto-authenticate with demo accounts behind the scenes.
  */
 export async function ensureAuth(role = 'owner') {
-  let token = getStoredToken(role);
-  if (token) return token;
-
-  const creds = DEMO_ACCOUNTS[role] || DEMO_ACCOUNTS.owner;
-  try {
-    const res = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: creds.email, password: creds.password }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setStoredToken(data.accessToken, role, data.user);
-      return data.accessToken;
-    }
-  } catch (err) {
-    console.warn(`Failed to auto-authenticate as ${role}:`, err);
-  }
-  return null;
+  return getStoredToken(role);
 }
 
 /**
@@ -168,7 +271,7 @@ export const api = {
     async getMe(role = 'owner') {
       return request('/auth/me', { method: 'GET' }, role);
     },
-    logout(role = 'owner') {
+    logout(role = null) {
       clearStoredToken(role);
     },
   },

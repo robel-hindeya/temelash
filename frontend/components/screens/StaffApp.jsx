@@ -343,6 +343,30 @@ StaffAppView.prototype.__template = function (__v) {
               }}
             >{`${__t(__v?.today)}`}</span>
           </span>
+          <button
+            type="button"
+            title="Sign out of staff terminal"
+            onClick={() => {
+              api.auth.logout();
+              window.location.href = '/';
+            }}
+            style={{
+              background: '#f1f5f9',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              padding: '6px 8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginLeft: '4px',
+              color: '#5b6475',
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+            </svg>
+          </button>
         </header>{' '}
         {__b(__v?.isScan) ? (
           <>

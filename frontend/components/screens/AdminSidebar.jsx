@@ -393,9 +393,13 @@ AdminSidebarView.prototype.__template = function (__v) {
                     {'Open a merchant dashboard'}
                   </A>{' '}
                   <div style={{ height: '1px', background: '#e3e5ec', margin: '4px 6px' }} />{' '}
-                  <A
+                  <button
+                    type="button"
                     role="menuitem"
-                    href="/"
+                    onClick={() => {
+                      api.auth.logout();
+                      window.location.href = '/';
+                    }}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -405,12 +409,16 @@ AdminSidebarView.prototype.__template = function (__v) {
                       boxSizing: 'border-box',
                       borderRadius: '8px',
                       color: '#c81d29',
-                      textDecoration: 'none',
+                      background: 'none',
+                      border: 'none',
+                      width: '100%',
+                      cursor: 'pointer',
+                      textAlign: 'left',
                       fontWeight: '700',
                     }}
                   >
                     {'Sign out'}
-                  </A>
+                  </button>
                 </div>
               </>
             ) : null}{' '}

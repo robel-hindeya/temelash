@@ -652,9 +652,13 @@ SidebarView.prototype.__template = function (__v) {
                     {'Help on Telegram'}
                   </A>{' '}
                   <div style={{ height: '1px', background: '#e3e5ec', margin: '4px 6px' }} />{' '}
-                  <A
+                  <button
+                    type="button"
                     role="menuitem"
-                    href="/"
+                    onClick={() => {
+                      api.auth.logout();
+                      window.location.href = '/';
+                    }}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -664,7 +668,11 @@ SidebarView.prototype.__template = function (__v) {
                       boxSizing: 'border-box',
                       borderRadius: '8px',
                       color: '#c81d29',
-                      textDecoration: 'none',
+                      background: 'none',
+                      border: 'none',
+                      width: '100%',
+                      cursor: 'pointer',
+                      textAlign: 'left',
                       fontWeight: '700',
                     }}
                   >
@@ -682,7 +690,7 @@ SidebarView.prototype.__template = function (__v) {
                       <path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l-5-5 5-5M5 12h11" />
                     </svg>
                     {'Sign out'}
-                  </A>
+                  </button>
                 </div>
               </>
             ) : null}{' '}
