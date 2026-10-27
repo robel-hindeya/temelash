@@ -7,6 +7,12 @@ export const OutboxJobType = {
   FRAUD_EVALUATE: 'fraud.evaluate',
   RETENTION_RUN: 'privacy.retention',
   MAINTENANCE_CLEANUP: 'maintenance.cleanup',
+  /** Tell the customer (Telegram) about a stamp or an unlocked reward. */
+  CARD_NOTIFY: 'notify.card_event',
+  /** Find rewards that expire soon and remind their customers. */
+  REWARD_EXPIRY_SCAN: 'notify.reward_expiry',
+  /** Deliver one merchant promotion to its opted-in audience (in batches). */
+  PROMOTION_SEND: 'notify.promotion',
 } as const;
 
 export interface OutboxJobInput {

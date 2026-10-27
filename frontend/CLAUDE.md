@@ -15,6 +15,7 @@ Next.js 16 App Router, plain JavaScript. Route files in `app/` are thin: most re
 | `/join` | `screens/customer/CustomerFlow.jsx` | old design demo flow |
 | `/staff`, `/staff/join/<token>` | `screens/staff/StaffApp.jsx`, `screens/staff/StaffJoinFlow.jsx` | scanner; invite acceptance |
 | `/business/*` | `screens/merchant/<Name>.jsx` | `Sidebar.jsx` and `ColorPicker.jsx` are shared here |
+| `/business/offers` | `screens/merchant/Offers.jsx` | real Telegram promotions (`getPromotions`, `sendPromotion`); segments, scheduling and email are disabled |
 | `/admin/*` | `screens/admin/Admin<Name>.jsx` | `AdminSidebar.jsx` shared; most screens are static mock-ups |
 | `/` | `screens/marketing/Main.jsx` | home page |
 | `/login` | `components/AuthModal.jsx` | sign-in and merchant sign-up |

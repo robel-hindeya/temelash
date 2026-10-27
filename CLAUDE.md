@@ -14,6 +14,7 @@ Do not read whole folders or whole screen files; screen markup lives in separate
 | --- | --- | --- |
 | Customer card, landing page, join, PIN sign-in | `components/screens/customer/` | `memberships` |
 | Telegram Mini App (sign-in, shared phone, bot) | `screens/customer/TelegramEntry.jsx`, `lib/api/telegram.js` | `telegram`, `memberships` |
+| Customer messages (stamp, reward, expiry) and promotions | `screens/merchant/Offers.jsx` | `notifications` |
 | Staff scanner, stamping, redeeming, staff onboarding | `components/screens/staff/` | `stamps`, `redemptions`, `staff` |
 | Merchant dashboard (card design, rewards, customers, staff, branches, analytics) | `components/screens/merchant/` | `merchants`, `loyalty-programs`, `customers`, `branches`, `staff`, `analytics` |
 | Platform admin | `components/screens/admin/` | `merchants` (platform), `audit-viewer`, `jobs` |

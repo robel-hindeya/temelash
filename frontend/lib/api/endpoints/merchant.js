@@ -155,4 +155,12 @@ export const merchant = {
     const q = new URLSearchParams(params).toString();
     return request(`/merchant/analytics/staff${q ? `?${q}` : ''}`, { method: 'GET' }, 'owner');
   },
+
+  // Promotions (Telegram, opted-in customers only)
+  getPromotions() {
+    return request('/merchant/promotions', { method: 'GET' }, 'owner');
+  },
+  sendPromotion(message) {
+    return request('/merchant/promotions', { method: 'POST', body: JSON.stringify({ message }) }, 'owner');
+  },
 };

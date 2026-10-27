@@ -12,13 +12,19 @@ describe('Telegram Mini App card (e2e, real PostgreSQL)', () => {
   let prisma: PrismaClient;
   let w: World;
   let nextUserId = 900_000_000 + Math.floor(Math.random() * 1_000_000);
+  const saved: Record<string, string | undefined> = {};
   const http = () => request(app.getHttpServer());
 
   beforeAll(async () => {
     // Config is read when the app module loads, so set Telegram up before importing it.
-    process.env.TELEGRAM_BOT_TOKEN = BOT_TOKEN;
-    process.env.TELEGRAM_WEBHOOK_SECRET = WEBHOOK_SECRET;
-    process.env.TELEGRAM_API_BASE = 'http://127.0.0.1:9'; // bot replies fail fast; they are best effort
+    for (const [k, v] of Object.entries({
+      TELEGRAM_BOT_TOKEN: BOT_TOKEN,
+      TELEGRAM_WEBHOOK_SECRET: WEBHOOK_SECRET,
+      TELEGRAM_API_BASE: 'http://127.0.0.1:9', // bot replies fail fast; they are best effort
+    })) {
+      saved[k] = process.env[k];
+      process.env[k] = v;
+    }
     prisma = new PrismaClient();
     w = await createWorld(prisma);
     await createActiveProgram(prisma, w.a.merchantId);
@@ -28,6 +34,11 @@ describe('Telegram Mini App card (e2e, real PostgreSQL)', () => {
   });
 
   afterAll(async () => {
+    // Later suites in this process must not inherit Telegram settings.
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
     await app.close();
     await prisma.$disconnect();
   });

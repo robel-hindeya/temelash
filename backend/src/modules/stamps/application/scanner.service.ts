@@ -274,6 +274,26 @@ export class ScannerService {
       },
       db,
     );
+    // Tell the customer in Telegram (the handler skips customers who have not linked it). Only queued
+    // when the bot is configured; sent by the outbox worker after commit.
+    if (this.config.get('TELEGRAM_BOT_TOKEN', { infer: true })) {
+      await this.outbox.enqueue(
+        {
+          merchantId: actor.merchantId,
+          type: OutboxJobType.CARD_NOTIFY,
+          aggregateType: 'membership',
+          aggregateId: membership.id,
+          payload: {
+            event: reward.unlocked ? 'reward_unlocked' : 'stamp',
+            stampId: stamp.id,
+            unlockId: reward.unlocked ? (reward.unlockId ?? null) : null,
+            effectiveStamps: total,
+            stampsRequired: program.stampsRequired,
+          },
+        },
+        db,
+      );
+    }
 
     const progress = await this.progressView(
       actor.merchantId,

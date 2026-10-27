@@ -4,6 +4,7 @@ import { normalizeEthiopianPhone } from '../../../common/phone/ethiopian-phone';
 import type { Env } from '../../../config/env.schema';
 import { BotApiClient } from '../infrastructure/bot-api.client';
 import { TelegramContactsRepository } from '../infrastructure/telegram-contacts.repository';
+import { TelegramCommandRegistry } from './telegram-command.registry';
 
 /** The parts of a Telegram update this bot reads. */
 export interface TelegramUpdate {
@@ -21,6 +22,7 @@ export class TelegramWebhookService {
     private readonly config: ConfigService<Env, true>,
     private readonly contacts: TelegramContactsRepository,
     private readonly bot: BotApiClient,
+    private readonly commands: TelegramCommandRegistry,
   ) {}
 
   async handle(update: TelegramUpdate, now = new Date()): Promise<void> {
@@ -51,6 +53,15 @@ export class TelegramWebhookService {
         chatId,
         'Thanks, your number is confirmed. Go back to your card to continue.',
       );
+      return;
+    }
+
+    // Commands other modules registered (e.g. /stop for offers).
+    const command = msg.text?.trim().split(/[\s@]/)[0]?.toLowerCase();
+    const handler = command ? this.commands.get(command) : undefined;
+    if (handler) {
+      const reply = await handler(String(fromId));
+      if (reply) await this.bot.sendMessage(chatId, reply);
       return;
     }
 

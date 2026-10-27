@@ -31,6 +31,7 @@ import { WalletModule } from './modules/wallet';
 import { MerchantsModule } from './modules/merchants';
 import { StaffModule } from './modules/staff';
 import { TelegramModule } from './modules/telegram';
+import { NotificationsModule } from './modules/notifications';
 
 import { AppController } from './app.controller';
 
@@ -74,6 +75,7 @@ import { AppController } from './app.controller';
     LoyaltyProgramsModule,
     CustomersModule,
     TelegramModule,
+    NotificationsModule,
     MembershipsModule,
     RewardsModule,
     StampsModule,

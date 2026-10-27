@@ -7,7 +7,8 @@ NestJS 11, Prisma 6, PostgreSQL. Global prefix `/api/v1`. Design notes per topic
 | Module | Owns | Routes |
 | --- | --- | --- |
 | `memberships` | join page, enrollment, phone + PIN and Telegram card sign-in, web card, card reissue | `join/*`, `card/*`, `merchant/memberships/*` |
-| `telegram` | Mini App initData verification, bot webhook (verified phone), Bot API client | `telegram/webhook` |
+| `telegram` | Mini App initData verification, bot webhook (verified phone), bot command registry, Bot API client | `telegram/webhook` |
+| `notifications` | Telegram messages (stamp, reward unlocked, expiry reminder), promotions, /stop opt-out | `merchant/promotions` |
 | `customers` | customer records, consent, card PIN rules | `merchant/customers` |
 | `stamps` | scan validation, stamping, cooldowns | `scanner/validate`, `scanner/stamps` |
 | `redemptions` | reward lookup, redemption, reversals | `scanner/redemptions`, `merchant/.../reverse` |
@@ -30,6 +31,11 @@ Off unless `TELEGRAM_BOT_TOKEN` is set; then `TELEGRAM_WEBHOOK_SECRET` (16+ char
 `TELEGRAM_MINI_APP_URL` gives the bot's "Open" button. Register the webhook with Telegram's `setWebhook`
 (`url=<api>/api/v1/telegram/webhook`, `secret_token=<secret>`). `signInitData` (exported from the module)
 builds valid initData for tests and local simulation.
+
+Customer messages go through the outbox: the scanner queues `notify.card_event` (only when the bot
+token is set), an hourly task queues the expiry scan, and promotions queue `notify.promotion` batches.
+`notification_deliveries.key` makes every message at-most-once. Promotions: opted-in Telegram
+customers only, one per merchant per 24 h, `{first name}` is filled in, `/stop` withdraws consent.
 
 ## Adding an endpoint
 

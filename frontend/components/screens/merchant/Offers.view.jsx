@@ -304,10 +304,10 @@ export default function renderOffers(__v) {
                       style={{ width: '18px', height: '18px', marginTop: '3px' }}
                     />
                     <span style={{ display: 'flex', flexDirection: 'column' }}>
-                      <strong>{'Wallet notification'}</strong>
+                      <strong>{'Telegram message'}</strong>
                       <span
                         style={{ fontSize: '14px', color: '#5b6475' }}
-                      >{`Apple and Google Wallet · ${__t(__v?.walletN)} people`}</span>
+                      >{`Customers who opted in to offers · ${__t(__v?.walletN)} people`}</span>
                     </span>
                   </label>{' '}
                   <div
@@ -647,15 +647,16 @@ export default function renderOffers(__v) {
                 <button
                   type="button"
                   onClick={__v?.send}
+                  disabled={__b(__v?.sendDisabled)}
                   style={{
                     border: '0',
-                    background: '#e42330',
+                    background: __b(__v?.sendDisabled) ? '#9aa1ad' : '#e42330',
                     color: '#ffffff',
                     fontWeight: '700',
                     borderRadius: '12px',
                     padding: '12px 22px',
                     minHeight: '48px',
-                    cursor: 'pointer',
+                    cursor: __b(__v?.sendDisabled) ? 'not-allowed' : 'pointer',
                   }}
                 >{`${__t(__v?.sendLabel)}`}</button>
               </div>{' '}
@@ -663,7 +664,7 @@ export default function renderOffers(__v) {
                 <>
                   <div
                     role="status"
-                    style={{ background: '#f7f7f9', borderRadius: '12px', padding: '12px 14px', fontWeight: '700' }}
+                    style={{ background: '#f7f7f9', borderRadius: '12px', padding: '12px 14px', fontWeight: '700', color: __v?.sentNoteColor }}
                   >{`${__t(__v?.sentNote)}`}</div>
                 </>
               ) : null}
@@ -1463,7 +1464,7 @@ export default function renderOffers(__v) {
                       {'SENT'}
                     </th>
                     <th scope="col" style={{ padding: '8px 0 8px 12px', fontWeight: '700', textAlign: 'right' }}>
-                      {'CAME IN WITHIN 7 DAYS'}
+                      {'DELIVERED'}
                     </th>
                   </tr>
                 </thead>

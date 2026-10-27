@@ -471,6 +471,36 @@ model Customer {
 /// Append-only consent history. Current consent = latest row per (customer, type).
 /// A phone number a Telegram user shared with the bot as their own contact (Telegram vouches for it).
 /// Not merchant data: it only lets the Mini App join or link a card by phone.
+/// One row per customer message (Telegram). The unique key makes every send at-most-once, even when an
+/// outbox job runs twice: "stamp:<stampId>", "unlock:<unlockId>", "expiry:<unlockId>", "promo:<id>:<customer>".
+model NotificationDelivery {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  merchantId  String    @map("merchant_id") @db.Uuid
+  customerId  String    @map("customer_id") @db.Uuid
+  key         String    @unique
+  kind        String
+  promotionId String?   @map("promotion_id") @db.Uuid
+  sentAt      DateTime? @map("sent_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([merchantId, kind, createdAt])
+  @@index([promotionId])
+  @@map("notification_deliveries")
+}
+
+/// A promotional message a merchant sent to customers who opted in to offers.
+model Promotion {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  merchantId      String   @map("merchant_id") @db.Uuid
+  message         String
+  createdByUserId String?  @map("created_by_user_id") @db.Uuid
+  audienceSize    Int      @map("audience_size")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([merchantId, createdAt])
+  @@map("promotions")
+}
+
 model TelegramContact {
   telegramUserId BigInt   @id @map("telegram_user_id")
   phoneE164      String   @map("phone_e164")

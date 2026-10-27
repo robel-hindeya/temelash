@@ -2,7 +2,7 @@
 /* Generated from the Temelash Card design (Offers.dc.html). */
 import DCLogic from '@/lib/DCLogic';
 import { A, withDCStyle } from '@/lib/dc-runtime';
-import { getAppOrigin, getMerchantJoinUrl, getOrAssignUserCode } from '@/lib/api';
+import api, { getMerchantJoinUrl, getOrAssignUserCode } from '@/lib/api';
 import renderOffers from './Offers.view';
 
 const __CSS =
@@ -26,11 +26,23 @@ class OffersView extends DCLogic {
       businessName: 'Sample Cafe',
       cardUrl: '',
       qrModalOpen: false,
+      // Promotions over Telegram: { reach, nextAllowedAt, telegramEnabled, recent } from the backend.
+      overview: null,
+      sending: false,
+      sendError: '',
     };
   }
-  componentDidMount() {
+  loadOverview = async () => {
     try {
-      const origin = getAppOrigin();
+      this.setState({ overview: await api.merchant.getPromotions() });
+    } catch (e) {
+      this.setState({ overview: { reach: 0, nextAllowedAt: null, telegramEnabled: false, recent: [], error: e.message } });
+    }
+  };
+
+  componentDidMount() {
+    this.loadOverview();
+    try {
       let bizName = 'Sample Cafe';
       try {
         const localBiz = window.localStorage.getItem('tm-biz-profile');
@@ -108,11 +120,12 @@ class OffersView extends DCLogic {
       bg: id === s.kind ? '#f7f7f9' : '#ffffff',
       pick: () => this.setState({ kind: id, en: null, am: null, aud: K[id].aud, justSent: false }),
     }));
+    const ov = s.overview;
     const audDefs = [
-      ['all', 'Everyone with your card', 'All saved cards', 412, 268],
-      ['close', 'Close to a reward', '1 or 2 stamps to go', 23, 15],
-      ['quiet', 'Gone quiet', 'No visit in 30 days', 71, 44],
-      ['bday', 'Birthday this month', 'Shared their birthday', 14, 11],
+      ['all', 'Everyone who opted in', 'Telegram card + agreed to offers', ov ? ov.reach : '…', 0],
+      ['close', 'Close to a reward', 'Coming soon', '—', 0],
+      ['quiet', 'Gone quiet', 'Coming soon', '—', 0],
+      ['bday', 'Birthday this month', 'Coming soon', '—', 0],
     ];
     const audiences = audDefs.map(([id, label, desc, n]) => ({
       label,
@@ -156,8 +169,7 @@ class OffersView extends DCLogic {
     const dots = [];
     for (let i = 0; i < 10; i++)
       dots.push({ bg: i < 7 ? '#fba919' : 'transparent', border: i < 7 ? '#fba919' : i === 9 ? '#e42330' : '#e3e5ec' });
-    let reach = 0;
-    if (s.wallet) reach = cur[3];
+    const reach = ov && s.wallet && s.aud === 'all' ? ov.reach : 0;
     const pvText = fill(text);
     const fmtDate = (iso, tm) => {
       if (!iso) return 'on a date you pick';
@@ -174,32 +186,32 @@ class OffersView extends DCLogic {
           : fmtDate(s.pickDate, s.pickTime);
     const firstSentence = fill(en).split(/[.!?]/)[0];
     const typeLabel = k.label;
-    const sentRows = s.sent.concat([
-      {
-        msg: 'Free pastry with any coffee before 9am',
-        type: 'Special offer',
-        to: 'Everyone',
-        via: 'Wallet',
-        when: '12 Oct',
-        back: '87',
-      },
-      {
-        msg: 'Liya, only 1 more visit to your free macchiato',
-        type: 'Reward reminder',
-        to: 'Close to a reward',
-        via: 'Wallet',
-        when: '5 Oct',
-        back: '14',
-      },
-      {
-        msg: 'Every visit earns 2 stamps until Sunday',
-        type: 'Double stamps',
-        to: 'Gone quiet',
-        via: 'Wallet',
-        when: '28 Sep',
-        back: '11',
-      },
-    ]);
+    const sentRows = ((ov && ov.recent) || []).map((p) => ({
+      msg: p.message.length > 60 ? p.message.slice(0, 60) + '…' : p.message,
+      type: 'Promotion',
+      to: 'Opted in',
+      via: 'Telegram',
+      when: new Date(p.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
+      back: p.sent + ' / ' + p.audienceSize,
+    }));
+    // Why Send is not possible right now, if it is not.
+    const blocked = !ov
+      ? 'Loading…'
+      : !ov.telegramEnabled
+        ? 'Telegram messages are not set up yet'
+        : s.aud !== 'all'
+          ? 'Only "Everyone who opted in" can be sent for now'
+          : s.when !== 'now'
+            ? 'Scheduling is coming soon: choose "Now"'
+            : !s.wallet
+              ? 'Tick Telegram message to send'
+              : /\{stamps to go\}/.test(text)
+                ? 'Remove {stamps to go}: it is not supported yet'
+                : ov.nextAllowedAt
+                  ? 'Next promotion after ' + new Date(ov.nextAllowedAt).toLocaleString()
+                  : !reach
+                    ? 'Nobody has opted in to offers yet'
+                    : '';
     return {
       kinds,
       audiences,
@@ -231,7 +243,7 @@ class OffersView extends DCLogic {
       toggleEmail: () =>
         this.setState({ email: !s.email, device: !s.email ? 'email' : s.device === 'email' ? 'apple' : s.device }),
       walletN: String(cur[3]),
-      emailN: String(cur[4]),
+      emailN: '0',
       isApple: device === 'apple',
       isGoogle: device === 'google',
       isWeb: device === 'web',
@@ -270,31 +282,21 @@ class OffersView extends DCLogic {
         whenText === 'now'
           ? 'Goes out as soon as you press Send.'
           : 'Goes out ' + whenText + '. You can cancel it from the Sent list until then.',
-      sendLabel: !reach
-        ? 'Tick Wallet notification to send'
-        : s.when === 'now'
-          ? 'Send to ' + reach + ' people'
-          : 'Schedule for ' + reach + ' people',
-      sentNote:
-        s.when === 'now'
-          ? 'Sent. It’s at the top of your Sent list below.'
-          : 'Scheduled for ' + whenText + '. It’s at the top of your Sent list below.',
-      justSent: !!s.justSent,
-      send: () => {
-        if (!reach) return;
-        this.setState({
-          justSent: true,
-          sent: [
-            {
-              msg: fill(en).slice(0, 60),
-              type: typeLabel,
-              to: cur[1],
-              via: 'Wallet',
-              when: s.when === 'now' ? 'Just now' : 'Scheduled · ' + whenText.replace(/^on /, ''),
-              back: '—',
-            },
-          ].concat(s.sent),
-        });
+      sendLabel: s.sending ? 'Sending…' : blocked || 'Send to ' + reach + (reach === 1 ? ' person' : ' people'),
+      sendDisabled: s.sending || !!blocked,
+      sentNote: s.sendError || 'Sent. Customers get it in Telegram over the next few minutes; see the Sent list below.',
+      sentNoteColor: s.sendError ? '#c81d29' : '#101827',
+      justSent: !!s.justSent || !!s.sendError,
+      send: async () => {
+        if (blocked || s.sending) return;
+        this.setState({ sending: true, sendError: '', justSent: false });
+        try {
+          await api.merchant.sendPromotion(text);
+          this.setState({ sending: false, justSent: true });
+          await this.loadOverview();
+        } catch (e) {
+          this.setState({ sending: false, sendError: e.message || 'Could not send. Please try again.' });
+        }
       },
       sent: sentRows,
     };
