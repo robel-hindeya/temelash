@@ -4,6 +4,8 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
+import QRCodeDisplay from '../QRCodeDisplay';
+import { getAppOrigin } from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-topbar{display:flex !important}.tm-side{display:none !important}.tm-side.is-open{display:flex !important;min-height:0 !important;height:auto !important;border-right:0 !important;border-bottom:1px solid #e3e5ec !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}.tm-split{border-left:0 !important;padding-left:0 !important;border-top:1px solid #e3e5ec;padding-top:16px}.tm-hide-sm{display:none !important}.tm-table{min-width:480px !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #4661ad;outline-offset:2px}\n@media (min-width: 1024px){.pv-sticky{position:sticky;top:24px;align-self:flex-start;max-height:calc(100vh - 48px);overflow-y:auto}}';
@@ -23,7 +25,28 @@ class OffersView extends DCLogic {
       pickTime: '08:00',
       lang: 'en',
       sent: [],
+      businessName: 'Sample Cafe',
+      cardUrl: '',
+      qrModalOpen: false,
     };
+  }
+  componentDidMount() {
+    try {
+      const origin = getAppOrigin();
+      let bizName = 'Sample Cafe';
+      try {
+        const localBiz = window.localStorage.getItem('tm-biz-profile');
+        if (localBiz) {
+          const parsed = JSON.parse(localBiz);
+          if (parsed?.nameEn) bizName = parsed.nameEn;
+        }
+      } catch (e) {}
+
+      this.setState({
+        businessName: bizName,
+        cardUrl: `${origin}/card?token=demo-card-liya-01`,
+      });
+    } catch (e) {}
   }
   kindDefs() {
     return {
@@ -220,10 +243,12 @@ class OffersView extends DCLogic {
         check: i < 7 ? '#101827' : i === 9 ? '#c81d29' : '#c9cdd6',
         path: i === 9 ? 'M3 8h18v4H3zM5 12v9h14v-9M12 8v13' : 'M5 12l5 5L20 7',
       })),
-      qr: '111101111100101001101101101111101111000010000101110110010010000101111101011100101011'
-        .slice(0, 81)
-        .split('')
-        .map((c) => ({ c: c === '1' ? '#101827' : 'transparent' })),
+      cardUrl: this.state.cardUrl || (typeof window !== 'undefined' ? `${window.location.origin}/card?token=demo-card-liya-01` : 'https://frontend-phi-one-57.vercel.app/card'),
+      memberCode: 'SAMPLE-8842',
+      businessName: this.state.businessName || 'Sample Cafe',
+      qrModalOpen: s.qrModalOpen,
+      openQrModal: () => this.setState({ qrModalOpen: true }),
+      closeQrModal: () => this.setState({ qrModalOpen: false }),
       isEmail: device === 'email' && s.email,
       emailOff: device === 'email' && !s.email,
       pv: pvText,
@@ -1124,7 +1149,31 @@ OffersView.prototype.__template = function (__v) {
                             lineHeight: '18px',
                             fontWeight: '700',
                           }}
-                        >{`${__t(__v?.banner)}`}</div>
+                        >{`${__t(__v?.banner)}`}</div>{' '}
+                        <div
+                          style={{
+                            alignSelf: 'center',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            padding: '6px',
+                            background: '#ffffff',
+                            borderRadius: '10px',
+                            cursor: 'pointer',
+                            marginTop: '2px',
+                          }}
+                          onClick={__v?.openQrModal}
+                          title="Click to enlarge QR code"
+                        >
+                          <QRCodeDisplay
+                            value={__v?.cardUrl || 'https://frontend-phi-one-57.vercel.app/card?token=demo-card-liya-01'}
+                            size={72}
+                            darkColor="#101827"
+                          />
+                          <span style={{ fontSize: '10px', color: '#5b6475', fontFamily: 'monospace', fontWeight: '700', marginTop: '2px' }}>
+                            {`${__t(__v?.memberCode || 'SAMPLE-8842')}`}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1243,17 +1292,29 @@ OffersView.prototype.__template = function (__v) {
                         style={{
                           background: '#ffffff',
                           borderRadius: '12px',
-                          height: '56px',
+                          padding: '8px 12px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          color: '#5b6475',
-                          fontSize: '12px',
-                          fontWeight: '700',
-                          letterSpacing: '0.08em',
+                          gap: '12px',
+                          cursor: 'pointer',
                         }}
+                        onClick={__v?.openQrModal}
+                        title="Click to enlarge QR code"
                       >
-                        {'MEMBER CODE'}
+                        <QRCodeDisplay
+                          value={__v?.cardUrl || 'https://frontend-phi-one-57.vercel.app/card?token=demo-card-liya-01'}
+                          size={46}
+                          darkColor="#101827"
+                        />
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontSize: '10px', color: '#5b6475', fontWeight: '700', letterSpacing: '0.04em' }}>
+                            MEMBER QR CODE
+                          </span>
+                          <span style={{ fontSize: '13px', color: '#101827', fontWeight: '800', fontFamily: 'monospace' }}>
+                            {`${__t(__v?.memberCode || 'SAMPLE-8842')}`}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1509,22 +1570,40 @@ OffersView.prototype.__template = function (__v) {
                           >{`${__t(__v?.pv)}`}</span>
                         </div>{' '}
                         <div
-                          role="img"
-                          aria-label="Member QR code placeholder"
                           style={{
                             alignSelf: 'center',
-                            width: '96px',
-                            height: '96px',
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(9, minmax(0, 1fr))',
-                            gap: '1px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '8px',
+                            background: '#ffffff',
+                            borderRadius: '14px',
+                            border: '1px solid #e3e5ec',
+                            boxShadow: '0 4px 12px rgba(16, 24, 39, 0.08)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
                           }}
+                          onClick={__v?.openQrModal}
+                          title="Click to enlarge QR code or open live card"
                         >
-                          {(__v?.qr || []).map((q, __i0) => (
-                            <React.Fragment key={__i0}>
-                              <span style={{ background: `${__t(q?.c)}` }} />
-                            </React.Fragment>
-                          ))}
+                          <QRCodeDisplay
+                            value={__v?.cardUrl || 'https://frontend-phi-one-57.vercel.app/card?token=demo-card-liya-01'}
+                            size={100}
+                            darkColor="#101827"
+                          />
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              color: '#5b6475',
+                              fontFamily: 'monospace',
+                              letterSpacing: '0.04em',
+                              marginTop: '6px',
+                              fontWeight: '700',
+                            }}
+                          >
+                            {`${__t(__v?.memberCode || 'SAMPLE-8842')}`}
+                          </span>
                         </div>
                       </div>{' '}
                       <div style={{ flex: '1 1 auto' }} />{' '}
@@ -1713,6 +1792,130 @@ OffersView.prototype.__template = function (__v) {
           </section>
         </main>
       </div>
+
+      {__b(__v?.qrModalOpen) ? (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(16, 24, 39, 0.72)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            animation: 'fadeIn 0.2s ease',
+          }}
+          onClick={__v?.closeQrModal}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '24px',
+              padding: '28px',
+              maxWidth: '380px',
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              boxShadow: '0 25px 50px -12px rgba(16, 24, 39, 0.35)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '999px',
+                background: '#fef2f2',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '24px',
+                marginBottom: '12px',
+              }}
+            >
+              📱
+            </div>
+            <h3 style={{ margin: '0 0 6px', fontSize: '20px', fontWeight: '800', color: '#101827' }}>
+              Live Customer Card QR
+            </h3>
+            <p style={{ margin: '0 0 18px', fontSize: '14px', color: '#5b6475', lineHeight: '20px' }}>
+              Scan with your phone camera or the Staff Scanner terminal to test this customer card and offer.
+            </p>
+            <div
+              style={{
+                padding: '14px',
+                background: '#ffffff',
+                border: '1px solid #e3e5ec',
+                borderRadius: '16px',
+                boxShadow: '0 4px 14px rgba(16, 24, 39, 0.08)',
+              }}
+            >
+              <QRCodeDisplay
+                value={__v?.cardUrl || 'https://frontend-phi-one-57.vercel.app/card?token=demo-card-liya-01'}
+                size={180}
+                darkColor="#101827"
+              />
+            </div>
+            <span
+              style={{
+                fontSize: '12px',
+                fontWeight: '700',
+                color: '#101827',
+                fontFamily: 'monospace',
+                marginTop: '12px',
+                background: '#f1f5f9',
+                padding: '4px 12px',
+                borderRadius: '6px',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {`${__t(__v?.memberCode || 'SAMPLE-8842')}`}
+            </span>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '20px', width: '100%' }}>
+              <a
+                href={__v?.cardUrl || '/card'}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  flex: 1,
+                  textAlign: 'center',
+                  background: '#e42330',
+                  color: '#ffffff',
+                  fontWeight: '700',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  textDecoration: 'none',
+                  fontSize: '14px',
+                  boxShadow: '0 2px 8px rgba(228, 35, 48, 0.25)',
+                }}
+              >
+                Open Card ↗
+              </a>
+              <button
+                type="button"
+                onClick={__v?.closeQrModal}
+                style={{
+                  flex: 1,
+                  background: '#f1f5f9',
+                  border: '1px solid #e2e8f0',
+                  color: '#101827',
+                  fontWeight: '700',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 };

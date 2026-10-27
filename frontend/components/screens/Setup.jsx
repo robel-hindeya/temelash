@@ -4,6 +4,8 @@ import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import ColorPicker from './ColorPicker';
+import QRCodeDisplay from '../QRCodeDisplay';
+import { getAppOrigin } from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n@media (max-width:640px){.tm-steplabel{display:none}.tm-stepline{width:12px !important}.tm-setup-main{padding:20px 16px 32px !important;gap:24px !important}.tm-setup-card{padding:20px !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #4661ad;outline-offset:2px}';
@@ -233,6 +235,7 @@ class SetupView extends DCLogic {
       hasLogo: !!this.state.logo,
       logoFileName: this.state.logoFileName,
       viewLogoModal: this.state.viewLogoModal,
+      cardUrl: typeof window !== 'undefined' ? `${getAppOrigin()}/card` : 'https://frontend-phi-one-57.vercel.app/card',
       onLogoUpload: (e) => {
         const file = e.target?.files?.[0];
         if (file) {
@@ -1338,65 +1341,25 @@ SetupView.prototype.__template = function (__v) {
                   </div>{' '}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'center' }}>
                     <div
-                      role="img"
-                      aria-label="QR code placeholder"
                       style={{
                         width: '180px',
                         height: '180px',
                         border: '1px solid #e3e5ec',
-                        borderRadius: '12px',
-                        padding: '14px',
+                        borderRadius: '16px',
+                        padding: '12px',
                         boxSizing: 'border-box',
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-                        gap: '4px',
+                        background: '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 4px 12px rgba(16, 24, 39, 0.08)',
                       }}
                     >
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />{' '}
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} /> <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span />
-                      <span /> <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span />
-                      <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} /> <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />{' '}
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span />
-                      <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span /> <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
-                      <span />
-                      <span style={{ background: '#101827', borderRadius: '2px' }} />
+                      <QRCodeDisplay
+                        value={__v?.cardUrl || 'http://localhost:3001/card'}
+                        size={156}
+                        darkColor="#101827"
+                      />
                     </div>{' '}
                     <div style={{ flex: '1 1 260px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       <A
