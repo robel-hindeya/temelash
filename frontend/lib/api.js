@@ -737,6 +737,7 @@ export function getMerchantLoyaltyCard(cardId) {
 }
 
 let _memoryStamps = {};
+export const CLOUD_SYNC_APP_KEY = 'dev93l7w';
 
 function getStampStorageKeys(cardId, userId) {
   const keys = [];
@@ -744,6 +745,82 @@ function getStampStorageKeys(cardId, userId) {
   if (userId) keys.push(`tm-stamps-${userId}`);
   if (cardId) keys.push(`tm-stamps-${cardId}`);
   return keys;
+}
+
+/**
+ * Broadcast channel for instant cross-tab / cross-window sync on the same device
+ */
+let _loyaltyBroadcastChannel = null;
+function getLoyaltyChannel() {
+  if (typeof window === 'undefined' || typeof window.BroadcastChannel === 'undefined') return null;
+  if (!_loyaltyBroadcastChannel) {
+    try {
+      _loyaltyBroadcastChannel = new window.BroadcastChannel('teme_loyalty_sync');
+    } catch {
+      _loyaltyBroadcastChannel = null;
+    }
+  }
+  return _loyaltyBroadcastChannel;
+}
+
+/**
+ * Fetch stamp count from cloud KV store for cross-device real-time sync
+ */
+export async function fetchCloudCardStamps(cardId, userId) {
+  if (!cardId && !userId) return null;
+  const cleanKey = (cardId && userId ? `stamp_${cardId}_${userId}` : `stamp_${userId || cardId}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+  try {
+    const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/${CLOUD_SYNC_APP_KEY}/${cleanKey}`, {
+      cache: 'no-store',
+    });
+    if (res.ok) {
+      const raw = await res.text();
+      const clean = (raw || '').replace(/"/g, '').trim();
+      const num = parseInt(clean, 10);
+      if (!isNaN(num) && num >= 0) {
+        // Cache locally
+        const memKey = cardId && userId ? `${cardId}-${userId}` : cardId || userId || 'default';
+        _memoryStamps[memKey] = num;
+        if (typeof window !== 'undefined') {
+          const keys = getStampStorageKeys(cardId, userId);
+          keys.forEach((k) => {
+            try { window.localStorage.setItem(k, String(num)); } catch {}
+          });
+        }
+        return num;
+      }
+    }
+  } catch (e) {
+    // Graceful offline fallback
+  }
+  return null;
+}
+
+/**
+ * Save stamp count to cloud KV store for cross-device real-time sync
+ */
+export async function syncCardStampsToCloud(cardId, userId, stamps) {
+  if (!cardId && !userId) return;
+  const val = String(Math.max(0, Number(stamps) || 0));
+  const keysToUpdate = [];
+  if (cardId && userId) {
+    keysToUpdate.push(`stamp_${cardId}_${userId}`);
+  }
+  if (userId) {
+    keysToUpdate.push(`stamp_${userId}`);
+  }
+  if (cardId && !userId) {
+    keysToUpdate.push(`stamp_${cardId}`);
+  }
+
+  for (const k of keysToUpdate) {
+    const cleanKey = k.replace(/[^a-zA-Z0-9_-]/g, '_');
+    try {
+      fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/${CLOUD_SYNC_APP_KEY}/${cleanKey}/${val}`, {
+        method: 'POST',
+      }).catch(() => null);
+    } catch {}
+  }
 }
 
 /**
@@ -764,7 +841,8 @@ export function getUserCardStamps(cardId, userId) {
       }
     }
   } catch {}
-  return 0;
+  const memKey = cardId && userId ? `${cardId}-${userId}` : cardId || userId || 'default';
+  return _memoryStamps[memKey] || 0;
 }
 
 /**
@@ -789,6 +867,7 @@ export function recordCardStamp({ cardId, userId, cardToken, count = 1, maxStamp
       });
       window.localStorage.setItem('tm-last-stamp-time', String(Date.now()));
 
+      // 1. Dispatch custom event for same window
       window.dispatchEvent(
         new CustomEvent('teme-card-stamp-updated', {
           detail: {
@@ -801,8 +880,27 @@ export function recordCardStamp({ cardId, userId, cardToken, count = 1, maxStamp
           },
         })
       );
+
+      // 2. Broadcast across tabs/windows
+      const channel = getLoyaltyChannel();
+      if (channel) {
+        channel.postMessage({
+          type: 'STAMP_RECORDED',
+          cardId,
+          userId: userId || cardToken,
+          cardToken,
+          count: addCount,
+          newStamps: newTotal,
+          maxStamps,
+          timestamp: Date.now(),
+        });
+      }
     } catch {}
   }
+
+  // 3. Sync to cloud KV store for cross-device support (fire-and-forget)
+  syncCardStampsToCloud(cardId, userId || cardToken, newTotal);
+
   return newTotal;
 }
 
@@ -824,11 +922,25 @@ export function resetUserCardStamps(cardId, userId) {
           detail: { cardId, userId, count: 0, newStamps: 0 },
         })
       );
+      const channel = getLoyaltyChannel();
+      if (channel) {
+        channel.postMessage({
+          type: 'STAMPS_RESET',
+          cardId,
+          userId,
+          newStamps: 0,
+          timestamp: Date.now(),
+        });
+      }
     } catch {}
   }
+
+  syncCardStampsToCloud(cardId, userId, 0);
+
   return 0;
 }
 
 export default api;
+
 
 

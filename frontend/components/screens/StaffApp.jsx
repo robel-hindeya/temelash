@@ -7,6 +7,7 @@ import api, {
   getUserCardStamps,
   recordCardStamp,
   resetUserCardStamps,
+  fetchCloudCardStamps,
 } from '@/lib/api';
 import jsQR from 'jsqr';
 
@@ -68,55 +69,55 @@ function triggerHaptic() {
   } catch {}
 }
 
-function extractTokenFromScan(raw) {
-  if (!raw || typeof raw !== 'string') return '';
+function extractScanInfo(raw) {
+  if (!raw || typeof raw !== 'string') return { token: '', cardId: null, userId: null };
   const text = raw.trim();
 
   // 1. JSON object payload check
   if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('{"') && text.endsWith('"}'))) {
     try {
       const parsed = JSON.parse(text);
-      if (parsed.cardToken) return String(parsed.cardToken).trim();
-      if (parsed.token) return String(parsed.token).trim();
-      if (parsed.memberId) return String(parsed.memberId).trim();
-      if (parsed.userId) return String(parsed.userId).trim();
-      if (parsed.id) return String(parsed.id).trim();
-      if (parsed.barcode) return String(parsed.barcode).trim();
+      const cardId = parsed.cardId || parsed.c || null;
+      const userId = parsed.userId || parsed.memberId || parsed.id || null;
+      const token = parsed.cardToken || parsed.token || parsed.barcode || userId || cardId || '';
+      return { token: String(token).trim(), cardId: cardId ? String(cardId).trim() : null, userId: userId ? String(userId).trim() : null };
     } catch {}
   }
 
-  // 2. URL parsing (e.g., https://domain.com/card?token=... or /card/<token> or /card/<id>)
+  // 2. URL parsing (e.g., https://domain.com/card?c=UXwJ9RwdyHs&id=s9XmK2pL4vQ or /card/UXwJ9RwdyHs)
   if (text.includes('?') || text.startsWith('http://') || text.startsWith('https://') || text.includes('/card')) {
     try {
       const url = new URL(text.startsWith('http') ? text : `https://temelashcard.et/${text.replace(/^\//, '')}`);
-      const tokParam =
-        url.searchParams.get('token') ||
-        url.searchParams.get('id') ||
-        url.searchParams.get('c') ||
-        url.searchParams.get('cardToken') ||
-        url.searchParams.get('card') ||
-        url.searchParams.get('t');
-      if (tokParam) return tokParam.trim();
+      const cardId = url.searchParams.get('c') || url.searchParams.get('card') || url.searchParams.get('cardId');
+      const userId = url.searchParams.get('id') || url.searchParams.get('memberId') || url.searchParams.get('userId');
+      const token = url.searchParams.get('token') || url.searchParams.get('cardToken') || url.searchParams.get('t') || userId || cardId;
 
       const segments = url.pathname.split('/').filter(Boolean);
       const cardIdx = segments.indexOf('card');
+      let pathId = null;
       if (cardIdx !== -1 && segments[cardIdx + 1]) {
-        return segments[cardIdx + 1].trim();
+        pathId = segments[cardIdx + 1].trim();
       }
+
+      return {
+        token: (token || pathId || '').trim(),
+        cardId: (cardId || pathId || null)?.trim(),
+        userId: (userId || null)?.trim(),
+      };
     } catch {}
   }
 
   // 3. Match 10-64 char token pattern (matches 11-char tokens like UXwJ9RwdyHs)
   const match = text.match(/[A-Za-z0-9_-]{10,64}/);
-  if (match) {
-    if (text.length <= 64 && !text.includes(' ') && !text.includes('/') && !text.includes(':')) {
-      return text;
-    }
-    return match[0];
-  }
-
-  return text;
+  const matched = match ? (text.length <= 64 && !text.includes(' ') && !text.includes('/') && !text.includes(':') ? text : match[0]) : text;
+  return { token: matched, cardId: null, userId: null };
 }
+
+function extractTokenFromScan(raw) {
+  const info = extractScanInfo(raw);
+  return info.token || info.userId || info.cardId || raw;
+}
+
 
 class StaffAppView extends DCLogic {
   constructor(props) {
@@ -301,16 +302,17 @@ class StaffAppView extends DCLogic {
     playScanBeep();
     triggerHaptic();
 
-    const token = extractTokenFromScan(rawText);
+    const scanInfo = extractScanInfo(rawText);
+    const displayToken = scanInfo.token || scanInfo.userId || scanInfo.cardId || rawText;
     this.setState({
       scannedSuccess: true,
-      cardTokenInput: token,
+      cardTokenInput: displayToken,
       scanError: '',
     });
 
     setTimeout(async () => {
       this.stopCamera();
-      await this.validateToken(token);
+      await this.validateToken(scanInfo);
       if (this.state.screen === 'scan') {
         this.isProcessingScan = false;
         this.setState({ scannedSuccess: false });
@@ -529,19 +531,50 @@ class StaffAppView extends DCLogic {
   };
 
   async validateToken(tokenToTest) {
-    const token = (tokenToTest || this.state.cardTokenInput || '').trim();
-    if (!token) {
+    let token = '';
+    let cardId = null;
+    let userId = null;
+
+    if (tokenToTest && typeof tokenToTest === 'object') {
+      token = (tokenToTest.token || '').trim();
+      cardId = tokenToTest.cardId || null;
+      userId = tokenToTest.userId || null;
+    } else {
+      const raw = (tokenToTest || this.state.cardTokenInput || '').trim();
+      const parsed = extractScanInfo(raw);
+      token = parsed.token || raw;
+      cardId = parsed.cardId || null;
+      userId = parsed.userId || null;
+    }
+
+    if (!token && !cardId && !userId) {
       this.setState({ scanError: 'Please enter or scan a card token or member ID.' });
       return;
     }
     this.setState({ scanError: '' });
-    const loyaltyCard = getMerchantLoyaltyCard(token);
-    const localSt = getUserCardStamps(loyaltyCard?.id || token, token);
+
+    const allCards = getMerchantLoyaltyCards();
+    const matchedCard =
+      (cardId && getMerchantLoyaltyCard(cardId)) ||
+      (token && getMerchantLoyaltyCard(token)) ||
+      allCards[0];
+
+    const effCardId = matchedCard?.id || cardId || 'UXwJ9RwdyHs';
+    const effUserId = userId || (matchedCard && token === matchedCard.id ? null : token) || 'MEMBER_1';
+
+    let localSt = getUserCardStamps(effCardId, effUserId);
     try {
-      const res = await api.scanner.validate({ cardToken: token });
+      const cloudSt = await fetchCloudCardStamps(effCardId, effUserId);
+      if (typeof cloudSt === 'number' && cloudSt > localSt) {
+        localSt = cloudSt;
+      }
+    } catch {}
+
+    try {
+      const res = await api.scanner.validate({ cardToken: token || effUserId });
       const current = Math.max(res.progress?.current ?? 0, localSt);
-      const required = loyaltyCard?.stampsRequired || res.progress?.required || 10;
-      const custName = res.customer?.firstName || (loyaltyCard ? loyaltyCard.name : 'Customer');
+      const required = matchedCard?.stampsRequired || res.progress?.required || 10;
+      const custName = res.customer?.firstName || `Member ${effUserId.slice(-4)}`;
       const isCooldown = res.outcome === 'REJECTED' && res.reason === 'COOLDOWN_ACTIVE';
 
       this.stopCamera();
@@ -549,15 +582,17 @@ class StaffAppView extends DCLogic {
       this.setState({
         customer: {
           name: custName,
-          initials: (custName || 'CU').slice(0, 2).toUpperCase(),
+          initials: (matchedCard ? matchedCard.name : custName || 'CU').slice(0, 2).toUpperCase(),
           phone: res.customer?.phone || '',
           visits: current || 1,
           lastVisit: 'Today',
           stamps: current,
           maxStamps: required,
-          rewardTitle: loyaltyCard?.rewardName || this.state.rewardTitle || 'Free macchiato',
-          cardToken: token,
-          cardId: loyaltyCard?.id || token,
+          rewardTitle: matchedCard?.rewardName || this.state.rewardTitle || 'Free macchiato',
+          cardToken: token || effUserId,
+          cardId: effCardId,
+          userId: effUserId,
+          cardName: matchedCard?.name || 'Loyalty Card',
           cooldownNotice: isCooldown ? res.message?.en || 'Cooldown active: stamp already recorded recently.' : null,
         },
         screen: 'customer',
@@ -565,30 +600,28 @@ class StaffAppView extends DCLogic {
         scanError: isCooldown ? '' : (res.outcome === 'REJECTED' ? (res.message?.en || res.reason) : ''),
       });
     } catch (err) {
-      if (token && token.length >= 10) {
-        this.stopCamera();
-        const shortName = loyaltyCard ? loyaltyCard.name : `Member ${token.slice(0, 4)}`;
-        this.setState({
-          customer: {
-            name: shortName,
-            initials: (loyaltyCard ? loyaltyCard.name : shortName).slice(0, 2).toUpperCase(),
-            phone: '+251 91 *** 4567',
-            visits: localSt || 1,
-            lastVisit: 'Today',
-            stamps: localSt,
-            maxStamps: loyaltyCard?.stampsRequired || 10,
-            rewardTitle: loyaltyCard?.rewardName || this.state.rewardTitle || 'Free macchiato',
-            cardToken: token,
-            cardId: loyaltyCard?.id || token,
-            cooldownNotice: null,
-          },
-          screen: 'customer',
-          stampCounter: 1,
-          scanError: '',
-        });
-        return;
-      }
-      this.setState({ scanError: err.message || 'Validation failed. Check token or branch permission.' });
+      this.stopCamera();
+      const shortName = `Member ${effUserId.slice(-4)}`;
+      this.setState({
+        customer: {
+          name: shortName,
+          initials: (matchedCard ? matchedCard.name : shortName).slice(0, 2).toUpperCase(),
+          phone: '+251 91 *** 4567',
+          visits: localSt || 1,
+          lastVisit: 'Today',
+          stamps: localSt,
+          maxStamps: matchedCard?.stampsRequired || 10,
+          rewardTitle: matchedCard?.rewardName || this.state.rewardTitle || 'Free macchiato',
+          cardToken: token || effUserId,
+          cardId: effCardId,
+          userId: effUserId,
+          cardName: matchedCard?.name || 'Loyalty Card',
+          cooldownNotice: null,
+        },
+        screen: 'customer',
+        stampCounter: 1,
+        scanError: '',
+      });
     }
   }
 
@@ -719,8 +752,8 @@ class StaffAppView extends DCLogic {
       },
       addStamp: async (countToAdd) => {
         const count = typeof countToAdd === 'number' ? countToAdd : (this.state.stampCounter || 1);
-        if (!cust?.cardToken) {
-          this.setState({ scanError: 'No active card token attached to this scan.' });
+        if (!cust) {
+          this.setState({ scanError: 'No active customer card loaded.' });
           return;
         }
 
@@ -728,16 +761,18 @@ class StaffAppView extends DCLogic {
         const newSt = (cust.stamps || 0) + count;
 
         try {
-          for (let i = 0; i < count; i++) {
-            await api.scanner.stamp({ cardToken: cust.cardToken }).catch(() => null);
+          if (cust.cardToken && !cust.cardToken.startsWith('DEMO-')) {
+            for (let i = 0; i < count; i++) {
+              await api.scanner.stamp({ cardToken: cust.cardToken }).catch(() => null);
+            }
           }
         } catch (e) {
           console.warn('Backend scanner sync note:', e);
         }
 
         recordCardStamp({
-          cardId: cust.cardId || cust.cardToken,
-          userId: cust.phone || cust.name || cust.cardToken,
+          cardId: cust.cardId || 'UXwJ9RwdyHs',
+          userId: cust.userId || cust.cardToken || cust.name,
           cardToken: cust.cardToken,
           count,
           maxStamps: reqSt,
@@ -756,11 +791,13 @@ class StaffAppView extends DCLogic {
         });
       },
       redeemReward: async () => {
-        if (!cust?.cardToken) return;
+        if (!cust) return;
         try {
-          await api.scanner.redeem({ cardToken: cust.cardToken }).catch(() => null);
+          if (cust.cardToken && !cust.cardToken.startsWith('DEMO-')) {
+            await api.scanner.redeem({ cardToken: cust.cardToken }).catch(() => null);
+          }
         } catch (e) {}
-        resetUserCardStamps(cust.cardId, cust.cardToken || cust.phone);
+        resetUserCardStamps(cust.cardId || 'UXwJ9RwdyHs', cust.userId || cust.cardToken || cust.phone);
         this.setState({
           customer: Object.assign({}, cust, { stamps: 0 }),
           screen: 'redeemed',
@@ -768,6 +805,9 @@ class StaffAppView extends DCLogic {
         });
       },
       custName: cust?.name || 'Customer',
+      custCardName: cust?.cardName || 'Loyalty Card',
+      custCardId: cust?.cardId || 'UXwJ9RwdyHs',
+      custUserId: cust?.userId || cust?.cardToken || '',
       custInitials: cust?.initials || 'CU',
       custMeta: `${cust?.visits || 1} visits · last visit ${cust?.lastVisit || 'Today'}`,
       custStampsFraction: `${currentSt}/${maxSt}`,

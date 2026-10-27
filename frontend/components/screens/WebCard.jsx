@@ -10,6 +10,8 @@ import api, {
   getMerchantLoyaltyCard,
   getUserCardStamps,
   resetUserCardStamps,
+  fetchCloudCardStamps,
+  getAppOrigin,
 } from '@/lib/api';
 import QRCodeDisplay from '@/components/QRCodeDisplay';
 
@@ -33,6 +35,8 @@ class WebCardView extends DCLogic {
       activeCard: null,
       loyaltyCards: [],
     };
+    this.pollTimer = null;
+    this.broadcastChannel = null;
   }
 
   async componentDidMount() {
@@ -40,15 +44,89 @@ class WebCardView extends DCLogic {
     if (typeof window !== 'undefined') {
       window.addEventListener('teme-card-stamp-updated', this.handleStampUpdate);
       window.addEventListener('storage', this.handleStorageUpdate);
+      try {
+        this.broadcastChannel = new window.BroadcastChannel('teme_loyalty_sync');
+        this.broadcastChannel.onmessage = this.handleBroadcastUpdate;
+      } catch {}
+      this.pollTimer = setInterval(this.pollCloudStamps, 1500);
     }
   }
 
   componentWillUnmount() {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+    if (this.broadcastChannel) {
+      try { this.broadcastChannel.close(); } catch {}
+      this.broadcastChannel = null;
+    }
     if (typeof window !== 'undefined') {
       window.removeEventListener('teme-card-stamp-updated', this.handleStampUpdate);
       window.removeEventListener('storage', this.handleStorageUpdate);
     }
   }
+
+  pollCloudStamps = async () => {
+    try {
+      const activeCardId = this.state.activeCardId;
+      const memberId = this.state.memberId || this.state.token;
+      if (!activeCardId || !memberId) return;
+
+      const cloudSt = await fetchCloudCardStamps(activeCardId, memberId);
+      if (typeof cloudSt === 'number') {
+        const cur = this.state.card?.progress?.current ?? 0;
+        if (cloudSt !== cur) {
+          this.setState((prev) => {
+            if (!prev.card) return null;
+            const req = prev.card.progress?.required || 10;
+            return {
+              card: {
+                ...prev.card,
+                progress: {
+                  ...prev.card.progress,
+                  current: cloudSt,
+                  remaining: Math.max(0, req - cloudSt),
+                  completedCards: Math.floor(cloudSt / req),
+                },
+                rewardsAvailable: cloudSt >= req ? 1 : 0,
+              },
+            };
+          });
+        }
+      }
+    } catch {}
+  };
+
+  handleBroadcastUpdate = (e) => {
+    const data = e?.data;
+    if (!data) return;
+    const { cardId, userId, cardToken, newStamps } = data;
+    const myCardId = this.state.activeCardId;
+    const myUser = this.state.memberId;
+    const myToken = this.state.token;
+
+    if (!cardId || cardId === myCardId || userId === myUser || cardToken === myToken) {
+      if (typeof newStamps === 'number') {
+        this.setState((prev) => {
+          if (!prev.card) return null;
+          const req = prev.card.progress?.required || 10;
+          return {
+            card: {
+              ...prev.card,
+              progress: {
+                ...prev.card.progress,
+                current: newStamps,
+                remaining: Math.max(0, req - newStamps),
+                completedCards: Math.floor(newStamps / req),
+              },
+              rewardsAvailable: newStamps >= req ? 1 : 0,
+            },
+          };
+        });
+      }
+    }
+  };
 
   handleStampUpdate = (e) => {
     const detail = e?.detail;
@@ -149,6 +227,8 @@ class WebCardView extends DCLogic {
     }
   };
 
+
+
   async loadCard() {
     try {
       let token = null;
@@ -190,7 +270,13 @@ class WebCardView extends DCLogic {
       }
 
       // Check current recorded stamp count for this user and card
-      const savedStamps = getUserCardStamps(activeCardId, memberId || token);
+      let savedStamps = getUserCardStamps(activeCardId, memberId || token);
+      try {
+        const cloudSt = await fetchCloudCardStamps(activeCardId, memberId || token);
+        if (typeof cloudSt === 'number' && cloudSt > savedStamps) {
+          savedStamps = cloudSt;
+        }
+      } catch {}
 
       // 2. If we already have a real stored token, try loading the card from the backend
       if (token && !token.startsWith('DEMO-')) {
@@ -489,13 +575,17 @@ class WebCardView extends DCLogic {
     const memberLabel = am ? `አባል · ${memberId}` : `Member · ${memberId}`;
 
     const barcodeValue = card?.barcode || this.state.token || memberId || 'UXwJ9RwdyHs';
+    const origin = getAppOrigin();
+    const qrValue = `${origin}/card?c=${this.state.activeCardId}&id=${memberId}`;
     const isNew = n === 0;
     const lastVisitText = isNew ? (am ? 'አዲስ አባል' : 'New member') : (am ? 'የቅርብ ጊዜ' : 'Recent visit');
 
     return {
       slots,
       qr,
-      cardToken: barcodeValue,
+      qrValue,
+      cardToken: qrValue,
+      barcodeValue,
       memberId,
       lastVisitText,
       t: T,
@@ -836,11 +926,17 @@ WebCardView.prototype.__template = function (__v) {
                 }}
               >
                 <QRCodeDisplay
-                  value={__v?.cardToken}
+                  value={__v?.qrValue || __v?.cardToken}
                   size={140}
                   darkColor={__v?.brandColor || '#101827'}
                 />
               </div>{' '}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#16a34a', display: 'inline-block', boxShadow: '0 0 6px #22c55e' }} />
+                <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: '700', letterSpacing: '0.04em' }}>
+                  LIVE REAL-TIME SYNC
+                </span>
+              </div>
               <span
                 style={{ fontSize: '14px', color: '#5b6475', fontFamily: `${__t(__v?.font)}` }}
               >{`${__t(__v?.t?.show)}`}</span>{' '}
