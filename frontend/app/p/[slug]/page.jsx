@@ -1,4 +1,4 @@
-import PublicLandingPage from '@/components/PublicLandingPage';
+import PublicLandingPage from '@/components/screens/customer/PublicLandingPage';
 
 export const metadata = {
   title: 'Merchant Landing Page — Temelash Card',
@@ -7,5 +7,5 @@ export const metadata = {
 
 export default async function Page({ params }) {
   const resolvedParams = await params;
-  return <PublicLandingPage slug={resolvedParams?.slug || 'sample-cafe'} />;
+  return <PublicLandingPage slug={resolvedParams?.slug} />;
 }

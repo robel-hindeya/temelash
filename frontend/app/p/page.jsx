@@ -1,4 +1,4 @@
-import PublicLandingPage from '@/components/PublicLandingPage';
+import PublicLandingPage from '@/components/screens/customer/PublicLandingPage';
 
 export const metadata = {
   title: 'Merchant Landing Page — Temelash Card',
@@ -6,5 +6,5 @@ export const metadata = {
 };
 
 export default function Page() {
-  return <PublicLandingPage slug="sample-cafe" />;
+  return <PublicLandingPage slug="UXwJ9RwdyHs" />;
 }

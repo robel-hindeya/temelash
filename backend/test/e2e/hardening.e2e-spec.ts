@@ -38,6 +38,12 @@ const PUBLIC_ROUTES = [
   // Customer-facing: the customer's own card token is the credential
   'GET /api/v1/join/:joinReference',
   'POST /api/v1/join/:joinReference/enroll',
+  // Customer sign-in on a new device: phone + PIN, or Telegram-signed initData
+  'POST /api/v1/join/:joinReference/sign-in',
+  'POST /api/v1/join/:joinReference/telegram/session',
+  'POST /api/v1/join/:joinReference/telegram/join',
+  // Telegram bot webhook: authenticated by the webhook secret header
+  'POST /api/v1/telegram/webhook',
   'POST /api/v1/card/consent/marketing/withdraw',
   'POST /api/v1/card/wallet/links',
   'POST /api/v1/card/web',
@@ -50,7 +56,8 @@ const PUBLIC_ROUTES = [
   'POST /api/v1/wallet/apple/v1/log',
 ];
 /** Defined by Apple's protocol and deliberately left out of Swagger. */
-const UNDOCUMENTED = /^\/api\/v1\/wallet\/apple\//;
+// Protocol-defined endpoints that are deliberately left out of the public API docs.
+const UNDOCUMENTED = /^\/api\/v1\/(wallet\/apple\/|telegram\/webhook$)/;
 
 describe('Production hardening (e2e, real PostgreSQL)', () => {
   let app: INestApplication;

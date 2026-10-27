@@ -80,7 +80,11 @@ export class CustomersRepository {
     merchantId: string,
     id: string,
     db: DbClient = this.prisma,
-  ): Promise<{ firstName: string | null; email: string | null; preferredLanguage: Language } | null> {
+  ): Promise<{
+    firstName: string | null;
+    email: string | null;
+    preferredLanguage: Language;
+  } | null> {
     return db.customer.findFirst({
       where: { id, merchantId },
       select: { firstName: true, email: true, preferredLanguage: true },
@@ -113,12 +117,20 @@ export class CustomersRepository {
     email: string,
     db: DbClient = this.prisma,
   ): Promise<CustomerRecord | null> {
-    return db.customer.findFirst({ where: { merchantId, email: { equals: email, mode: 'insensitive' } }, select });
+    return db.customer.findFirst({
+      where: { merchantId, email: { equals: email, mode: 'insensitive' } },
+      select,
+    });
   }
 
   async create(
     merchantId: string,
-    data: { phoneE164?: string | null; email?: string | null; firstName: string; preferredLanguage: Language },
+    data: {
+      phoneE164?: string | null;
+      email?: string | null;
+      firstName: string;
+      preferredLanguage: Language;
+    },
     db: DbClient,
   ): Promise<string> {
     const row = await db.customer.create({
@@ -126,6 +138,91 @@ export class CustomersRepository {
       select: { id: true },
     });
     return row.id;
+  }
+
+  /** What phone + PIN sign-in needs. Never selected into general customer reads. */
+  findPinCredential(
+    merchantId: string,
+    phoneE164: string,
+    db: DbClient = this.prisma,
+  ): Promise<{
+    id: string;
+    firstName: string | null;
+    status: CustomerStatus;
+    pinHash: string | null;
+    pinLockedUntil: Date | null;
+  } | null> {
+    return db.customer.findFirst({
+      where: { merchantId, phoneE164 },
+      select: { id: true, firstName: true, status: true, pinHash: true, pinLockedUntil: true },
+    });
+  }
+
+  /** The customer at this merchant whose card this Telegram user opens. */
+  findByTelegramUser(
+    merchantId: string,
+    telegramUserId: string,
+    db: DbClient = this.prisma,
+  ): Promise<{ id: string; firstName: string | null; status: CustomerStatus } | null> {
+    return db.customer.findFirst({
+      where: { merchantId, telegramUserId: BigInt(telegramUserId) },
+      select: { id: true, firstName: true, status: true },
+    });
+  }
+
+  /** Links a Telegram user to the customer, unless another Telegram user is already linked. */
+  async linkTelegramUser(
+    merchantId: string,
+    id: string,
+    telegramUserId: string,
+    db: DbClient = this.prisma,
+  ): Promise<boolean> {
+    const res = await db.customer.updateMany({
+      where: {
+        id,
+        merchantId,
+        OR: [{ telegramUserId: null }, { telegramUserId: BigInt(telegramUserId) }],
+      },
+      data: { telegramUserId: BigInt(telegramUserId) },
+    });
+    return res.count === 1;
+  }
+
+  /** Sets the PIN only when none exists, so re-enrolling a known phone can never replace it. */
+  async setPinIfMissing(
+    merchantId: string,
+    id: string,
+    pinHash: string,
+    db: DbClient,
+  ): Promise<void> {
+    await db.customer.updateMany({ where: { id, merchantId, pinHash: null }, data: { pinHash } });
+  }
+
+  /**
+   * Counts a wrong PIN. At `maxAttempts` the PIN is locked until `lockUntil` and the count restarts.
+   * Returns whether this failure locked it.
+   */
+  async recordPinFailure(
+    merchantId: string,
+    id: string,
+    maxAttempts: number,
+    lockUntil: Date,
+    db: DbClient = this.prisma,
+  ): Promise<boolean> {
+    const rows = await db.$queryRaw<Array<{ locked: boolean }>>`
+      UPDATE customers SET
+        pin_failed_attempts = CASE WHEN pin_failed_attempts + 1 >= ${maxAttempts} THEN 0 ELSE pin_failed_attempts + 1 END,
+        pin_locked_until = CASE WHEN pin_failed_attempts + 1 >= ${maxAttempts} THEN ${lockUntil} ELSE pin_locked_until END
+      WHERE id = ${id}::uuid AND merchant_id = ${merchantId}::uuid
+      RETURNING pin_failed_attempts = 0 AS locked`;
+    return rows[0]?.locked ?? false;
+  }
+
+  async clearPinFailures(merchantId: string, id: string, db: DbClient): Promise<void> {
+    await db.customer.updateMany({
+      where: { id, merchantId },
+      data: { pinFailedAttempts: 0, pinLockedUntil: null },
+    });
   }
 
   /** Fills gaps only; never overwrites what the customer or staff already recorded. */

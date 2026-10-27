@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import api, { setStoredToken, DEMO_ACCOUNTS } from '@/lib/api';
+import api, { setStoredToken, DEMO_ACCOUNTS, SHOW_DEMO_LOGINS } from '@/lib/api';
 
 export default function AuthModal({
   isOpen,
@@ -76,30 +76,7 @@ export default function AuthModal({
         else router.push('/business');
       }, 700);
     } catch (err) {
-      // In case backend is offline, check demo accounts as fallback
-      const matchingDemo = Object.values(DEMO_ACCOUNTS).find(
-        (a) => a.email.toLowerCase() === email.trim().toLowerCase() && a.password === password
-      );
-      if (matchingDemo) {
-        const isStaff = matchingDemo.email.includes('staff');
-        const isManager = matchingDemo.email.includes('manager');
-        const isAdmin = matchingDemo.email.includes('admin');
-        const role = isAdmin ? 'admin' : (isStaff ? 'staff' : (isManager ? 'manager' : 'owner'));
-        setStoredToken(`demo-tok-${Date.now()}`, role, {
-          email: matchingDemo.email,
-          displayName: matchingDemo.label,
-          role: role.toUpperCase(),
-        });
-        setSuccessMsg('Signed in with demo session! Redirecting...');
-        setTimeout(() => {
-          onClose?.();
-          if (role === 'admin') router.push('/admin');
-          else if (role === 'staff') router.push('/staff');
-          else router.push('/business');
-        }, 700);
-      } else {
-        setError(err.message || 'Invalid email or password. Please try again.');
-      }
+      setError(err.message || 'Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -122,19 +99,7 @@ export default function AuthModal({
         else router.push('/business');
       }, 600);
     } catch (err) {
-      // Offline fallback
-      setStoredToken(`demo-tok-${accountKey}-${Date.now()}`, accountKey, {
-        email: creds.email,
-        displayName: creds.label,
-        role: accountKey.toUpperCase(),
-      });
-      setSuccessMsg(`Signed in as ${creds.label}! Redirecting...`);
-      setTimeout(() => {
-        onClose?.();
-        if (accountKey === 'admin') router.push('/admin');
-        else if (accountKey === 'staff') router.push('/staff');
-        else router.push('/business');
-      }, 600);
+      setError(err.message || 'Demo sign-in failed. Is the backend running?');
     } finally {
       setLoading(false);
     }
@@ -489,6 +454,7 @@ export default function AuthModal({
               </button>
 
               {/* Quick Demo Credentials */}
+              {SHOW_DEMO_LOGINS ? (
               <div style={{ marginTop: '12px', borderTop: '1px dashed #e3e5ec', paddingTop: '16px' }}>
                 <span
                   style={{
@@ -589,6 +555,7 @@ export default function AuthModal({
                   </button>
                 </div>
               </div>
+              ) : null}
             </form>
           )}
 

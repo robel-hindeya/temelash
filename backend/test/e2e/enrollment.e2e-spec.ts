@@ -522,4 +522,103 @@ describe('Customer enrollment, consent and cards (e2e, real PostgreSQL)', () => 
       ).toBe(1);
     });
   });
+
+  describe('phone + PIN sign-in', () => {
+    const signIn = (ref: string, phone: string, pin: string) =>
+      http().post(`/api/v1/join/${ref}/sign-in`).send({ phone, pin });
+    // A unique phone and email per sign-up, so no test finds another test's customer.
+    let n = 0;
+    const join = (ref: string, over: Record<string, unknown> = {}) => {
+      n += 1;
+      return enroll(ref, {
+        phone: randomPhone(),
+        email: `pin${n}-${Date.now()}@example.com`,
+        ...over,
+      });
+    };
+
+    it('reopens the card with a new token and retires the old one', async () => {
+      const phone = randomPhone();
+      const joined = await join(w.a.joinReference, { phone, pin: '482915' }).expect(201);
+      const oldToken: string = joined.body.card.token;
+
+      const res = await signIn(w.a.joinReference, phone, '482915').expect(200);
+      const newToken: string = res.body.card.token;
+      expect(newToken).not.toBe(oldToken);
+      expect(res.body.customer).toEqual({ firstName: 'Abebe' });
+      expect(res.body.program.nameEn).toBe('Test Card');
+
+      await http().post('/api/v1/card/web').send({ cardToken: newToken }).expect(200);
+      await http().post('/api/v1/card/web').send({ cardToken: oldToken }).expect(404);
+      const membership = await prisma.customerMembership.findFirstOrThrow({
+        where: { tokenHash: sha(newToken) },
+      });
+      expect(
+        await prisma.auditEvent.count({
+          where: { action: 'membership.card_recovered', targetId: membership.id },
+        }),
+      ).toBe(1);
+    });
+
+    it('never stores the PIN in clear', async () => {
+      const joined = await join(w.a.joinReference, { pin: '271828' }).expect(201);
+      const membership = await prisma.customerMembership.findFirstOrThrow({
+        where: { tokenHash: sha(joined.body.card.token) },
+      });
+      const c = await prisma.customer.findUniqueOrThrow({ where: { id: membership.customerId } });
+      expect(c.pinHash).toMatch(/^\$argon2id\$/);
+      expect(c.pinHash).not.toContain('271828');
+    });
+
+    it('answers a wrong PIN, an unknown phone and a member without a PIN the same way', async () => {
+      const withPin = randomPhone();
+      const withoutPin = randomPhone();
+      await join(w.a.joinReference, { phone: withPin, pin: '590214' }).expect(201);
+      await join(w.a.joinReference, { phone: withoutPin }).expect(201);
+
+      const attempts: Array<[string, string]> = [
+        [withPin, '590215'],
+        [randomPhone(), '590214'],
+        [withoutPin, '590214'],
+        [withPin, 'abc'],
+      ];
+      for (const [phone, pin] of attempts) {
+        const res = await signIn(w.a.joinReference, phone, pin).expect(401);
+        expect(res.body.error.code).toBe('INVALID_CREDENTIALS');
+      }
+    });
+
+    it('locks the PIN after five wrong tries, even for the right PIN', async () => {
+      const phone = randomPhone();
+      await join(w.a.joinReference, { phone, pin: '314159' }).expect(201);
+      for (let i = 0; i < 4; i++) await signIn(w.a.joinReference, phone, '000001').expect(401);
+      const fifth = await signIn(w.a.joinReference, phone, '000001').expect(429);
+      expect(fifth.body.error.code).toBe('PIN_LOCKED');
+      const right = await signIn(w.a.joinReference, phone, '314159').expect(429);
+      expect(right.body.error.code).toBe('PIN_LOCKED');
+    });
+
+    it('refuses guessable PINs at sign-up', async () => {
+      for (const pin of ['111111', '123456', '987654']) {
+        const res = await join(w.a.joinReference, { pin }).expect(400);
+        expect(res.body.error.code).toBe('PIN_TOO_WEAK');
+      }
+      await join(w.a.joinReference, { pin: '12345' }).expect(400);
+    });
+
+    it('never lets a repeat sign-up replace an existing PIN', async () => {
+      const phone = randomPhone();
+      await join(w.a.joinReference, { phone, pin: '602214' }).expect(201);
+      const again = await join(w.a.joinReference, { phone, pin: '777123' }).expect(201);
+      expect(again.body.status).toBe('EXISTING');
+      await signIn(w.a.joinReference, phone, '777123').expect(401);
+      await signIn(w.a.joinReference, phone, '602214').expect(200);
+    });
+
+    it('is scoped to the merchant whose link was used', async () => {
+      const phone = randomPhone();
+      await join(w.a.joinReference, { phone, pin: '846213' }).expect(201);
+      await signIn(w.b.joinReference, phone, '846213').expect(401);
+    });
+  });
 });
