@@ -8,6 +8,7 @@ import QRCodeDisplay from '../QRCodeDisplay';
 import api, {
   getAppOrigin,
   getOrAssignMerchantCode,
+  getMerchantJoinUrl,
   getMerchantLoyaltyCards,
   getMerchantLoyaltyCard,
   updateMerchantLoyaltyCard,
@@ -417,7 +418,7 @@ class RewardsView extends DCLogic {
       loyaltyCards: s.loyaltyCards || [],
       selectedCardId: s.selectedCardId || 'UXwJ9RwdyHs',
       selectCard: this.selectCard,
-      cardUrl: `${getAppOrigin()}/card?c=${s.selectedCardId || 'UXwJ9RwdyHs'}&m=${getOrAssignMerchantCode()}`,
+      cardUrl: getMerchantJoinUrl(),
       notifTitle: justHit ? 'NOTIFICATION THEY GET NOW' : 'WHEN THE NEXT REWARD UNLOCKS',
       notifHead: unlockName + ' unlocked',
       notifText: unlockName + ' unlocked. Show this at the counter.',

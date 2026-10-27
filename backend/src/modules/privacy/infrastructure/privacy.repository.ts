@@ -159,7 +159,16 @@ export class PrivacyRepository {
   ): Promise<void> {
     await db.customer.updateMany({
       where: { id: customerId, merchantId },
-      data: { firstName: null, phoneE164: null, email: null, status: 'ANONYMIZED', anonymizedAt: now },
+      data: {
+        firstName: null,
+        phoneE164: null,
+        email: null,
+        pinHash: null,
+        pinFailedAttempts: 0,
+        pinLockedUntil: null,
+        status: 'ANONYMIZED',
+        anonymizedAt: now,
+      },
     });
     for (const id of membershipIds) {
       await db.customerMembership.updateMany({

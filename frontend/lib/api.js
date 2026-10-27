@@ -313,8 +313,15 @@ export const api = {
 
   merchant: {
     // Profile
-    getProfile() {
-      return request('/merchant/profile', { method: 'GET' }, 'owner');
+    async getProfile() {
+      const profile = await request('/merchant/profile', { method: 'GET' }, 'owner');
+      // Remember the merchant's real join reference: every customer QR code is built from it.
+      if (profile?.joinReference && typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem('tm-merchant-code', profile.joinReference);
+        } catch {}
+      }
+      return profile;
     },
     updateProfile(data) {
       return request('/merchant/profile', {
@@ -525,6 +532,12 @@ export const api = {
         body: JSON.stringify({ cardToken, provider }),
       });
     },
+    signIn(joinReference, data) {
+      return publicRequest(`/join/${encodeURIComponent(joinReference)}/sign-in`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
     withdrawMarketing(cardToken) {
       return publicRequest('/card/consent/marketing/withdraw', {
         method: 'POST',
@@ -582,15 +595,25 @@ export function generateShortId(length = 11) {
 /**
  * Get or assign the merchant's 11-character code like 'UXwJ9RwdyHs'
  */
+const JOIN_REFERENCE = /^[A-Za-z0-9_-]{6,80}$/;
+
+/**
+ * The one link every customer QR code points to: the merchant's public landing page, where customers
+ * join or sign back in before their card opens.
+ */
+export function getMerchantJoinUrl() {
+  return `${getAppOrigin()}/p/${encodeURIComponent(getOrAssignMerchantCode())}`;
+}
+
 export function getOrAssignMerchantCode(merchantNameOrId = null) {
   if (typeof window === 'undefined') return 'UXwJ9RwdyHs';
   try {
     const existing = window.localStorage.getItem('tm-merchant-code');
-    if (existing && /^[A-Za-z0-9_-]{10,14}$/.test(existing)) {
+    if (existing && JOIN_REFERENCE.test(existing)) {
       return existing;
     }
     const u = getCurrentUser();
-    if (u?.merchantCode && /^[A-Za-z0-9_-]{10,14}$/.test(u.merchantCode)) {
+    if (u?.merchantCode && JOIN_REFERENCE.test(u.merchantCode)) {
       window.localStorage.setItem('tm-merchant-code', u.merchantCode);
       return u.merchantCode;
     }
@@ -766,14 +789,27 @@ export function logoutCustomer() {
   setCustomerSession(null);
 }
 
+/** Six digits, and not one repeated digit or a straight run: the same rule the backend enforces. */
+export function checkCardPin(pin) {
+  const p = String(pin || '');
+  if (!/^\d{6}$/.test(p)) return 'Your PIN must be exactly 6 digits.';
+  if (/^(\d)\1{5}$/.test(p)) return 'Choose a PIN that is not one repeated digit.';
+  const steps = new Set();
+  for (let i = 1; i < p.length; i++) steps.add(Number(p[i]) - Number(p[i - 1]));
+  if (steps.size === 1 && (steps.has(1) || steps.has(-1))) return 'Choose a PIN that is not a straight run like 123456.';
+  return null;
+}
+
 /**
  * Join a merchant's program. Returns the new card session.
  * The backend returns a card token only for a new membership; an existing member gets no token back.
+ * The PIN lets the customer reopen the card later with their phone number.
  */
 export async function registerCustomer({
   joinReference,
   firstName,
   phone,
+  pin,
   email,
   preferredLanguage = 'EN',
   marketingConsent = false,
@@ -783,6 +819,8 @@ export async function registerCustomer({
   const cleanPhone = String(phone || '').replace(/[\s-]/g, '').trim();
   if (!name) throw new Error('Please enter your first name.');
   if (!cleanPhone) throw new Error('Please enter your phone number.');
+  const pinProblem = checkCardPin(pin);
+  if (pinProblem) throw new Error(pinProblem);
   if (!joinReference) throw new Error('This join link is missing the shop. Please scan the shop QR code again.');
 
   // The backend requires an email; customers are not asked for one, so a per-phone placeholder is used.
@@ -790,6 +828,7 @@ export async function registerCustomer({
   const payload = {
     firstName: name,
     phone: cleanPhone,
+    pin: String(pin),
     email: email || `${digits}@customer.temelash.et`,
     preferredLanguage,
     acceptTerms: true,
@@ -801,14 +840,32 @@ export async function registerCustomer({
   const token = res?.card?.token;
   if (!token) {
     if (res?.status === 'EXISTING') {
-      throw new Error(
-        'This phone number already has a card at this shop. Open it from the link you saved when you joined, or ask staff for help.',
-      );
+      const err = new Error('This phone number already has a card here. Sign in with your phone number and PIN instead.');
+      err.code = 'ALREADY_MEMBER';
+      throw err;
     }
     throw new Error('Could not create your card. Please try again.');
   }
 
   const session = { token, firstName: name, phone: cleanPhone, joinReference };
+  setCustomerSession(session);
+  return session;
+}
+
+/**
+ * Reopen a card on this device with phone + PIN. The backend issues a fresh card token, so a copy of
+ * the card on a lost or old phone stops working.
+ */
+export async function signInCustomer({ joinReference, phone, pin }) {
+  const cleanPhone = String(phone || '').replace(/[\s-]/g, '').trim();
+  if (!cleanPhone) throw new Error('Please enter your phone number.');
+  if (!/^\d{6}$/.test(String(pin || ''))) throw new Error('Enter your 6-digit PIN.');
+  if (!joinReference) throw new Error('This link is missing the shop. Please scan the shop QR code again.');
+
+  const res = await api.public.signIn(joinReference, { phone: cleanPhone, pin: String(pin) });
+  const token = res?.card?.token;
+  if (!token) throw new Error('Could not open your card. Please try again.');
+  const session = { token, firstName: res.customer?.firstName || '', phone: cleanPhone, joinReference };
   setCustomerSession(session);
   return session;
 }

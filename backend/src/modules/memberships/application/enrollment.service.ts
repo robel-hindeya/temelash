@@ -7,7 +7,14 @@ import { normalizeEthiopianPhone } from '../../../common/phone/ethiopian-phone';
 import type { Env } from '../../../config/env.schema';
 import { TransactionManager } from '../../../database/transaction-manager';
 import { AuditService } from '../../audit';
-import { CURRENT_CONSENT_VERSION, ConsentRepository, CustomersRepository } from '../../customers';
+import { PasswordService } from '../../auth';
+import {
+  CURRENT_CONSENT_VERSION,
+  ConsentRepository,
+  CustomersRepository,
+  isGuessablePin,
+  isWellFormedPin,
+} from '../../customers';
 import { ProgramRecord, ProgramsRepository } from '../../loyalty-programs';
 import { MerchantDirectory } from '../../merchants';
 import { newCardToken } from '../domain/card-token';
@@ -21,6 +28,8 @@ export interface EnrollInput {
   acceptTerms: boolean;
   marketingConsent?: boolean;
   consentVersion?: string;
+  /** Six-digit card PIN for phone + PIN sign-in on another device. */
+  pin?: string;
 }
 
 export interface WalletOption {
@@ -76,6 +85,7 @@ export class EnrollmentService {
     private readonly audit: AuditService,
     private readonly transactions: TransactionManager,
     private readonly config: ConfigService<Env, true>,
+    private readonly passwords: PasswordService,
   ) {}
 
   async joinInfo(joinReference: string): Promise<JoinInfo> {
@@ -122,6 +132,24 @@ export class EnrollmentService {
     }
     const firstName = input.firstName.trim();
     const email = input.email.trim().toLowerCase();
+    if (input.pin !== undefined) {
+      if (!phone) {
+        throw new DomainError(
+          ErrorCode.VALIDATION_FAILED,
+          'A PIN needs a phone number to sign in with.',
+          400,
+        );
+      }
+      if (!isWellFormedPin(input.pin) || isGuessablePin(input.pin)) {
+        throw new DomainError(
+          'PIN_TOO_WEAK',
+          'Choose a 6-digit PIN that is not one repeated digit or a straight run like 123456.',
+          400,
+        );
+      }
+    }
+    // argon2 is deliberately slow: hash before the transaction holds any locks.
+    const pinHash = input.pin !== undefined ? await this.passwords.hash(input.pin) : null;
 
     // Two simultaneous sign-ups for one phone or email: the loser hits a unique index and simply retries,
     // finding the winner's rows.
@@ -133,14 +161,20 @@ export class EnrollmentService {
           const lock = await this.programs.lockForEnrollment(target.id, program.id, db);
           if (!lock || lock.status !== 'ACTIVE' || !lock.isDefault) throw notJoinable();
 
-          let customer = (phone ? await this.customers.findByPhone(target.id, phone, db) : null)
-            ?? (email ? await this.customers.findByEmail(target.id, email, db) : null);
+          let customer =
+            (phone ? await this.customers.findByPhone(target.id, phone, db) : null) ??
+            (email ? await this.customers.findByEmail(target.id, email, db) : null);
           const newCustomer = customer === null;
           let customerId = customer?.id;
           if (!customerId) {
             customerId = await this.customers.create(
               target.id,
-              { phoneE164: phone ?? null, email, firstName, preferredLanguage: input.preferredLanguage },
+              {
+                phoneE164: phone ?? null,
+                email,
+                firstName,
+                preferredLanguage: input.preferredLanguage,
+              },
               db,
             );
           } else {
@@ -169,6 +203,8 @@ export class EnrollmentService {
             );
             await this.memberships.ensureWebPass(target.id, membershipId, db);
             card = { token: issued.token };
+            // Only the request that issues the card may set the PIN, and never over an existing one.
+            if (pinHash) await this.customers.setPinIfMissing(target.id, customerId, pinHash, db);
 
             // Consent is recorded for the person who actually signed up. Re-enrolling an existing
             // customer can never change their stored choices (a third party must not be able to
@@ -241,7 +277,7 @@ export class EnrollmentService {
     }
   }
 
-  private describe(
+  describe(
     target: { nameEn: string; nameAm: string | null; defaultLanguage: 'EN' | 'AM' },
     program: ProgramRecord,
   ): JoinInfo {

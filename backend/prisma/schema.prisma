@@ -444,6 +444,11 @@ model Customer {
   preferredLanguage Language       @default(EN) @map("preferred_language")
   status            CustomerStatus @default(ACTIVE)
   anonymizedAt      DateTime?      @map("anonymized_at") @db.Timestamptz(3)
+  /// argon2id hash of the 6-digit card PIN chosen at sign-up. Phone + PIN reopens the card on a new
+  /// device. NULL = no PIN (staff-assisted reissue only).
+  pinHash           String?        @map("pin_hash")
+  pinFailedAttempts Int            @default(0) @map("pin_failed_attempts")
+  pinLockedUntil    DateTime?      @map("pin_locked_until") @db.Timestamptz(3)
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 

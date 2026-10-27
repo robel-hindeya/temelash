@@ -9,6 +9,7 @@ import ColorPicker from './ColorPicker';
 import api, {
   getAppOrigin,
   getOrAssignMerchantCode,
+  getMerchantJoinUrl,
   getMerchantLoyaltyCards,
   addMerchantLoyaltyCard,
   updateMerchantLoyaltyCard,
@@ -192,7 +193,8 @@ class CardDesignView extends DCLogic {
     };
     const merchantCode = getOrAssignMerchantCode(s.name);
     const activeCardId = s.selectedCardId || 'UXwJ9RwdyHs';
-    const cardUrl = `${getAppOrigin()}/card?c=${activeCardId}&m=${merchantCode}`;
+    // Every customer QR opens the landing page, where customers join or sign back in.
+    const cardUrl = getMerchantJoinUrl();
     return {
       name: s.name || 'Your business',
       nameAm: s.nameAm || 'ሳምፕል ካፌ',

@@ -6,5 +6,5 @@ export const metadata = {
 };
 
 export default function Page() {
-  return <PublicLandingPage slug="sample-cafe" />;
+  return <PublicLandingPage slug="UXwJ9RwdyHs" />;
 }

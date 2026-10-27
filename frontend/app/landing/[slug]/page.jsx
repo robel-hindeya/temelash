@@ -1,11 +1,7 @@
-import PublicLandingPage from '@/components/PublicLandingPage';
+import { redirect } from 'next/navigation';
 
-export const metadata = {
-  title: 'Merchant Landing Page — Temelash Card',
-  description: 'Connect with your local business, collect digital stamps, and redeem rewards.',
-};
-
+// Older QR codes pointed here; the landing page now lives at /p/<join reference>.
 export default async function Page({ params }) {
-  const resolvedParams = await params;
-  return <PublicLandingPage slug={resolvedParams?.slug || 'sample-cafe'} />;
+  const { slug } = await params;
+  redirect(`/p/${encodeURIComponent(slug)}`);
 }

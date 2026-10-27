@@ -5,7 +5,7 @@ import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import ColorPicker from './ColorPicker';
 import QRCodeDisplay from '../QRCodeDisplay';
-import { getAppOrigin } from '@/lib/api';
+import { getMerchantJoinUrl } from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n@media (max-width:640px){.tm-steplabel{display:none}.tm-stepline{width:12px !important}.tm-setup-main{padding:20px 16px 32px !important;gap:24px !important}.tm-setup-card{padding:20px !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #4661ad;outline-offset:2px}';
@@ -235,7 +235,7 @@ class SetupView extends DCLogic {
       hasLogo: !!this.state.logo,
       logoFileName: this.state.logoFileName,
       viewLogoModal: this.state.viewLogoModal,
-      cardUrl: typeof window !== 'undefined' ? `${getAppOrigin()}/card` : 'https://frontend-phi-one-57.vercel.app/card',
+      cardUrl: getMerchantJoinUrl(),
       onLogoUpload: (e) => {
         const file = e.target?.files?.[0];
         if (file) {

@@ -8,6 +8,7 @@ import api, {
   getCustomerSession,
   logoutCustomer,
   registerCustomer,
+  signInCustomer,
 } from '@/lib/api';
 import QRCodeDisplay from '@/components/QRCodeDisplay';
 
@@ -18,6 +19,21 @@ const __CSS =
 // per IP (10 a minute by default), so the card also refreshes when the customer returns to the page instead
 // of polling fast.
 const REFRESH_MS = 30000;
+
+const INSTALL_DISMISSED_KEY = 'tm-install-dismissed';
+
+/** Opened from the home-screen icon rather than a browser tab. */
+function isStandalone() {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+/** How this browser adds a web app to the home screen: its own prompt, Safari's Share menu, or the browser menu. */
+function installMethod(promptEvent) {
+  if (promptEvent) return 'prompt';
+  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+  return /iPhone|iPad|iPod/i.test(ua) ? 'ios' : 'menu';
+}
 
 class WebCardView extends DCLogic {
   constructor(props) {
@@ -32,13 +48,18 @@ class WebCardView extends DCLogic {
       walletLoading: false,
       walletMsg: null,
       token: initialSession?.token || null,
-      // Customer join modal state
+      // Customer join / sign-in modal state. The home-screen app keeps its own storage on iPhone, so
+      // there it opens on sign-in (phone + PIN) rather than on joining.
       authModalOpen: false,
+      authTab: isStandalone() ? 'signin' : 'register',
       authFirstName: '',
       authPhone: initialSession?.phone || '',
+      authPin: '',
       authError: '',
       authLoading: false,
       currentUser: initialSession,
+      installPrompt: null,
+      showInstall: false,
     };
     this.refreshTimer = null;
   }
@@ -50,6 +71,10 @@ class WebCardView extends DCLogic {
         if (document.visibilityState === 'visible') this.refreshCard();
       }, REFRESH_MS);
       document.addEventListener('visibilitychange', this.handleVisibility);
+      window.addEventListener('beforeinstallprompt', this.handleInstallPrompt);
+      window.addEventListener('appinstalled', this.dismissInstall);
+      // Right after joining (?new=1), offer to put the card on the home screen.
+      if (new URLSearchParams(window.location.search).get('new') === '1') this.offerInstall();
     }
   }
 
@@ -60,8 +85,41 @@ class WebCardView extends DCLogic {
     }
     if (typeof window !== 'undefined') {
       document.removeEventListener('visibilitychange', this.handleVisibility);
+      window.removeEventListener('beforeinstallprompt', this.handleInstallPrompt);
+      window.removeEventListener('appinstalled', this.dismissInstall);
     }
   }
+
+  handleInstallPrompt = (e) => {
+    e.preventDefault();
+    this.setState({ installPrompt: e });
+  };
+
+  offerInstall = () => {
+    if (isStandalone()) return;
+    let dismissed = false;
+    try {
+      dismissed = window.localStorage.getItem(INSTALL_DISMISSED_KEY) === '1';
+    } catch {}
+    if (!dismissed && this.state.token) this.setState({ showInstall: true, menu: false });
+  };
+
+  install = async () => {
+    const promptEvent = this.state.installPrompt;
+    if (!promptEvent) return;
+    promptEvent.prompt();
+    try {
+      await promptEvent.userChoice;
+    } catch {}
+    this.setState({ installPrompt: null, showInstall: false });
+  };
+
+  dismissInstall = () => {
+    try {
+      window.localStorage.setItem(INSTALL_DISMISSED_KEY, '1');
+    } catch {}
+    this.setState({ showInstall: false });
+  };
 
   handleVisibility = () => {
     if (document.visibilityState === 'visible') this.refreshCard();
@@ -90,8 +148,23 @@ class WebCardView extends DCLogic {
     try {
       const card = await api.public.getWebCard(token);
       if (card) this.setState({ card, error: null });
-    } catch {}
+    } catch (err) {
+      // The card was reopened on another phone (new token) or reissued by staff: this copy is dead.
+      if (err.status === 404) this.signedOutElsewhere();
+    }
   };
+
+  signedOutElsewhere() {
+    logoutCustomer();
+    this.setState({
+      card: null,
+      token: null,
+      currentUser: null,
+      authModalOpen: true,
+      authTab: 'signin',
+      authError: 'This card was opened on another phone. Sign in with your phone number and PIN to use it here.',
+    });
+  }
 
   onAuthFirstName = (e) => {
     this.setState({ authFirstName: e.target.value, authError: '' });
@@ -101,27 +174,49 @@ class WebCardView extends DCLogic {
     this.setState({ authPhone: e.target.value, authError: '' });
   };
 
+  onAuthPin = (e) => {
+    this.setState({ authPin: e.target.value.replace(/\D/g, '').slice(0, 6), authError: '' });
+  };
+
+  setAuthTab = (tab) => {
+    this.setState({ authTab: tab, authError: '' });
+  };
+
   handleAuthSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
-    const { authFirstName, authPhone, lang } = this.state;
+    const { authTab, authFirstName, authPhone, authPin, lang } = this.state;
     this.setState({ authLoading: true, authError: '' });
     try {
-      let consentVersion;
-      try {
-        consentVersion = (await api.public.getJoinInfo(this.joinReference()))?.consent?.version;
-      } catch {}
-      const session = await registerCustomer({
-        joinReference: this.joinReference(),
-        firstName: authFirstName,
-        phone: authPhone,
-        preferredLanguage: lang === 'am' ? 'AM' : 'EN',
-        consentVersion,
+      let session;
+      if (authTab === 'signin') {
+        session = await signInCustomer({ joinReference: this.joinReference(), phone: authPhone, pin: authPin });
+      } else {
+        let consentVersion;
+        try {
+          consentVersion = (await api.public.getJoinInfo(this.joinReference()))?.consent?.version;
+        } catch {}
+        session = await registerCustomer({
+          joinReference: this.joinReference(),
+          firstName: authFirstName,
+          phone: authPhone,
+          pin: authPin,
+          preferredLanguage: lang === 'am' ? 'AM' : 'EN',
+          consentVersion,
+        });
+      }
+      this.setState({
+        currentUser: session,
+        token: session.token,
+        authModalOpen: false,
+        authLoading: false,
+        authPin: '',
       });
-      this.setState({ currentUser: session, token: session.token, authModalOpen: false, authLoading: false });
       await this.loadCard();
+      if (authTab === 'register') this.offerInstall();
     } catch (err) {
       this.setState({
-        authError: err.message || 'Could not create your card. Please try again.',
+        authTab: err.code === 'ALREADY_MEMBER' ? 'signin' : authTab,
+        authError: err.message || 'Something went wrong. Please try again.',
         authLoading: false,
       });
     }
@@ -129,7 +224,7 @@ class WebCardView extends DCLogic {
 
   handleLogout = () => {
     const ok = window.confirm(
-      'Remove this card from this phone? Your stamps stay with the shop, but you will need your card link to open it here again.',
+      'Sign out of this card on this phone? Your stamps stay with the shop. Sign back in any time with your phone number and PIN.',
     );
     if (!ok) return;
     logoutCustomer();
@@ -139,6 +234,7 @@ class WebCardView extends DCLogic {
       card: null,
       menu: false,
       authModalOpen: true,
+      authTab: 'signin',
       authError: '',
     });
   };
@@ -155,8 +251,8 @@ class WebCardView extends DCLogic {
     } catch (err) {
       // An unknown or revoked token: forget it and offer to join again.
       if (err.status === 404 || err.status === 400 || err.status === 410) {
-        logoutCustomer();
-        this.setState({ card: null, token: null, currentUser: null, loading: false, authModalOpen: true });
+        this.signedOutElsewhere();
+        this.setState({ loading: false });
         return;
       }
       this.setState({ loading: false, error: 'Could not load your card. Check your connection and try again.' });
@@ -301,7 +397,16 @@ class WebCardView extends DCLogic {
         ? card?.program?.nameAm || card?.program?.nameEn || 'የታማኝነት ካርድ'
         : card?.program?.nameEn || 'Loyalty Card',
       authModalOpen: this.state.authModalOpen,
-      authTab: 'register',
+      authTab: this.state.authTab,
+      authPin: this.state.authPin,
+      onAuthPin: this.onAuthPin,
+      setAuthTab: this.setAuthTab,
+      showInstall: this.state.showInstall,
+      installMethod: installMethod(this.state.installPrompt),
+      install: this.install,
+      dismissInstall: this.dismissInstall,
+      offerInstall: this.offerInstall,
+      canOfferInstall: !isStandalone(),
       authFirstName: this.state.authFirstName,
       authPhone: this.state.authPhone,
       authError: this.state.authError,
@@ -802,9 +907,28 @@ WebCardView.prototype.__template = function (__v) {
                         cursor: 'pointer',
                       }}
                     >
-                      Remove from this phone
+                      Sign out
                     </button>
                   </div>
+                ) : null}
+
+                {__v?.canOfferInstall && __v?.currentUser ? (
+                  <button
+                    type="button"
+                    onClick={__v?.offerInstall}
+                    style={{
+                      border: '1px solid #e3e5ec',
+                      borderRadius: '12px',
+                      padding: '12px',
+                      textAlign: 'center',
+                      fontWeight: '700',
+                      background: '#ffffff',
+                      color: '#101827',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {'Add this card to your home screen'}
+                  </button>
                 ) : null}
 
                 <dl
@@ -845,6 +969,46 @@ WebCardView.prototype.__template = function (__v) {
               </div>
             </div>
           </>
+        ) : null}
+
+        {__v?.showInstall && !__v?.authModalOpen ? (
+          <div
+            role="dialog"
+            aria-label="Add your card to the home screen"
+            style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.55)', zIndex: 99998, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+          >
+            <div style={{ background: '#ffffff', width: '100%', maxWidth: '420px', borderRadius: '20px 20px 0 0', padding: '22px 20px 28px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <h2 style={{ margin: 0, fontSize: '19px', fontWeight: '800', color: '#101827' }}>
+                {'Keep your card one tap away'}
+              </h2>
+              <p style={{ margin: 0, fontSize: '14px', lineHeight: '20px', color: '#374151' }}>
+                {__v?.installMethod === 'prompt'
+                  ? 'Add it to your home screen and it opens like an app, ready to show at the counter.'
+                  : __v?.installMethod === 'ios'
+                    ? 'In Safari, tap the Share button, then "Add to Home Screen".'
+                    : 'Open your browser menu (⋮) and choose "Add to Home screen" or "Install app".'}
+              </p>
+              <p style={{ margin: 0, fontSize: '13px', lineHeight: '18px', color: '#64748b' }}>
+                {'If the icon asks you to sign in, use your phone number and PIN.'}
+              </p>
+              {__v?.installMethod === 'prompt' ? (
+                <button
+                  type="button"
+                  onClick={__v?.install}
+                  style={{ background: '#101827', color: '#ffffff', border: 'none', borderRadius: '12px', padding: '13px', fontSize: '15px', fontWeight: '700', cursor: 'pointer' }}
+                >
+                  {'Add to home screen'}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={__v?.dismissInstall}
+                style={{ background: 'transparent', color: '#4661ad', border: '1px solid #e3e5ec', borderRadius: '12px', padding: '12px', fontSize: '14px', fontWeight: '700', cursor: 'pointer' }}
+              >
+                {__v?.installMethod === 'prompt' ? 'Not now' : 'Done'}
+              </button>
+            </div>
+          </div>
         ) : null}
 
         {/* Customer Auth Modal (First-time scan OR after Logout) */}
@@ -897,8 +1061,39 @@ WebCardView.prototype.__template = function (__v) {
                   {__v?.programTitle || 'Coffee Stamp Card'}
                 </h2>
                 <p style={{ margin: 0, fontSize: '13px', color: '#64748b', lineHeight: '18px' }}>
-                  {'Enter your first name and phone number to get your loyalty card. No password needed.'}
+                  {__v?.authTab === 'signin'
+                    ? 'Sign in with your phone number and the 6-digit PIN you chose.'
+                    : 'Enter your name and phone number, and choose a 6-digit PIN to open your card on any phone.'}
                 </p>
+              </div>
+
+              <div role="tablist" style={{ display: 'flex', background: '#f1f5f9', padding: '4px', borderRadius: '12px', gap: '4px' }}>
+                {[
+                  ['register', 'New member'],
+                  ['signin', 'Sign in'],
+                ].map(([tab, text]) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={__v?.authTab === tab}
+                    onClick={() => __v?.setAuthTab(tab)}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      border: 'none',
+                      borderRadius: '8px',
+                      background: __v?.authTab === tab ? '#ffffff' : 'transparent',
+                      color: __v?.authTab === tab ? '#101827' : '#64748b',
+                      fontWeight: '700',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      boxShadow: __v?.authTab === tab ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    }}
+                  >
+                    {text}
+                  </button>
+                ))}
               </div>
 
               {__v?.authError ? (
@@ -964,6 +1159,36 @@ WebCardView.prototype.__template = function (__v) {
                   />
                 </div>
 
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#374151' }}>
+                    {__v?.authTab === 'signin' ? 'Your 6-digit PIN *' : 'Choose a 6-digit PIN *'}
+                  </label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete={__v?.authTab === 'signin' ? 'current-password' : 'new-password'}
+                    placeholder="••••••"
+                    value={__v?.authPin || ''}
+                    onChange={__v?.onAuthPin}
+                    required
+                    style={{
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '10px',
+                      padding: '11px 14px',
+                      fontSize: '16px',
+                      letterSpacing: '0.3em',
+                      outline: 'none',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                  {__v?.authTab === 'signin' ? (
+                    <span style={{ fontSize: '12px', color: '#64748b' }}>
+                      {'Forgot your PIN? Ask staff at the counter to reissue your card.'}
+                    </span>
+                  ) : null}
+                </div>
+
                 {__v?.authTab === 'register' ? (
                   <div
                     style={{
@@ -979,7 +1204,7 @@ WebCardView.prototype.__template = function (__v) {
                     }}
                   >
                     <span>⚡</span>
-                    <span>Your card is saved on this phone. Bookmark this page or add it to your wallet to keep it.</span>
+                    <span>Not 123456 or 111111. With your phone number, this PIN opens your card on a new phone.</span>
                   </div>
                 ) : null}
 
@@ -1001,7 +1226,9 @@ WebCardView.prototype.__template = function (__v) {
                 >
                   {__v?.authLoading
                     ? 'Processing...'
-                    : 'Get My Loyalty Card ➔'}
+                    : __v?.authTab === 'signin'
+                      ? 'Open My Card ➔'
+                      : 'Get My Loyalty Card ➔'}
                 </button>
               </form>
             </div>

@@ -8,7 +8,7 @@ export function isLoginRequest(req: Pick<Request, 'method' | 'originalUrl' | 'ur
 }
 
 const ENROLLMENT_PATH =
-  /\/(join\/[^/]+\/enroll|card\/consent\/marketing\/withdraw|card\/wallet\/links|card\/web)\/?$/;
+  /\/(join\/[^/]+\/(?:enroll|sign-in)|card\/consent\/marketing\/withdraw|card\/wallet\/links|card\/web)\/?$/;
 
 export function isEnrollmentRequest(req: Pick<Request, 'method' | 'originalUrl' | 'url'>): boolean {
   const path = (req.originalUrl ?? req.url ?? '').split('?')[0] ?? '';
