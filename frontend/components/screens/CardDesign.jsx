@@ -5,6 +5,7 @@ import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
 import QRCodeDisplay from '../QRCodeDisplay';
+import ColorPicker from './ColorPicker';
 import api, { getAppOrigin } from '@/lib/api';
 
 const __CSS =

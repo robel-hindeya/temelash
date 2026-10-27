@@ -275,12 +275,15 @@ class WebCardView extends DCLogic {
     const memberLabel = am ? `አባል · ${memberId}` : `Member · ${memberId}`;
 
     const barcodeValue = card?.barcode || this.state.token || 'A25rOmsw_h-cQ1DEXRuJ5pfuSstxAq7l_0pwMJtnZqo';
+    const isNew = n === 0;
+    const lastVisitText = isNew ? (am ? 'አዲስ አባል' : 'New member') : (am ? 'የቅርብ ጊዜ' : 'Recent visit');
 
     return {
       slots,
       qr,
       cardToken: barcodeValue,
       memberId,
+      lastVisitText,
       t: T,
       countLabel: `${n}/${maxStamps}`,
       banner: T.banner,
@@ -585,7 +588,7 @@ WebCardView.prototype.__template = function (__v) {
                   }}
                 >{`${__t(__v?.t?.last)}`}</span>
                 <span style={{ fontWeight: '700', fontSize: '17px', fontVariantNumeric: 'tabular-nums' }}>
-                  {card?.progress?.current > 0 ? 'Recent visit' : 'New member'}
+                  {`${__t(__v?.lastVisitText)}`}
                 </span>
               </div>
             </div>{' '}
