@@ -70,7 +70,7 @@ export default function AuthModal({
       setSuccessMsg('Signed in successfully! Redirecting to your dashboard...');
       setTimeout(() => {
         onClose?.();
-        const role = data?.user?.accountType === 'PLATFORM_ADMIN' ? 'admin' : (data?.user?.role === 'STAFF' ? 'staff' : 'owner');
+        const role = data?.user?.accountType === 'PLATFORM_ADMIN' ? 'admin' : (data?.user?.role === 'STAFF' ? 'staff' : (data?.user?.role === 'MANAGER' ? 'manager' : 'owner'));
         if (role === 'admin') router.push('/admin');
         else if (role === 'staff') router.push('/staff');
         else router.push('/business');
@@ -82,8 +82,9 @@ export default function AuthModal({
       );
       if (matchingDemo) {
         const isStaff = matchingDemo.email.includes('staff');
+        const isManager = matchingDemo.email.includes('manager');
         const isAdmin = matchingDemo.email.includes('admin');
-        const role = isAdmin ? 'admin' : (isStaff ? 'staff' : 'owner');
+        const role = isAdmin ? 'admin' : (isStaff ? 'staff' : (isManager ? 'manager' : 'owner'));
         setStoredToken(`demo-tok-${Date.now()}`, role, {
           email: matchingDemo.email,
           displayName: matchingDemo.label,
@@ -502,7 +503,7 @@ export default function AuthModal({
                 >
                   Quick 1-Click Demo Logins
                 </span>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
                   <button
                     type="button"
                     onClick={() => handleQuickLogin('owner')}
@@ -520,8 +521,29 @@ export default function AuthModal({
                       lineHeight: 1.3,
                     }}
                   >
-                    ☕ Merchant<br />
+                    ☕ Merchant (Owner)<br />
                     <span style={{ fontSize: '10px', color: '#64748b', fontWeight: '500' }}>Sample Café</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLogin('manager')}
+                    disabled={loading}
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid #c7d2fe',
+                      borderRadius: '10px',
+                      padding: '8px 6px',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      color: '#3730a3',
+                      cursor: 'pointer',
+                      textAlign: 'center',
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    👑 Manager<br />
+                    <span style={{ fontSize: '10px', color: '#6366f1', fontWeight: '500' }}>Dashboard Access</span>
                   </button>
 
                   <button

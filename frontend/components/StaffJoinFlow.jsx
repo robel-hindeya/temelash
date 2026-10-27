@@ -14,13 +14,54 @@ export default function StaffJoinFlow({ initialCode = '' }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [role, setRole] = useState('STAFF'); // 'STAFF' | 'MANAGER'
 
   useEffect(() => {
+    let detectedRole = 'STAFF';
+
+    // 1. Check URL query parameter ?role=manager
+    if (typeof window !== 'undefined') {
+      try {
+        const searchParams = new URLSearchParams(window.location.search);
+        const qRole = searchParams.get('role');
+        if (qRole && qRole.toLowerCase() === 'manager') {
+          detectedRole = 'MANAGER';
+        }
+      } catch (e) {}
+    }
+
+    // 2. Check local team members list
+    if (typeof window !== 'undefined') {
+      try {
+        const rawTeam = window.localStorage.getItem('tm-team-members');
+        if (rawTeam) {
+          const parsedTeam = JSON.parse(rawTeam);
+          if (Array.isArray(parsedTeam)) {
+            const match = parsedTeam.find(
+              (m) =>
+                (m.link && m.link.includes(initialCode)) ||
+                (m.id && initialCode.includes(m.id)) ||
+                (initialCode.toLowerCase().includes((m.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '')))
+            );
+            if (match && (match.role === 'Manager' || match.role === 'MANAGER')) {
+              detectedRole = 'MANAGER';
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 3. Check code keywords
+    if (initialCode && (initialCode.toLowerCase().includes('manager') || initialCode.toLowerCase().includes('mng'))) {
+      detectedRole = 'MANAGER';
+    }
+
+    setRole(detectedRole);
+
     if (initialCode) {
       setCode(initialCode);
-      // Derive a friendly default display name if the code has a prefix like "hana-4811" or "hh-4811"
       const prefix = initialCode.split('-')[0];
-      if (prefix && prefix.length > 2) {
+      if (prefix && prefix.length > 2 && prefix.toLowerCase() !== 'inv') {
         const capitalized = prefix.charAt(0).toUpperCase() + prefix.slice(1);
         setDisplayName((prev) => prev || capitalized);
       }
@@ -33,15 +74,18 @@ export default function StaffJoinFlow({ initialCode = '' }) {
 
     const token = (code || '').trim();
     if (!token) {
-      setError('Please provide a valid staff invitation code.');
+      setError('Please provide a valid invitation code.');
       return;
     }
     if (!pin || pin.length < 4) {
-      setError('Please set a staff PIN or password (at least 4 characters).');
+      setError('Please set a PIN or password (at least 4 characters).');
       return;
     }
 
     setLoading(true);
+    const isManager = role === 'MANAGER';
+    const roleKey = isManager ? 'MANAGER' : 'STAFF';
+
     try {
       // Try accepting via backend API if available
       try {
@@ -50,20 +94,25 @@ export default function StaffJoinFlow({ initialCode = '' }) {
         console.warn('Backend invitation accept note (proceeding with local activation):', backendErr);
       }
 
-      // Activate staff session in localStorage
-      const staffUser = {
-        id: `staff-${Date.now()}`,
-        displayName: displayName.trim() || 'Staff Cashier',
+      // Activate session
+      const sessionUser = {
+        id: `${isManager ? 'manager' : 'staff'}-${Date.now()}`,
+        displayName: displayName.trim() || (isManager ? 'Manager' : 'Staff Cashier'),
         email: email.trim() || `${token.toLowerCase()}@sample-cafe.test`,
-        role: 'STAFF',
+        role: roleKey,
         accountType: 'MERCHANT_USER',
-        branchName: 'Bole branch',
+        branchName: isManager ? 'All branches' : 'Bole branch',
         inviteToken: token,
       };
 
-      setStoredToken(`staff-session-${Date.now()}`, 'staff', staffUser);
+      if (isManager) {
+        setStoredToken(`manager-session-${Date.now()}`, 'manager', sessionUser);
+        setStoredToken(`manager-session-${Date.now()}`, 'owner', sessionUser);
+      } else {
+        setStoredToken(`staff-session-${Date.now()}`, 'staff', sessionUser);
+      }
 
-      // Update team member in tm-team-members so Settings screen reflects active status
+      // Update team member in tm-team-members so Settings screen reflects active status and proper role
       try {
         const rawTeam = window.localStorage.getItem('tm-team-members');
         if (rawTeam) {
@@ -77,6 +126,7 @@ export default function StaffJoinFlow({ initialCode = '' }) {
               ) {
                 return Object.assign({}, m, {
                   name: displayName.trim() || m.name,
+                  role: isManager ? 'Manager' : (m.role || 'Staff'),
                   status: 'active',
                 });
               }
@@ -90,14 +140,20 @@ export default function StaffJoinFlow({ initialCode = '' }) {
       setSuccess(true);
 
       setTimeout(() => {
-        router.push('/staff');
+        if (isManager) {
+          router.push('/business'); // Open Business Dashboard for Manager!
+        } else {
+          router.push('/staff'); // Open Staff Terminal for Staff!
+        }
       }, 1200);
     } catch (err) {
-      setError(err.message || 'Could not accept staff invitation. Please try again.');
+      setError(err.message || 'Could not accept invitation. Please try again.');
     } finally {
       setLoading(false);
     }
   };
+
+  const isManager = role === 'MANAGER';
 
   return (
     <div
@@ -173,7 +229,7 @@ export default function StaffJoinFlow({ initialCode = '' }) {
         <div
           style={{
             width: '100%',
-            maxWidth: '500px',
+            maxWidth: '520px',
             background: '#ffffff',
             borderRadius: '24px',
             boxShadow: '0 20px 40px -15px rgba(16, 24, 39, 0.12), 0 0 0 1px rgba(16, 24, 39, 0.06)',
@@ -183,7 +239,9 @@ export default function StaffJoinFlow({ initialCode = '' }) {
           {/* Header Banner */}
           <div
             style={{
-              background: 'linear-gradient(135deg, #101827 0%, #1e293b 100%)',
+              background: isManager
+                ? 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)'
+                : 'linear-gradient(135deg, #101827 0%, #1e293b 100%)',
               padding: '28px 32px 24px',
               color: '#ffffff',
             }}
@@ -193,20 +251,20 @@ export default function StaffJoinFlow({ initialCode = '' }) {
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px',
-                background: 'rgba(251, 169, 25, 0.2)',
-                border: '1px solid rgba(251, 169, 25, 0.4)',
+                background: isManager ? 'rgba(99, 102, 241, 0.25)' : 'rgba(251, 169, 25, 0.2)',
+                border: isManager ? '1px solid rgba(165, 180, 252, 0.4)' : '1px solid rgba(251, 169, 25, 0.4)',
                 borderRadius: '999px',
                 padding: '4px 14px',
                 fontSize: '12px',
                 fontWeight: '800',
                 letterSpacing: '0.08em',
-                color: '#fbbf24',
+                color: isManager ? '#a5b4fc' : '#fbbf24',
                 textTransform: 'uppercase',
                 marginBottom: '12px',
               }}
             >
-              <span>👋</span>
-              <span>STAFF INVITATION ONBOARDING</span>
+              <span>{isManager ? '🛡️' : '👋'}</span>
+              <span>{isManager ? 'MANAGER INVITATION ONBOARDING' : 'STAFF INVITATION ONBOARDING'}</span>
             </div>
 
             <h1
@@ -218,11 +276,13 @@ export default function StaffJoinFlow({ initialCode = '' }) {
                 color: '#ffffff',
               }}
             >
-              Join the Staff Team
+              {isManager ? 'Join as Business Manager' : 'Join the Staff Team'}
             </h1>
 
-            <p style={{ margin: 0, fontSize: '14px', color: '#94a3b8', lineHeight: '20px' }}>
-              Activate your staff terminal to scan customer cards, award stamps, and redeem rewards.
+            <p style={{ margin: 0, fontSize: '14px', color: '#cbd5e1', lineHeight: '20px' }}>
+              {isManager
+                ? 'Activate your manager credentials to access the Business Dashboard, track customer visits, oversee rewards, and manage branch staff.'
+                : 'Activate your staff terminal to scan customer cards, award stamps, and redeem rewards.'}
             </p>
           </div>
 
@@ -252,49 +312,101 @@ export default function StaffJoinFlow({ initialCode = '' }) {
             {success ? (
               <div
                 style={{
-                  background: '#f0fdf4',
-                  border: '1px solid #bbf7d0',
-                  borderRadius: '16px',
-                  padding: '24px',
                   textAlign: 'center',
+                  padding: '24px 0',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   gap: '12px',
                 }}
               >
-                <span style={{ fontSize: '36px' }}>🎉</span>
-                <strong style={{ fontSize: '18px', color: '#166534' }}>Welcome to the Team!</strong>
-                <p style={{ margin: 0, fontSize: '14px', color: '#15803d', lineHeight: '20px' }}>
-                  Your staff terminal account has been activated. Launching scanner app...
+                <div
+                  style={{
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '50%',
+                    background: '#dcfce7',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#16a34a',
+                    fontSize: '28px',
+                  }}
+                >
+                  ✓
+                </div>
+                <h3 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#101827' }}>
+                  {isManager ? 'Manager Account Activated!' : 'Staff Terminal Activated!'}
+                </h3>
+                <p style={{ margin: 0, color: '#5b6475', fontSize: '14px', maxWidth: '320px' }}>
+                  {isManager
+                    ? 'Welcome, Manager! Opening your business dashboard...'
+                    : 'Opening the QR card scanner terminal...'}
                 </p>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                {/* Role Switcher in case user wants to toggle or verify */}
+                <div
+                  style={{
+                    background: isManager ? '#eef2fb' : '#f8fafc',
+                    border: isManager ? '1px solid #c7d7f7' : '1px solid #e2e8f0',
+                    borderRadius: '12px',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: '#5b6475' }}>
+                      Assigned Role
+                    </span>
+                    <span style={{ fontSize: '14px', fontWeight: '800', color: isManager ? '#4661ad' : '#101827' }}>
+                      {isManager ? '👑 Manager (Full Dashboard Access)' : '👤 Staff (POS Terminal Scanner)'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRole(isManager ? 'STAFF' : 'MANAGER')}
+                    style={{
+                      background: '#ffffff',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '8px',
+                      padding: '6px 10px',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      color: '#4661ad',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {isManager ? 'Switch to Staff' : 'Switch to Manager'}
+                  </button>
+                </div>
+
                 {/* Invitation Code */}
                 <div>
                   <label
-                    htmlFor="staff-inv-code"
+                    htmlFor="staff-code"
                     style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#101827', marginBottom: '6px' }}
                   >
-                    Invitation Code / Token *
+                    Invitation Code *
                   </label>
                   <input
-                    id="staff-inv-code"
+                    id="staff-code"
                     type="text"
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
-                    placeholder="e.g. hh-4811"
+                    placeholder="e.g. hana-4811"
                     style={{
                       width: '100%',
                       padding: '12px 14px',
                       borderRadius: '12px',
                       border: '1px solid #cbd5e1',
                       fontSize: '14px',
-                      fontWeight: '700',
-                      fontFamily: 'monospace',
                       boxSizing: 'border-box',
-                      background: initialCode ? '#f8fafc' : '#ffffff',
+                      background: '#f8fafc',
+                      fontWeight: '600',
                     }}
                     required
                   />
@@ -344,7 +456,7 @@ export default function StaffJoinFlow({ initialCode = '' }) {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="staff@sample-cafe.test"
+                    placeholder={isManager ? "manager@sample-cafe.test" : "staff@sample-cafe.test"}
                     style={{
                       width: '100%',
                       padding: '12px 14px',
@@ -356,14 +468,14 @@ export default function StaffJoinFlow({ initialCode = '' }) {
                   />
                 </div>
 
-                {/* 4-digit PIN / Password */}
+                {/* PIN / Password */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                     <label
                       htmlFor="staff-pin"
                       style={{ fontSize: '13px', fontWeight: '700', color: '#101827' }}
                     >
-                      Set Staff PIN or Password *
+                      {isManager ? 'Set Manager Password or PIN *' : 'Set Staff PIN or Password *'}
                     </label>
                     <button
                       type="button"
@@ -398,11 +510,13 @@ export default function StaffJoinFlow({ initialCode = '' }) {
                     required
                   />
                   <span style={{ fontSize: '12px', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                    You will use this PIN to quickly sign in to the QR stamp scanner.
+                    {isManager
+                      ? 'You will use this password to sign in to your Business Dashboard.'
+                      : 'You will use this PIN to quickly sign in to the QR stamp scanner.'}
                   </span>
                 </div>
 
-                {/* Branch Assignment preview */}
+                {/* Destination & Access Preview */}
                 <div
                   style={{
                     background: '#f8fafc',
@@ -414,15 +528,19 @@ export default function StaffJoinFlow({ initialCode = '' }) {
                     justifyContent: 'space-between',
                   }}
                 >
-                  <span style={{ fontSize: '13px', color: '#64748b', fontWeight: '600' }}>Branch Assignment</span>
-                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>☕ Bole Branch</span>
+                  <span style={{ fontSize: '13px', color: '#64748b', fontWeight: '600' }}>
+                    {isManager ? 'Dashboard Access' : 'Terminal Destination'}
+                  </span>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: isManager ? '#4661ad' : '#0f172a' }}>
+                    {isManager ? '📊 Business Dashboard (/business)' : '☕ Bole Branch POS (/staff)'}
+                  </span>
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
                   style={{
-                    background: '#e42330',
+                    background: isManager ? '#4661ad' : '#e42330',
                     color: '#ffffff',
                     fontWeight: '700',
                     fontSize: '15px',
@@ -436,10 +554,16 @@ export default function StaffJoinFlow({ initialCode = '' }) {
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
-                    boxShadow: '0 4px 14px rgba(228, 35, 48, 0.25)',
+                    boxShadow: isManager
+                      ? '0 4px 14px rgba(70, 97, 173, 0.3)'
+                      : '0 4px 14px rgba(228, 35, 48, 0.25)',
                   }}
                 >
-                  {loading ? 'Activating staff account...' : 'Accept Invite & Open Staff Terminal →'}
+                  {loading
+                    ? 'Activating account...'
+                    : isManager
+                    ? 'Accept Invite & Open Dashboard →'
+                    : 'Accept Invite & Open Staff Terminal →'}
                 </button>
               </form>
             )}

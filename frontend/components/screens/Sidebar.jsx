@@ -139,8 +139,18 @@ class SidebarView extends DCLogic {
       this.setState({ profile: false, open: false });
     };
     const owner = (this.state.owner || '').trim();
+    let userRole = 'Owner';
+    try {
+      const curRole = api?.auth?.getCurrentRole ? api.auth.getCurrentRole() : null;
+      if (curRole === 'manager') userRole = 'Manager';
+      else if (typeof window !== 'undefined') {
+        const storedRole = window.sessionStorage.getItem('tc_role') || window.localStorage.getItem('tc_role');
+        if (storedRole?.toLowerCase() === 'manager') userRole = 'Manager';
+      }
+    } catch (e) {}
     const paid = this.state.plan === 'monthly' || this.state.plan === 'yearly' || this.state.plan === 'active';
     return {
+      userRole,
       planLabel: paid ? 'YOUR PLAN' : 'FREE TRIAL',
       planText: paid ? (this.state.plan === 'yearly' ? 'Yearly · active' : 'Monthly · active') : 'Active plan',
       planLink: paid ? 'Manage plan' : 'Choose a plan',
@@ -761,7 +771,7 @@ SidebarView.prototype.__template = function (__v) {
                 <span
                   style={{ fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                 >{`${__t(__v?.ownerName)}`}</span>
-                <span style={{ color: '#5b6475' }}>{'Owner'}</span>
+                <span style={{ color: '#5b6475' }}>{`${__t(__v?.userRole || 'Owner')}`}</span>
               </span>{' '}
               <svg
                 width="16"

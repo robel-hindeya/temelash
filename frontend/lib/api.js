@@ -8,6 +8,7 @@ const API_BASE = '/api/v1';
 // Seed demo accounts matching backend .seed-output.json
 export const DEMO_ACCOUNTS = {
   owner: { email: 'owner@sample-cafe.test', password: 'password123', label: 'Sample Owner (Merchant)' },
+  manager: { email: 'manager@sample-cafe.test', password: 'password123', label: 'Dawit Manager (Merchant)' },
   staff: { email: 'staff.bole@sample-cafe.test', password: 'password123', label: 'Bole Staff' },
   admin: { email: 'admin@temelashcard.test', password: 'password123', label: 'Platform Admin' },
 };
@@ -30,7 +31,7 @@ export function getCurrentUser() {
   try {
     const raw = s.getItem('tc_current_user');
     if (raw) return JSON.parse(raw);
-    for (const r of ['admin', 'owner', 'staff']) {
+    for (const r of ['admin', 'owner', 'manager', 'staff']) {
       const u = s.getItem(`tc_user_${r}`);
       if (u) return JSON.parse(u);
     }
@@ -49,11 +50,13 @@ export function getCurrentRole() {
   if (user) {
     if (user.accountType === 'PLATFORM_ADMIN' || user.role === 'PLATFORM_ADMIN' || user.role === 'ADMIN') return 'admin';
     if (user.role === 'STAFF') return 'staff';
-    if (user.role === 'OWNER' || user.role === 'MANAGER') return 'owner';
+    if (user.role === 'MANAGER') return 'manager';
+    if (user.role === 'OWNER') return 'owner';
   }
   if (s.getItem('tc_token_admin')) return 'admin';
-  if (s.getItem('tc_token_staff')) return 'staff';
+  if (s.getItem('tc_token_manager')) return 'manager';
   if (s.getItem('tc_token_owner')) return 'owner';
+  if (s.getItem('tc_token_staff')) return 'staff';
   return null;
 }
 
@@ -80,17 +83,18 @@ export function hasRolePermission(requiredRole = 'owner') {
       if (r === 'STAFF' || r === 'MANAGER' || r === 'OWNER') return true;
       if (user.accountType === 'PLATFORM_ADMIN') return true;
     }
-    if (s.getItem('tc_token_staff') || s.getItem('tc_token_owner')) return true;
+    if (s.getItem('tc_token_staff') || s.getItem('tc_token_manager') || s.getItem('tc_token_owner')) return true;
     return false;
   }
 
-  if (requiredRole === 'owner') {
+  if (requiredRole === 'owner' || requiredRole === 'manager') {
     if (user) {
       const r = (user.role || '').toUpperCase();
       if (r === 'OWNER' || r === 'MANAGER') return true;
       if (user.accountType === 'PLATFORM_ADMIN') return true;
     }
     if (s.getItem('tc_token_owner')) return true;
+    if (s.getItem('tc_token_manager')) return true;
     if (s.getItem('tc_registered_merchant')) return true;
     return false;
   }
@@ -101,6 +105,13 @@ export function hasRolePermission(requiredRole = 'owner') {
 export function getStoredToken(role = 'owner') {
   const s = getStorage();
   if (!s) return null;
+
+  if (role === 'owner' || role === 'manager') {
+    const ownerTok = s.getItem('tc_token_owner');
+    if (ownerTok) return ownerTok;
+    const managerTok = s.getItem('tc_token_manager');
+    if (managerTok) return managerTok;
+  }
 
   const roleTok = s.getItem(`tc_token_${role}`);
   if (roleTok) return roleTok;
@@ -115,11 +126,11 @@ export function getStoredToken(role = 'owner') {
         return genericTok;
       }
     } else if (role === 'staff') {
-      if (activeRole === 'staff' || activeRole === 'owner' || ['STAFF', 'MANAGER', 'OWNER'].includes((user?.role || '').toUpperCase())) {
+      if (activeRole === 'staff' || activeRole === 'manager' || activeRole === 'owner' || ['STAFF', 'MANAGER', 'OWNER'].includes((user?.role || '').toUpperCase())) {
         return genericTok;
       }
-    } else if (role === 'owner') {
-      if (activeRole === 'owner' || ['OWNER', 'MANAGER'].includes((user?.role || '').toUpperCase())) {
+    } else if (role === 'owner' || role === 'manager') {
+      if (activeRole === 'owner' || activeRole === 'manager' || ['OWNER', 'MANAGER'].includes((user?.role || '').toUpperCase())) {
         return genericTok;
       }
     }
@@ -132,10 +143,16 @@ export function setStoredToken(token, role = 'owner', user = null) {
   const s = getStorage();
   if (!s) return;
   s.setItem(`tc_token_${role}`, token);
+  if (role === 'manager') {
+    s.setItem('tc_token_owner', token);
+  }
   s.setItem('tc_access_token', token);
   s.setItem('tc_active_role', role);
   if (user) {
     s.setItem(`tc_user_${role}`, JSON.stringify(user));
+    if (role === 'manager') {
+      s.setItem('tc_user_owner', JSON.stringify(user));
+    }
     s.setItem('tc_current_user', JSON.stringify(user));
   }
   if (typeof window !== 'undefined') {

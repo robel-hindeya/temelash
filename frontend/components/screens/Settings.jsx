@@ -22,6 +22,7 @@ class SettingsView extends DCLogic {
       nextInv: 1,
       team: [
         { id: 'owner', name: 'Sample Cafe Owner', ini: 'SC', phone: '+251 91 100 0001', role: 'Owner', status: 'active' },
+        { id: 'manager', name: 'Dawit Manager', ini: 'DM', phone: '+251 91 100 0003', role: 'Manager', status: 'active' },
         { id: 'bole', name: 'Bole Staff', ini: 'BS', phone: '+251 91 100 0002', role: 'Staff', status: 'active' },
       ],
       range: 'day',
@@ -267,8 +268,8 @@ class SettingsView extends DCLogic {
     ivErr.nameBorder = ivErr.name ? '#c81d29' : '#e3e5ec';
     ivErr.phoneBorder = ivErr.phone ? '#c81d29' : '#e3e5ec';
     const roleOpts = [
-      ['staff', 'Staff', 'Adds stamps and redeems rewards in the staff app.'],
-      ['manager', 'Manager', 'Everything staff can do, plus offers, rewards and customers.'],
+      ['staff', 'Staff', 'Adds stamps and redeems rewards in the staff POS scanner terminal.'],
+      ['manager', 'Manager', 'Accesses the Business Dashboard: overview, analytics, customers, offers & staff.'],
     ].map(([id, label, desc]) => ({
       label,
       desc,
@@ -276,40 +277,90 @@ class SettingsView extends DCLogic {
       border: s.iv.role === id ? '#4661ad' : '#e3e5ec',
       pick: () => this.setState({ iv: Object.assign({}, s.iv, { role: id }) }),
     }));
-    const canDo = { Owner: 'Everything', Manager: 'Stamps, offers, customers', Staff: 'Stamps and rewards' };
-    const lastActive = { owner: 'Active now', meron: 'Active 10 min ago', yonas: 'Active 1 hour ago' };
-    const team = s.team.map((m) => ({
-      name: m.id === 'owner' && (s.pf.name || '').trim() ? s.pf.name.trim() : m.name,
-      ini: m.ini,
-      phone: m.phone,
-      role: m.role,
-      can: canDo[m.role],
-      status: m.status === 'invited' ? 'Invite sent · waiting' : lastActive[m.id] || 'Active',
-      statusColor: m.status === 'invited' ? '#4661ad' : '#5b6475',
-      isInvited: m.status === 'invited',
-      isActiveStaff: m.status === 'active' && m.id !== 'owner',
-      resend: () => {
-        const origin = getAppOrigin();
-        const link = m.link || `${origin}/staff/join/${(m.name || 'staff').toLowerCase().replace(/[^a-z0-9]+/g, '')}-${m.id}`;
-        if (typeof navigator !== 'undefined' && navigator.clipboard) {
-          navigator.clipboard.writeText(link).catch(() => {});
-        }
-        this.setState({ lastInvite: { name: m.name, link }, copied: true });
-      },
-      cancel: () => {
-        const nextTeam = s.team.filter((x) => x.id !== m.id);
-        const nextInvite = s.lastInvite && s.lastInvite.name === m.name ? null : s.lastInvite;
-        try {
-          window.localStorage.setItem('tm-team-members', JSON.stringify(nextTeam));
-          if (!nextInvite) window.localStorage.removeItem('tm-last-invite');
-        } catch (e) {}
-        this.setState({
-          team: nextTeam,
-          lastInvite: nextInvite,
-        });
-      },
-      view: () => this.setState({ sel: m.id }),
-    }));
+    const canDo = {
+      Owner: 'Full access to business & financial settings',
+      Manager: 'Full Business Dashboard: overview, analytics, customers, offers & staff',
+      Staff: 'Staff POS Scanner terminal (adds stamps & redeems)',
+    };
+    const lastActive = { owner: 'Active now', manager: 'Active 5 min ago', meron: 'Active 10 min ago', yonas: 'Active 1 hour ago', bole: 'Active 20 min ago' };
+    const team = s.team.map((m) => {
+      const isOwner = m.id === 'owner' || (m.role || '').toLowerCase() === 'owner';
+      const isManager = (m.role || '').toLowerCase() === 'manager';
+      const isStaff = !isOwner && !isManager;
+      const roleBadge = isOwner ? '⭐ Owner' : isManager ? '👑 Manager' : '👤 Staff';
+      const roleBg = isOwner ? '#fef3c7' : isManager ? '#eef2ff' : '#f1f5f9';
+      const roleFg = isOwner ? '#92400e' : isManager ? '#3730a3' : '#475569';
+      const roleBorder = isOwner ? '#fde68a' : isManager ? '#c7d2fe' : '#cbd5e1';
+
+      return {
+        id: m.id,
+        name: m.id === 'owner' && (s.pf.name || '').trim() ? s.pf.name.trim() : m.name,
+        ini: m.ini,
+        phone: m.phone,
+        role: m.role,
+        isOwner,
+        isManager,
+        isStaff,
+        roleBadge,
+        roleBg,
+        roleFg,
+        roleBorder,
+        can: canDo[m.role] || (isManager ? canDo.Manager : canDo.Staff),
+        status: m.status === 'invited' ? 'Invite sent · waiting' : lastActive[m.id] || 'Active',
+        statusColor: m.status === 'invited' ? '#4661ad' : '#5b6475',
+        isInvited: m.status === 'invited',
+        isActiveStaff: m.status === 'active' && !isOwner,
+        toggleRole: async () => {
+          if (isOwner) return;
+          const newRole = isManager ? 'Staff' : 'Manager';
+          try {
+            if (!m.id.startsWith('inv')) {
+              await api.merchant.changeStaffRole(m.id, newRole.toUpperCase());
+            }
+          } catch (e) {
+            console.warn('API role change warning, updating locally:', e);
+          }
+          const nextTeam = s.team.map((x) => (x.id === m.id ? Object.assign({}, x, { role: newRole }) : x));
+          try {
+            window.localStorage.setItem('tm-team-members', JSON.stringify(nextTeam));
+          } catch (e) {}
+          this.setState({ team: nextTeam });
+        },
+        openDashboard: () => {
+          if (typeof window !== 'undefined') {
+            window.location.href = '/business';
+          }
+        },
+        openTerminal: () => {
+          if (typeof window !== 'undefined') {
+            window.location.href = '/staff';
+          }
+        },
+        resend: () => {
+          const origin = getAppOrigin();
+          const roleQuery = isManager ? '?role=manager' : '';
+          const baseLink = m.link || `${origin}/staff/join/${(m.name || 'staff').toLowerCase().replace(/[^a-z0-9]+/g, '')}-${m.id}`;
+          const link = baseLink.includes('?role=') ? baseLink : `${baseLink}${roleQuery}`;
+          if (typeof navigator !== 'undefined' && navigator.clipboard) {
+            navigator.clipboard.writeText(link).catch(() => {});
+          }
+          this.setState({ lastInvite: { name: m.name, link }, copied: true });
+        },
+        cancel: () => {
+          const nextTeam = s.team.filter((x) => x.id !== m.id);
+          const nextInvite = s.lastInvite && s.lastInvite.name === m.name ? null : s.lastInvite;
+          try {
+            window.localStorage.setItem('tm-team-members', JSON.stringify(nextTeam));
+            if (!nextInvite) window.localStorage.removeItem('tm-last-invite');
+          } catch (e) {}
+          this.setState({
+            team: nextTeam,
+            lastInvite: nextInvite,
+          });
+        },
+        view: () => this.setState({ sel: m.id }),
+      };
+    });
 
     // ---- activity ----
     const active = s.team.filter((m) => m.status === 'active');
@@ -698,7 +749,8 @@ class SettingsView extends DCLogic {
           });
           const origin = getAppOrigin();
           const token = res?.invitation?.token || `${Date.now()}`;
-          const link = `${origin}/staff/join/${token}`;
+          const roleQuery = s.iv.role === 'manager' ? '?role=manager' : '';
+          const link = `${origin}/staff/join/${token}${roleQuery}`;
           const masked = '+251 ' + digits.slice(-9, -7) + ' *** ' + digits.slice(-4);
           const ini = name
             .split(/\s+/)
@@ -733,7 +785,8 @@ class SettingsView extends DCLogic {
         } catch (err) {
           console.warn('Backend staff invite warning, adding locally:', err);
           const origin = getAppOrigin();
-          const link = `${origin}/staff/join/` + name.toLowerCase().replace(/[^a-z0-9]+/g, '') + '-' + (4810 + s.nextInv);
+          const roleQuery = s.iv.role === 'manager' ? '?role=manager' : '';
+          const link = `${origin}/staff/join/` + name.toLowerCase().replace(/[^a-z0-9]+/g, '') + '-' + (4810 + s.nextInv) + roleQuery;
           const masked = '+251 ' + digits.slice(-9, -7) + ' *** ' + digits.slice(-4);
           const ini = name
             .split(/\s+/)
@@ -1309,13 +1362,20 @@ SettingsView.prototype.__template = function (__v) {
                               <td style={{ padding: '12px' }}>
                                 <span
                                   style={{
-                                    border: '1px solid #e3e5ec',
+                                    border: `1px solid ${s?.roleBorder || '#e3e5ec'}`,
+                                    background: s?.roleBg || '#f8fafc',
+                                    color: s?.roleFg || '#0f172a',
                                     borderRadius: '999px',
-                                    padding: '2px 10px',
-                                    fontSize: '14px',
+                                    padding: '3px 12px',
+                                    fontSize: '13px',
                                     fontWeight: '700',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
                                   }}
-                                >{`${__t(s?.role)}`}</span>
+                                >
+                                  {`${__t(s?.roleBadge || s?.role)}`}
+                                </span>
                               </td>
                               <td
                                 className="tm-hide-sm"
@@ -1361,24 +1421,81 @@ SettingsView.prototype.__template = function (__v) {
                                     </button>
                                   </>
                                 ) : null}{' '}
-                                {__b(s?.isActiveStaff) ? (
+                                {__b(!s?.isOwner) ? (
                                   <>
+                                    {__b(s?.isManager) ? (
+                                      <button
+                                        type="button"
+                                        onClick={s?.openDashboard}
+                                        title="Open Business Dashboard as Manager"
+                                        style={{
+                                          border: '1px solid #c7d2fe',
+                                          background: '#eef2ff',
+                                          color: '#3730a3',
+                                          fontWeight: '700',
+                                          borderRadius: '8px',
+                                          padding: '6px 12px',
+                                          marginRight: '6px',
+                                          cursor: 'pointer',
+                                          fontSize: '13px',
+                                        }}
+                                      >
+                                        {'📊 Dashboard'}
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={s?.openTerminal}
+                                        title="Open Staff POS Scanner Terminal"
+                                        style={{
+                                          border: '1px solid #cbd5e1',
+                                          background: '#f8fafc',
+                                          color: '#475569',
+                                          fontWeight: '700',
+                                          borderRadius: '8px',
+                                          padding: '6px 12px',
+                                          marginRight: '6px',
+                                          cursor: 'pointer',
+                                          fontSize: '13px',
+                                        }}
+                                      >
+                                        {'📱 Terminal'}
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
-                                      onClick={s?.view}
+                                      onClick={s?.toggleRole}
+                                      title={s?.isManager ? 'Switch to Staff role' : 'Promote to Manager role'}
                                       style={{
                                         border: '0',
                                         background: 'transparent',
                                         color: '#4661ad',
                                         fontWeight: '700',
-                                        padding: '8px',
-                                        minHeight: '44px',
+                                        padding: '6px 10px',
                                         cursor: 'pointer',
+                                        fontSize: '13px',
                                       }}
                                     >
-                                      {'See activity'}
+                                      {s?.isManager ? 'Make Staff' : 'Make Manager'}
                                     </button>
                                   </>
+                                ) : null}{' '}
+                                {__b(s?.isActiveStaff) ? (
+                                  <button
+                                    type="button"
+                                    onClick={s?.view}
+                                    style={{
+                                      border: '0',
+                                      background: 'transparent',
+                                      color: '#4661ad',
+                                      fontWeight: '700',
+                                      padding: '8px',
+                                      minHeight: '44px',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    {'Activity'}
+                                  </button>
                                 ) : null}
                               </td>
                             </tr>
