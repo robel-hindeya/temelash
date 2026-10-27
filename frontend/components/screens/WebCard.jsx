@@ -3,7 +3,12 @@
 import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
-import api, { getOrAssignUserCode, getOrAssignMerchantCode } from '@/lib/api';
+import api, {
+  getOrAssignUserCode,
+  getOrAssignMerchantCode,
+  getMerchantLoyaltyCards,
+  getMerchantLoyaltyCard,
+} from '@/lib/api';
 import QRCodeDisplay from '@/components/QRCodeDisplay';
 
 const __CSS =
@@ -22,6 +27,9 @@ class WebCardView extends DCLogic {
       walletMsg: null,
       memberId: null,
       token: null,
+      activeCardId: 'UXwJ9RwdyHs',
+      activeCard: null,
+      loyaltyCards: [],
     };
   }
 
@@ -29,17 +37,75 @@ class WebCardView extends DCLogic {
     await this.loadCard();
   }
 
+  switchCard = (cardId) => {
+    const cards = getMerchantLoyaltyCards();
+    const card = cards.find((c) => c.id === cardId);
+    if (card) {
+      this.setState((prev) => {
+        const existingCard = prev.card || {};
+        const updatedCard = {
+          ...existingCard,
+          program: {
+            ...existingCard.program,
+            nameEn: card.name,
+            nameAm: card.nameAm || existingCard.program?.nameAm,
+            brandColor: card.accent || existingCard.program?.brandColor,
+          },
+          progress: {
+            ...existingCard.progress,
+            required: card.stampsRequired || 10,
+            remaining: card.stampsRequired || 10,
+          },
+          reward: {
+            ...existingCard.reward,
+            nameEn: card.rewardName || 'Special Reward',
+            nameAm: card.rewardNameAm || '',
+          },
+        };
+        return {
+          activeCardId: card.id,
+          activeCard: card,
+          card: updatedCard,
+        };
+      });
+      if (typeof window !== 'undefined' && window.history?.pushState) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('c', card.id);
+        window.history.pushState({}, '', url.toString());
+      }
+    }
+  };
+
   async loadCard() {
     try {
       let token = null;
       let memberId = null;
       let merchantParam = null;
+      let cardIdParam = null;
+      const allLoyaltyCards = getMerchantLoyaltyCards();
+
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
         token = params.get('token') || window.localStorage.getItem('tm-customer-token');
-        memberId = params.get('id') || this.props?.id || window.localStorage.getItem('tm-user-code') || window.localStorage.getItem('tm-customer-id');
+        cardIdParam = params.get('c') || params.get('card') || params.get('cardId');
         merchantParam = params.get('m') || params.get('merchant') || params.get('slug');
+
+        const routeOrParamId = params.get('id') || this.props?.id;
+        const matchingCard = allLoyaltyCards.find((c) => c.id === routeOrParamId);
+        if (matchingCard) {
+          cardIdParam = matchingCard.id;
+        } else if (routeOrParamId) {
+          memberId = routeOrParamId;
+        }
       }
+
+      if (!cardIdParam && this.props?.id) {
+        const matchingCard = allLoyaltyCards.find((c) => c.id === this.props.id);
+        if (matchingCard) cardIdParam = matchingCard.id;
+      }
+
+      const activeCardId = cardIdParam || allLoyaltyCards[0]?.id || 'UXwJ9RwdyHs';
+      const activeCard = getMerchantLoyaltyCard(activeCardId) || allLoyaltyCards[0];
 
       // 1. Assign 11-char alphanumeric ID (like UXwJ9RwdyHs) for user
       if (!memberId || memberId.startsWith('TC-')) {
@@ -55,7 +121,37 @@ class WebCardView extends DCLogic {
         try {
           const card = await api.public.getWebCard(token);
           if (card) {
-            this.setState({ card, token, memberId, loading: false, error: null });
+            if (activeCard) {
+              card.program = {
+                ...card.program,
+                nameEn: activeCard.name || card.program?.nameEn,
+                nameAm: activeCard.nameAm || card.program?.nameAm,
+                brandColor: activeCard.accent || card.program?.brandColor,
+              };
+              if (activeCard.rewardName) {
+                card.reward = {
+                  ...card.reward,
+                  nameEn: activeCard.rewardName,
+                  nameAm: activeCard.rewardNameAm || card.reward?.nameAm,
+                };
+              }
+              if (activeCard.stampsRequired) {
+                card.progress = {
+                  ...card.progress,
+                  required: activeCard.stampsRequired,
+                };
+              }
+            }
+            this.setState({
+              card,
+              token,
+              memberId,
+              activeCardId,
+              activeCard,
+              loyaltyCards: allLoyaltyCards,
+              loading: false,
+              error: null,
+            });
             return;
           }
         } catch (err) {
@@ -109,7 +205,37 @@ class WebCardView extends DCLogic {
         try {
           const card = await api.public.getWebCard(enrolledToken);
           if (card) {
-            this.setState({ card, token: enrolledToken, memberId, loading: false, error: null });
+            if (activeCard) {
+              card.program = {
+                ...card.program,
+                nameEn: activeCard.name || card.program?.nameEn,
+                nameAm: activeCard.nameAm || card.program?.nameAm,
+                brandColor: activeCard.accent || card.program?.brandColor,
+              };
+              if (activeCard.rewardName) {
+                card.reward = {
+                  ...card.reward,
+                  nameEn: activeCard.rewardName,
+                  nameAm: activeCard.rewardNameAm || card.reward?.nameAm,
+                };
+              }
+              if (activeCard.stampsRequired) {
+                card.progress = {
+                  ...card.progress,
+                  required: activeCard.stampsRequired,
+                };
+              }
+            }
+            this.setState({
+              card,
+              token: enrolledToken,
+              memberId,
+              activeCardId,
+              activeCard,
+              loyaltyCards: allLoyaltyCards,
+              loading: false,
+              error: null,
+            });
             return;
           }
         } catch (e) {}
@@ -119,7 +245,7 @@ class WebCardView extends DCLogic {
       const prog = joinInfo?.program || {};
       const merch = joinInfo?.merchant || {};
       const rw = prog.rewards && prog.rewards[0] ? prog.rewards[0] : null;
-      const stampsReq = prog.stampsRequired || 10;
+      const stampsReq = activeCard?.stampsRequired || prog.stampsRequired || 10;
       const fallbackToken = enrolledToken || memberId || getOrAssignUserCode();
       if (typeof window !== 'undefined' && !enrolledToken) {
         window.localStorage.setItem('tm-customer-token', fallbackToken);
@@ -129,9 +255,9 @@ class WebCardView extends DCLogic {
         card: {
           merchant: { nameEn: merch.nameEn || 'Sample Cafe', nameAm: merch.nameAm || 'ሳምፕል ካፌ' },
           program: {
-            nameEn: prog.nameEn || 'Coffee Stamp Card',
-            nameAm: prog.nameAm || 'የቡና ማህተም ካርድ',
-            brandColor: prog.brandColor || '#8a4b2a',
+            nameEn: activeCard?.name || prog.nameEn || 'Coffee Stamp Card',
+            nameAm: activeCard?.nameAm || prog.nameAm || 'የቡና ማህተም ካርድ',
+            brandColor: activeCard?.accent || prog.brandColor || '#8a4b2a',
             termsEn: prog.termsEn || 'One stamp per visit. Valid 30 days.',
             termsAm: prog.termsAm || 'በአንድ ጉብኝት አንድ ማህተም።',
           },
@@ -143,19 +269,20 @@ class WebCardView extends DCLogic {
             completedCards: 0,
           },
           rewardsAvailable: 0,
-          reward: rw
-            ? {
-                nameEn: rw.nameEn || rw.name || 'Free macchiato',
-                nameAm: rw.nameAm || 'ነፃ ማኪያቶ',
-                descriptionEn: rw.descriptionEn || 'Free drink at completed card',
-                descriptionAm: rw.descriptionAm || '',
-              }
-            : { nameEn: 'Free macchiato', nameAm: 'ነፃ ማኪያቶ' },
+          reward: {
+            nameEn: activeCard?.rewardName || rw?.nameEn || rw?.name || 'Free macchiato',
+            nameAm: activeCard?.rewardNameAm || rw?.nameAm || 'ነፃ ማኪያቶ',
+            descriptionEn: rw?.descriptionEn || 'Free item when completed',
+            descriptionAm: rw?.descriptionAm || '',
+          },
           barcode: fallbackToken,
           status: 'ACTIVE',
         },
         token: fallbackToken,
         memberId,
+        activeCardId,
+        activeCard,
+        loyaltyCards: allLoyaltyCards,
         loading: false,
       });
     } catch (e) {
@@ -304,6 +431,12 @@ class WebCardView extends DCLogic {
       brandColor,
       memberLabel,
       merchantFullName: businessName,
+      cardId: this.state.activeCardId || 'UXwJ9RwdyHs',
+      programTitle: am
+        ? card?.program?.nameAm || card?.program?.nameEn || 'የታማኝነት ካርድ'
+        : card?.program?.nameEn || 'Loyalty Card',
+      loyaltyCards: this.state.loyaltyCards || getMerchantLoyaltyCards(),
+      switchCard: this.switchCard,
       rewardDescription: am
         ? card?.reward?.nameAm || `${maxStamps} ማህተም ሲሞላ`
         : `${card?.reward?.nameEn || 'Reward'} at ${maxStamps} stamps`,
@@ -480,6 +613,11 @@ WebCardView.prototype.__template = function (__v) {
                   <span style={{ fontWeight: '800', fontSize: '15px', letterSpacing: '0.03em' }}>
                     {`${__t(__v?.nameB)}`}
                   </span>
+                  {__v?.programTitle ? (
+                    <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', marginTop: '2px' }}>
+                      {`${__t(__v?.programTitle)}`}
+                    </span>
+                  ) : null}
                 </span>
               </div>{' '}
               <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
@@ -625,25 +763,35 @@ WebCardView.prototype.__template = function (__v) {
               <span style={{ fontSize: '13px', fontWeight: '700', color: '#101827', fontVariantNumeric: 'tabular-nums' }}>
                 {`${__t(__v?.memberLabel)}`}
               </span>
-              <span
-                style={{
-                  fontSize: '11px',
-                  color: '#64748b',
-                  letterSpacing: '0.04em',
-                  fontFamily: 'monospace',
-                  background: '#f1f5f9',
-                  padding: '3px 10px',
-                  borderRadius: '6px',
-                  border: '1px solid #e2e8f0',
-                  maxWidth: '260px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-                title={__v?.cardToken}
-              >
-                Card ID: {__v?.memberId || __v?.cardToken}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: '#2563eb',
+                    fontWeight: '700',
+                    fontFamily: 'monospace',
+                    background: '#eff6ff',
+                    padding: '3px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #bfdbfe',
+                  }}
+                >
+                  Card ID: {__v?.cardId}
+                </span>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: '#64748b',
+                    fontFamily: 'monospace',
+                    background: '#f1f5f9',
+                    padding: '3px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #e2e8f0',
+                  }}
+                >
+                  Member: {__v?.memberId}
+                </span>
+              </div>
             </div>{' '}
             <div
               style={{
@@ -692,6 +840,60 @@ WebCardView.prototype.__template = function (__v) {
               }}
             >{`${__t(__v?.t?.google)}`}</button>
           </div>
+
+          {/* Multi-Card Switcher for Customer */}
+          {(__v?.loyaltyCards || []).length > 1 ? (
+            <div
+              style={{
+                background: '#ffffff',
+                borderRadius: '16px',
+                padding: '14px 16px',
+                border: '1px solid #e3e5ec',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Cards from this Business
+                </span>
+                <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                  {__v?.loyaltyCards.length} Cards
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+                {__v?.loyaltyCards.map((c) => {
+                  const isCur = c.id === __v?.cardId;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => __v?.switchCard && __v.switchCard(c.id)}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        border: isCur ? '2px solid #101827' : '1px solid #cbd5e1',
+                        background: isCur ? '#101827' : '#f8fafc',
+                        color: isCur ? '#ffffff' : '#101827',
+                        fontSize: '12px',
+                        fontWeight: isCur ? '700' : '600',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: c.accent || '#4661ad' }} />
+                      <span>{c.name}</span>
+                      <span style={{ fontSize: '10px', opacity: 0.8, fontFamily: 'monospace' }}>[{c.id}]</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
         </main>{' '}
         {__b(__v?.menuOpen) ? (
           <>

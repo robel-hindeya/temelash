@@ -1,7 +1,7 @@
 import React from 'react';
 import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
-import api from '@/lib/api';
+import api, { getMerchantLoyaltyCard, getMerchantLoyaltyCards } from '@/lib/api';
 import jsQR from 'jsqr';
 
 const __CSS = `
@@ -86,6 +86,7 @@ function extractTokenFromScan(raw) {
       const tokParam =
         url.searchParams.get('token') ||
         url.searchParams.get('id') ||
+        url.searchParams.get('c') ||
         url.searchParams.get('cardToken') ||
         url.searchParams.get('card') ||
         url.searchParams.get('t');
@@ -543,18 +544,20 @@ class StaffAppView extends DCLogic {
     } catch (err) {
       if (token && token.length >= 10) {
         this.stopCamera();
-        const shortName = `Member ${token.slice(0, 4)}`;
+        const loyaltyCard = getMerchantLoyaltyCard(token);
+        const shortName = loyaltyCard ? loyaltyCard.name : `Member ${token.slice(0, 4)}`;
         this.setState({
           customer: {
             name: shortName,
-            initials: shortName.slice(0, 2).toUpperCase(),
+            initials: (loyaltyCard ? loyaltyCard.name : shortName).slice(0, 2).toUpperCase(),
             phone: '+251 91 *** 4567',
             visits: 0,
             lastVisit: 'Today',
             stamps: 0,
-            maxStamps: 10,
-            rewardTitle: this.state.rewardTitle || 'Free macchiato',
+            maxStamps: loyaltyCard?.stampsRequired || 10,
+            rewardTitle: loyaltyCard?.rewardName || this.state.rewardTitle || 'Free macchiato',
             cardToken: token,
+            cardId: loyaltyCard?.id || token,
             cooldownNotice: null,
           },
           screen: 'customer',

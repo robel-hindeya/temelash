@@ -5,7 +5,13 @@ import DCLogic from '@/lib/DCLogic';
 import { __b, __t, A, withDCStyle } from '@/lib/dc-runtime';
 import Sidebar from './Sidebar';
 import QRCodeDisplay from '../QRCodeDisplay';
-import api, { getAppOrigin, getOrAssignMerchantCode } from '@/lib/api';
+import api, {
+  getAppOrigin,
+  getOrAssignMerchantCode,
+  getMerchantLoyaltyCards,
+  getMerchantLoyaltyCard,
+  updateMerchantLoyaltyCard,
+} from '@/lib/api';
 
 const __CSS =
   'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}}\n@media (min-width:1024px){.pv-sticky{position:sticky;top:24px;align-self:flex-start}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #4661ad;outline-offset:2px}';
@@ -14,6 +20,8 @@ class RewardsView extends DCLogic {
     super(props);
     this.state = {
       programId: null,
+      loyaltyCards: [],
+      selectedCardId: 'UXwJ9RwdyHs',
       count: 10,
       reward: 'Free macchiato',
       mainDays: 30,
@@ -37,21 +45,44 @@ class RewardsView extends DCLogic {
   async componentDidMount() {
     this.persist();
     try {
+      const cards = getMerchantLoyaltyCards();
+      const firstCard = cards[0];
+      const updates = {
+        loyaltyCards: cards,
+        selectedCardId: firstCard?.id || 'UXwJ9RwdyHs',
+      };
+      if (firstCard) {
+        updates.count = firstCard.stampsRequired || 10;
+        updates.reward = firstCard.rewardName || 'Free macchiato';
+      }
+
       const programs = await api.merchant.getPrograms('ACTIVE');
       if (programs && programs.length > 0) {
         const p = programs[0];
         const r = p.rewardDefinitions?.[0] || p.rewards?.[0];
-        this.setState({
-          programId: p.id,
-          count: p.stampsRequired || this.state.count,
-          reward: r?.nameEn || this.state.reward,
-          mainDays: r?.validForDays || this.state.mainDays,
-        });
+        updates.programId = p.id;
+        if (!firstCard?.stampsRequired) updates.count = p.stampsRequired || this.state.count;
+        if (!firstCard?.rewardName) updates.reward = r?.nameEn || this.state.reward;
+        updates.mainDays = r?.validForDays || this.state.mainDays;
       }
+      this.setState(updates);
     } catch (e) {
       console.warn('Failed to load active program from database:', e);
     }
   }
+
+  selectCard = (cardId) => {
+    const cards = this.state.loyaltyCards || getMerchantLoyaltyCards();
+    const card = cards.find((c) => c.id === cardId);
+    if (card) {
+      this.setState({
+        selectedCardId: card.id,
+        count: card.stampsRequired || 10,
+        reward: card.rewardName || 'Special Reward',
+        saved: false,
+      });
+    }
+  };
   componentDidUpdate() {
     this.persist();
   }
@@ -383,14 +414,25 @@ class RewardsView extends DCLogic {
       nextName: nextR ? nextR.name : 'Card complete',
       toGo: nextR ? left + (left === 1 ? ' visit' : ' visits') : '—',
       pvMs,
-      cardUrl: `${getAppOrigin()}/card?m=${getOrAssignMerchantCode()}`,
+      loyaltyCards: s.loyaltyCards || [],
+      selectedCardId: s.selectedCardId || 'UXwJ9RwdyHs',
+      selectCard: this.selectCard,
+      cardUrl: `${getAppOrigin()}/card?c=${s.selectedCardId || 'UXwJ9RwdyHs'}&m=${getOrAssignMerchantCode()}`,
       notifTitle: justHit ? 'NOTIFICATION THEY GET NOW' : 'WHEN THE NEXT REWARD UNLOCKS',
       notifHead: unlockName + ' unlocked',
       notifText: unlockName + ' unlocked. Show this at the counter.',
       save: async () => {
         try {
+          updateMerchantLoyaltyCard(s.selectedCardId || 'UXwJ9RwdyHs', {
+            stampsRequired: s.count,
+            rewardName: s.reward,
+          });
+          const updatedCards = getMerchantLoyaltyCards();
+          this.setState({ loyaltyCards: updatedCards });
+
           if (s.programId) {
             await api.merchant.updateProgram(s.programId, {
+              stampsRequired: s.count,
               reward: {
                 nameEn: s.reward,
                 validForDays: s.mainDays || null,
@@ -476,6 +518,89 @@ RewardsView.prototype.__template = function (__v) {
               >
                 {'Save changes'}
               </button>
+            </div>
+          </div>{' '}
+          {/* Card Selector Strip */}
+          <div
+            style={{
+              background: '#ffffff',
+              border: '1px solid #e3e5ec',
+              borderRadius: '16px',
+              padding: '16px 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <strong style={{ fontSize: '15px', color: '#101827' }}>
+                  Select Loyalty Card to Configure ({(__v?.loyaltyCards || []).length})
+                </strong>
+                <span style={{ fontSize: '12px', color: '#64748b', marginLeft: '8px' }}>
+                  Each card program has its own stamps & reward definition
+                </span>
+              </div>
+              <A
+                href="/business/card-design"
+                style={{
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  color: '#4661ad',
+                  textDecoration: 'none',
+                }}
+              >
+                + Manage / Add Cards ↗
+              </A>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              {(__v?.loyaltyCards || []).map((card) => {
+                const isSelected = card.id === __v?.selectedCardId;
+                return (
+                  <button
+                    key={card.id}
+                    type="button"
+                    onClick={() => __v?.selectCard && __v.selectCard(card.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 14px',
+                      borderRadius: '10px',
+                      border: isSelected ? '2px solid #101827' : '1px solid #e2e8f0',
+                      background: isSelected ? '#101827' : '#f8fafc',
+                      color: isSelected ? '#ffffff' : '#101827',
+                      cursor: 'pointer',
+                      fontWeight: isSelected ? '700' : '600',
+                      fontSize: '13px',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: card.accent || '#4661ad',
+                        display: 'inline-block',
+                      }}
+                    />
+                    <span>{card.name}</span>
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        fontFamily: 'monospace',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: isSelected ? 'rgba(255,255,255,0.2)' : '#e2e8f0',
+                        color: isSelected ? '#ffffff' : '#475569',
+                      }}
+                    >
+                      ID: {card.id}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>{' '}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'flex-start' }}>

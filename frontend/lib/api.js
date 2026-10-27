@@ -618,5 +618,124 @@ export function getOrAssignUserCode() {
   }
 }
 
+/**
+ * Default merchant loyalty cards if none saved
+ */
+export const DEFAULT_MERCHANT_CARDS = [
+  {
+    id: 'UXwJ9RwdyHs',
+    name: 'Coffee Stamp Card',
+    nameAm: 'የቡና ማህተም ካርድ',
+    accent: '#8a4b2a',
+    icon: 'coffee',
+    stampsRequired: 10,
+    rewardName: 'Free macchiato',
+    rewardNameAm: 'ነፃ ማኪያቶ',
+    description: 'Collect 10 stamps for a fresh hot macchiato',
+    isDefault: true,
+  },
+  {
+    id: 'kP7mQ9xRtL2',
+    name: 'Pastry & Breakfast Card',
+    nameAm: 'የቁርስ እና ኬክ ካርድ',
+    accent: '#c2410c',
+    icon: 'croissant',
+    stampsRequired: 8,
+    rewardName: 'Free croissant or pastry',
+    rewardNameAm: 'ነፃ ክሩአሳን ወይም ኬክ',
+    description: '8 morning visits earns any specialty pastry',
+    isDefault: false,
+  },
+  {
+    id: 'mK7vB2xP9Lq',
+    name: 'Lunch Combo Loyalty',
+    nameAm: 'የምሳ ኮምቦ ካርድ',
+    accent: '#2f6b4f',
+    icon: 'fork',
+    stampsRequired: 6,
+    rewardName: 'Free combo meal',
+    rewardNameAm: 'ነፃ የምሳ ኮምቦ ምግብ',
+    description: 'Order 6 lunch combos and get the 7th on the house',
+    isDefault: false,
+  },
+];
+
+let _memoryMerchantCards = [...DEFAULT_MERCHANT_CARDS];
+
+/**
+ * Get all loyalty cards for the merchant
+ */
+export function getMerchantLoyaltyCards() {
+  if (typeof window === 'undefined') return _memoryMerchantCards;
+  try {
+    const raw = window.localStorage.getItem('tm-merchant-cards');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        _memoryMerchantCards = parsed;
+        return parsed;
+      }
+    }
+    window.localStorage.setItem('tm-merchant-cards', JSON.stringify(DEFAULT_MERCHANT_CARDS));
+    return DEFAULT_MERCHANT_CARDS;
+  } catch {
+    return _memoryMerchantCards;
+  }
+}
+
+/**
+ * Add a new loyalty card with an assigned 11-character ID like UXwJ9RwdyHs
+ */
+export function addMerchantLoyaltyCard(data) {
+  const cards = getMerchantLoyaltyCards();
+  const id = data?.id || generateShortId(11);
+  const newCard = {
+    id,
+    name: data?.name || 'New Loyalty Card',
+    nameAm: data?.nameAm || 'አዲስ የማህተም ካርድ',
+    accent: data?.accent || '#4661ad',
+    icon: data?.icon || 'star',
+    stampsRequired: Number(data?.stampsRequired) || 10,
+    rewardName: data?.rewardName || 'Special Reward',
+    rewardNameAm: data?.rewardNameAm || 'ልዩ ሽልማት',
+    description: data?.description || 'Collect stamps to unlock rewards',
+    isDefault: false,
+    createdAt: new Date().toISOString(),
+  };
+  const updated = [...cards, newCard];
+  _memoryMerchantCards = updated;
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem('tm-merchant-cards', JSON.stringify(updated));
+    } catch {}
+  }
+  return newCard;
+}
+
+/**
+ * Update an existing loyalty card by its 11-char ID
+ */
+export function updateMerchantLoyaltyCard(cardId, updates) {
+  const cards = getMerchantLoyaltyCards();
+  const updated = cards.map((c) => (c.id === cardId ? { ...c, ...updates } : c));
+  _memoryMerchantCards = updated;
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem('tm-merchant-cards', JSON.stringify(updated));
+    } catch {}
+  }
+  return updated.find((c) => c.id === cardId) || null;
+}
+
+/**
+ * Get a specific loyalty card by its 11-char ID
+ */
+export function getMerchantLoyaltyCard(cardId) {
+  if (!cardId) return null;
+  const cards = getMerchantLoyaltyCards();
+  return cards.find((c) => c.id === cardId) || null;
+}
+
 export default api;
+
 
