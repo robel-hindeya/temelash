@@ -25,6 +25,26 @@ class SidebarView extends DCLogic {
     this.onResize();
 
     try {
+      // Check local storage so sidebar immediately shows saved business name and owner
+      try {
+        const localOwner = window.localStorage.getItem('tm-owner-name');
+        const localBiz = window.localStorage.getItem('tm-biz-profile');
+        const localBranches = window.localStorage.getItem('tm-branches-list');
+        const initialUpdates = {};
+        if (localOwner) initialUpdates.owner = localOwner;
+        if (localBiz) {
+          const parsed = JSON.parse(localBiz);
+          if (parsed?.nameEn) initialUpdates.businessName = parsed.nameEn;
+        }
+        if (localBranches) {
+          const parsed = JSON.parse(localBranches);
+          if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].name) {
+            initialUpdates.branchName = parsed[0].name;
+          }
+        }
+        if (Object.keys(initialUpdates).length > 0) this.setState(initialUpdates);
+      } catch (x) {}
+
       const [profile, branches, me] = await Promise.allSettled([
         api.merchant.getProfile(),
         api.merchant.getBranches(),

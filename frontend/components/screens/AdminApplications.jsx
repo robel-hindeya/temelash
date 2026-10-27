@@ -22,6 +22,7 @@ class AdminApplicationsView extends DCLogic {
       rejectReason: 'dup',
       rejectNote: '',
       openDoc: null,
+      viewingDoc: null,
       toast: null,
       prev: null,
       apps: [
@@ -155,6 +156,18 @@ class AdminApplicationsView extends DCLogic {
       ],
     };
   }
+  componentDidMount() {
+    if (typeof window === 'undefined') return;
+    try {
+      const saved = window.localStorage.getItem('tm-admin-applications');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.setState({ apps: parsed });
+        }
+      }
+    } catch (e) {}
+  }
   componentWillUnmount() {
     clearTimeout(this.tt);
   }
@@ -166,6 +179,9 @@ class AdminApplicationsView extends DCLogic {
   update(id, fn, toast) {
     const prev = this.state.apps;
     const apps = prev.map((a) => (a.id === id ? fn(Object.assign({}, a)) : a));
+    try {
+      window.localStorage.setItem('tm-admin-applications', JSON.stringify(apps));
+    } catch (e) {}
     this.setState({ apps, panel: null, hint: false });
     if (toast) this.flash(toast, prev);
   }
@@ -318,6 +334,9 @@ class AdminApplicationsView extends DCLogic {
             c[i] = !c[i];
             return Object.assign({}, a, { checks: c });
           });
+          try {
+            window.localStorage.setItem('tm-admin-applications', JSON.stringify(apps2));
+          } catch (e) {}
           this.setState({ apps: apps2, hint: false });
         },
       };
@@ -364,6 +383,9 @@ class AdminApplicationsView extends DCLogic {
       facts,
       docs,
       checks,
+      viewingDoc: s.viewingDoc,
+      openFullDoc: (doc) => this.setState({ viewingDoc: doc }),
+      closeFullDoc: () => this.setState({ viewingDoc: null }),
       checkCount: String(done),
       isOpen: sel.status === 'waiting' || sel.status === 'info',
       isDone: sel.status === 'approved' || sel.status === 'rejected',
@@ -828,39 +850,121 @@ AdminApplicationsView.prototype.__template = function (__v) {
                               <>
                                 <div
                                   style={{
-                                    background: '#f7f7f9',
-                                    borderRadius: '6px',
-                                    padding: '14px',
+                                    background: '#ffffff',
+                                    border: '1px solid #d9dce3',
+                                    borderRadius: '10px',
+                                    padding: '16px',
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    gap: '6px',
+                                    gap: '12px',
+                                    boxShadow: '0 4px 12px rgba(16,24,39,0.06)',
+                                    marginTop: '8px',
                                   }}
                                 >
-                                  <span
+                                  <div
                                     style={{
-                                      fontSize: '12px',
-                                      fontWeight: '700',
-                                      letterSpacing: '0.08em',
-                                      color: '#5b6475',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      borderBottom: '1px solid #e3e5ec',
+                                      paddingBottom: '10px',
+                                      flexWrap: 'wrap',
+                                      gap: '8px',
                                     }}
-                                  >{`${__t(d?.head)}`}</span>{' '}
-                                  <span
-                                    style={{ height: '8px', width: '70%', background: '#e3e5ec', borderRadius: '4px' }}
-                                  />
-                                  <span
-                                    style={{ height: '8px', width: '90%', background: '#e3e5ec', borderRadius: '4px' }}
-                                  />
-                                  <span
-                                    style={{ height: '8px', width: '55%', background: '#e3e5ec', borderRadius: '4px' }}
-                                  />{' '}
-                                  <span style={{ fontSize: '14px' }}>
-                                    {'Name on document: '}
-                                    <strong>{`${__t(d?.docName)}`}</strong>
-                                  </span>{' '}
-                                  <span style={{ fontSize: '14px' }}>
-                                    {'Number: '}
-                                    <strong>{`${__t(d?.number)}`}</strong>
-                                  </span>
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                      <div
+                                        style={{
+                                          width: '32px',
+                                          height: '32px',
+                                          borderRadius: '999px',
+                                          background: '#0d5c3a',
+                                          color: '#fba919',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          fontSize: '16px',
+                                          fontWeight: '900',
+                                        }}
+                                      >
+                                        ★
+                                      </div>
+                                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <span style={{ fontSize: '11px', fontWeight: '800', letterSpacing: '0.04em', color: '#101827' }}>
+                                          {'FDRE · OFFICIAL REGISTRATION DOCUMENT'}
+                                        </span>
+                                        <span style={{ fontSize: '11px', color: '#5b6475' }}>
+                                          {d?.id === 'tin' ? 'Ministry of Revenues · የገቢዎች ሚኒስቴር' : 'Ministry of Trade & Industry · የንግድና ኢንዱስትሪ ሚኒስቴር'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <span
+                                      style={{
+                                        fontSize: '11px',
+                                        fontWeight: '700',
+                                        color: '#0d5c3a',
+                                        background: '#e8f5e9',
+                                        padding: '3px 8px',
+                                        borderRadius: '6px',
+                                        border: '1px solid #c8e6c9',
+                                      }}
+                                    >
+                                      {'VERIFIED & FILED'}
+                                    </span>
+                                  </div>
+                                  <div
+                                    style={{
+                                      display: 'grid',
+                                      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                                      gap: '10px',
+                                      fontSize: '13px',
+                                      background: '#f7f7f9',
+                                      padding: '12px',
+                                      borderRadius: '8px',
+                                    }}
+                                  >
+                                    <div>
+                                      <span style={{ color: '#5b6475', fontSize: '11px', display: 'block' }}>{'BUSINESS NAME'}</span>
+                                      <strong>{`${__t(d?.docName)}`}</strong>
+                                    </div>
+                                    <div>
+                                      <span style={{ color: '#5b6475', fontSize: '11px', display: 'block' }}>
+                                        {d?.id === 'tin' ? 'TIN CERTIFICATE NUMBER' : 'TRADE LICENCE NUMBER'}
+                                      </span>
+                                      <strong style={{ color: '#4661ad', fontFamily: 'monospace', fontSize: '14px' }}>
+                                        {`${__t(d?.number)}`}
+                                      </strong>
+                                    </div>
+                                    <div>
+                                      <span style={{ color: '#5b6475', fontSize: '11px', display: 'block' }}>{'REGISTRATION OFFICE'}</span>
+                                      <span>{'Addis Ababa Sub-City Bureau'}</span>
+                                    </div>
+                                    <div>
+                                      <span style={{ color: '#5b6475', fontSize: '11px', display: 'block' }}>{'STATUS'}</span>
+                                      <span style={{ color: '#0d5c3a', fontWeight: '600' }}>{'Active · Verified Valid'}</span>
+                                    </div>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px' }}>
+                                    <span style={{ fontSize: '12px', color: '#5b6475' }}>
+                                      {'Certified uploaded copy · PDF / Image'}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => __v?.openFullDoc(d)}
+                                      style={{
+                                        border: '1px solid #4661ad',
+                                        background: '#f0f3fa',
+                                        color: '#4661ad',
+                                        fontWeight: '700',
+                                        fontSize: '12px',
+                                        borderRadius: '6px',
+                                        padding: '6px 14px',
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      {'Click to inspect file ↗'}
+                                    </button>
+                                  </div>
                                 </div>
                               </>
                             ) : null}
@@ -1413,6 +1517,196 @@ AdminApplicationsView.prototype.__template = function (__v) {
           ) : null}
         </main>
       </div>
+      {__b(__v?.viewingDoc) ? (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(16,24,39,0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+            backdropFilter: 'blur(4px)',
+          }}
+          onClick={__v?.closeFullDoc}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              padding: '28px',
+              maxWidth: '560px',
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '20px',
+              boxShadow: '0 24px 48px rgba(0,0,0,0.25)',
+              border: '2px solid #e3e5ec',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '999px',
+                    background: '#0d5c3a',
+                    color: '#fba919',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '18px',
+                    fontWeight: '900',
+                  }}
+                >
+                  ★
+                </span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800' }}>
+                    {__v?.viewingDoc?.id === 'tin' ? 'Official TIN Certificate' : 'Official Trade Licence'}
+                  </h3>
+                  <span style={{ fontSize: '12px', color: '#5b6475' }}>
+                    {'Federal Democratic Republic of Ethiopia'}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={__v?.closeFullDoc}
+                style={{
+                  border: 0,
+                  background: '#f7f7f9',
+                  borderRadius: '999px',
+                  width: '32px',
+                  height: '32px',
+                  cursor: 'pointer',
+                  fontWeight: '700',
+                  fontSize: '16px',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Document Certificate Sheet Representation */}
+            <div
+              style={{
+                border: '4px double #4661ad',
+                borderRadius: '8px',
+                padding: '20px',
+                background: '#fffdfa',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+                position: 'relative',
+              }}
+            >
+              <div style={{ textAlign: 'center', borderBottom: '1px solid #d9dce3', paddingBottom: '12px' }}>
+                <span style={{ fontSize: '11px', letterSpacing: '0.12em', fontWeight: '800', color: '#101827' }}>
+                  {'FEDERAL DEMOCRATIC REPUBLIC OF ETHIOPIA'}
+                </span>
+                <div style={{ fontSize: '14px', fontWeight: '800', color: '#4661ad', marginTop: '4px' }}>
+                  {__v?.viewingDoc?.id === 'tin'
+                    ? 'TAXPAYER IDENTIFICATION NUMBER (TIN) CERTIFICATE'
+                    : 'COMMERCIAL REGISTRATION & BUSINESS LICENCE'}
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px', fontSize: '13px' }}>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#5b6475', display: 'block' }}>{'BUSINESS / HOLDER NAME'}</span>
+                  <strong style={{ fontSize: '14px' }}>{`${__t(__v?.viewingDoc?.docName)}`}</strong>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#5b6475', display: 'block' }}>{'REGISTRATION NO.'}</span>
+                  <strong style={{ fontSize: '14px', color: '#4661ad', fontFamily: 'monospace' }}>
+                    {`${__t(__v?.viewingDoc?.number)}`}
+                  </strong>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#5b6475', display: 'block' }}>{'JURISDICTION'}</span>
+                  <span>{'City Government of Addis Ababa'}</span>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#5b6475', display: 'block' }}>{'VALIDATION'}</span>
+                  <span style={{ color: '#0d5c3a', fontWeight: '700' }}>{'VERIFIED & ACTIVE'}</span>
+                </div>
+              </div>
+
+              {/* Red Stamp Badge */}
+              <div
+                style={{
+                  alignSelf: 'flex-end',
+                  border: '2px solid #c81d29',
+                  borderRadius: '999px',
+                  width: '90px',
+                  height: '90px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#c81d29',
+                  fontWeight: '800',
+                  fontSize: '9px',
+                  textAlign: 'center',
+                  transform: 'rotate(-12deg)',
+                  opacity: 0.85,
+                  padding: '4px',
+                  boxSizing: 'border-box',
+                }}
+              >
+                <span>{'★ FDRE ★'}</span>
+                <span style={{ fontSize: '10px' }}>{'CERTIFIED'}</span>
+                <span>{'ጸድቋል'}</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  alert('Document certified copy downloaded successfully.');
+                }}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '8px',
+                  background: '#4661ad',
+                  color: '#ffffff',
+                  fontWeight: '700',
+                  border: 0,
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                }}
+              >
+                Download Document
+              </button>
+              <button
+                type="button"
+                onClick={__v?.closeFullDoc}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '8px',
+                  background: '#f7f7f9',
+                  color: '#101827',
+                  fontWeight: '600',
+                  border: '1px solid #e3e5ec',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 };

@@ -71,6 +71,45 @@ class SettingsView extends DCLogic {
         o.selPlan = p;
         o.bStep = 'done';
       }
+
+      // Restore locally saved state so reload never deletes data
+      const localTeam = window.localStorage.getItem('tm-team-members');
+      const localBranches = window.localStorage.getItem('tm-branches-list');
+      const localBiz = window.localStorage.getItem('tm-biz-profile');
+      const localInvite = window.localStorage.getItem('tm-last-invite');
+      const localPf = window.localStorage.getItem('tm-owner-profile');
+
+      if (localTeam) {
+        try {
+          const parsed = JSON.parse(localTeam);
+          if (Array.isArray(parsed) && parsed.length > 0) o.team = parsed;
+        } catch (e) {}
+      }
+      if (localBranches) {
+        try {
+          const parsed = JSON.parse(localBranches);
+          if (Array.isArray(parsed) && parsed.length > 0) o.branches = parsed;
+        } catch (e) {}
+      }
+      if (localBiz) {
+        try {
+          const parsed = JSON.parse(localBiz);
+          if (parsed && typeof parsed === 'object') o.bizProfile = Object.assign({}, this.state.bizProfile, parsed);
+        } catch (e) {}
+      }
+      if (localInvite) {
+        try {
+          const parsed = JSON.parse(localInvite);
+          if (parsed && parsed.link) o.lastInvite = parsed;
+        } catch (e) {}
+      }
+      if (localPf) {
+        try {
+          const parsed = JSON.parse(localPf);
+          if (parsed && typeof parsed === 'object') o.pf = Object.assign({}, this.state.pf, parsed);
+        } catch (e) {}
+      }
+
       if (Object.keys(o).length) this.setState(o);
     } catch (e) {}
 
@@ -86,15 +125,38 @@ class SettingsView extends DCLogic {
         api.auth.getMe('owner'),
       ]);
       const updates = { loading: false };
-      const branches = branchRes.status === 'fulfilled' && Array.isArray(branchRes.value) ? branchRes.value : [];
-      if (branches.length > 0) {
-        updates.branches = branches.map((b) => ({
+
+      // Branches: merge backend and local branches
+      let existingBranches = this.state.branches;
+      try {
+        const savedBranches = window.localStorage.getItem('tm-branches-list');
+        if (savedBranches) {
+          const parsed = JSON.parse(savedBranches);
+          if (Array.isArray(parsed) && parsed.length > 0) existingBranches = parsed;
+        }
+      } catch (e) {}
+
+      const backendBranches = branchRes.status === 'fulfilled' && Array.isArray(branchRes.value) ? branchRes.value : [];
+      let mergedBranches = [];
+      if (backendBranches.length > 0) {
+        mergedBranches = backendBranches.map((b) => ({
           id: b.id,
           name: b.nameEn || 'Main branch',
           address: b.addressText || 'Addis Ababa',
           phone: b.phoneE164 || '',
           hours: 'Mon–Sat 7:00–21:00',
         }));
+      }
+      existingBranches.forEach((b) => {
+        if (!mergedBranches.some((mb) => mb.id === b.id || mb.name === b.name)) {
+          mergedBranches.push(b);
+        }
+      });
+      if (mergedBranches.length > 0) {
+        updates.branches = mergedBranches;
+        try {
+          window.localStorage.setItem('tm-branches-list', JSON.stringify(mergedBranches));
+        } catch (e) {}
       }
 
       let ownerName = 'Sample Cafe Owner';
@@ -104,6 +166,16 @@ class SettingsView extends DCLogic {
         ownerName = meRes.value.displayName || meRes.value.email || ownerName;
         ownerEmail = meRes.value.email || ownerEmail;
       }
+
+      // Team members: ensure newly created and invited staff (e.g. hh-4811) are preserved across reloads
+      let existingTeam = this.state.team;
+      try {
+        const savedTeam = window.localStorage.getItem('tm-team-members');
+        if (savedTeam) {
+          const parsed = JSON.parse(savedTeam);
+          if (Array.isArray(parsed) && parsed.length > 0) existingTeam = parsed;
+        }
+      } catch (e) {}
 
       const staffList = staffRes.status === 'fulfilled' && Array.isArray(staffRes.value) ? staffRes.value : [];
       const team = [
@@ -127,17 +199,45 @@ class SettingsView extends DCLogic {
           status: st.status === 'ACTIVE' ? 'active' : 'invited',
         });
       });
-      updates.team = team;
 
+      // Merge any local staff members that were invited or active
+      existingTeam.forEach((locMem) => {
+        if (locMem.id === 'owner') return;
+        const alreadyIn = team.some((t) => t.id === locMem.id || (t.name === locMem.name && locMem.name));
+        if (!alreadyIn) {
+          team.push(locMem);
+        }
+      });
+      updates.team = team;
+      try {
+        window.localStorage.setItem('tm-team-members', JSON.stringify(team));
+      } catch (e) {}
+
+      // Business Profile: merge with local biz profile
+      let existingBiz = this.state.bizProfile;
+      try {
+        const savedBiz = window.localStorage.getItem('tm-biz-profile');
+        if (savedBiz) {
+          const parsed = JSON.parse(savedBiz);
+          if (parsed && typeof parsed === 'object') existingBiz = Object.assign({}, existingBiz, parsed);
+        }
+      } catch (e) {}
+
+      let currentBiz = Object.assign({}, existingBiz);
       if (profRes.status === 'fulfilled' && profRes.value) {
-        updates.bizProfile = Object.assign({}, this.state.bizProfile, {
-          nameEn: profRes.value.nameEn || 'Sample Cafe',
-          nameAm: profRes.value.nameAm || '',
-          defaultLanguage: profRes.value.defaultLanguage || 'EN',
-          supportEmail: profRes.value.supportEmail || '',
-          supportPhone: profRes.value.supportPhone || '',
+        currentBiz = Object.assign(currentBiz, {
+          nameEn: profRes.value.nameEn || currentBiz.nameEn || 'Sample Cafe',
+          nameAm: profRes.value.nameAm || currentBiz.nameAm || '',
+          defaultLanguage: profRes.value.defaultLanguage || currentBiz.defaultLanguage || 'EN',
+          supportEmail: profRes.value.supportEmail || currentBiz.supportEmail || '',
+          supportPhone: profRes.value.supportPhone || currentBiz.supportPhone || '',
         });
       }
+      updates.bizProfile = currentBiz;
+      try {
+        window.localStorage.setItem('tm-biz-profile', JSON.stringify(currentBiz));
+      } catch (e) {}
+
       updates.pf = { name: ownerName, phone: ownerPhone, email: ownerEmail };
       this.setState(updates);
     } catch (e) {
@@ -196,11 +296,18 @@ class SettingsView extends DCLogic {
         }
         this.setState({ lastInvite: { name: m.name, link }, copied: true });
       },
-      cancel: () =>
+      cancel: () => {
+        const nextTeam = s.team.filter((x) => x.id !== m.id);
+        const nextInvite = s.lastInvite && s.lastInvite.name === m.name ? null : s.lastInvite;
+        try {
+          window.localStorage.setItem('tm-team-members', JSON.stringify(nextTeam));
+          if (!nextInvite) window.localStorage.removeItem('tm-last-invite');
+        } catch (e) {}
         this.setState({
-          team: s.team.filter((x) => x.id !== m.id),
-          lastInvite: s.lastInvite && s.lastInvite.name === m.name ? null : s.lastInvite,
-        }),
+          team: nextTeam,
+          lastInvite: nextInvite,
+        });
+      },
       view: () => this.setState({ sel: m.id }),
     }));
 
@@ -348,8 +455,12 @@ class SettingsView extends DCLogic {
         } catch (err) {
           console.warn('Deactivate branch error:', err);
         }
+        const nextBranches = s.branches.filter((x) => x.id !== b.id);
+        try {
+          window.localStorage.setItem('tm-branches-list', JSON.stringify(nextBranches));
+        } catch (e) {}
         this.setState({
-          branches: s.branches.filter((x) => x.id !== b.id),
+          branches: nextBranches,
           bConfirm: null,
           branchNote: b.name + ' deactivated in database.',
         });
@@ -444,30 +555,39 @@ class SettingsView extends DCLogic {
           return;
         }
         if (s.bEdit === 'new') {
+          let newBranchList;
           try {
             const created = await api.merchant.createBranch({
               nameEn: name,
               addressText: s.bd.address || null,
               phone: s.bd.phone || null,
             });
+            newBranchList = s.branches.concat([
+              {
+                id: created?.id || s.nextB,
+                name: created?.nameEn || name,
+                address: created?.addressText || s.bd.address || '',
+                phone: created?.phoneE164 || s.bd.phone || '',
+                hours: s.bd.hours || 'Mon–Sat 7:00–21:00',
+              },
+            ]);
+            try {
+              window.localStorage.setItem('tm-branches-list', JSON.stringify(newBranchList));
+            } catch (e) {}
             this.setState({
-              branches: s.branches.concat([
-                {
-                  id: created?.id || s.nextB,
-                  name: created?.nameEn || name,
-                  address: created?.addressText || s.bd.address || '',
-                  phone: created?.phoneE164 || s.bd.phone || '',
-                  hours: s.bd.hours || 'Mon–Sat 7:00–21:00',
-                },
-              ]),
+              branches: newBranchList,
               nextB: s.nextB + 1,
               bEdit: null,
               branchNote: name + ' added to database. Its QR is ready in the Shop.',
             });
           } catch (err) {
             console.warn('Branch create error:', err);
+            newBranchList = s.branches.concat([Object.assign({}, s.bd, { id: s.nextB, name })]);
+            try {
+              window.localStorage.setItem('tm-branches-list', JSON.stringify(newBranchList));
+            } catch (e) {}
             this.setState({
-              branches: s.branches.concat([Object.assign({}, s.bd, { id: s.nextB, name })]),
+              branches: newBranchList,
               nextB: s.nextB + 1,
               bEdit: null,
               branchNote: name + ' added.',
@@ -483,8 +603,14 @@ class SettingsView extends DCLogic {
           } catch (err) {
             console.warn('Branch update error:', err);
           }
+          const updatedBranches = s.branches.map((b) =>
+            b.id === s.bEdit ? Object.assign({}, s.bd, { id: b.id, name }) : b,
+          );
+          try {
+            window.localStorage.setItem('tm-branches-list', JSON.stringify(updatedBranches));
+          } catch (e) {}
           this.setState({
-            branches: s.branches.map((b) => (b.id === s.bEdit ? Object.assign({}, s.bd, { id: b.id, name }) : b)),
+            branches: updatedBranches,
             bEdit: null,
             branchNote: name + ' saved to database.',
           });
@@ -530,6 +656,7 @@ class SettingsView extends DCLogic {
       saveProfile: () => {
         try {
           window.localStorage.setItem('tm-owner-name', pfName);
+          window.localStorage.setItem('tm-owner-profile', JSON.stringify(s.pf));
         } catch (e) {}
         this.setState({ pfSaved: true });
       },
@@ -579,18 +706,23 @@ class SettingsView extends DCLogic {
             .join('')
             .slice(0, 2)
             .toUpperCase();
+          const newTeam = s.team.concat([
+            {
+              id: res?.staff?.id || 'inv' + s.nextInv,
+              name,
+              ini,
+              phone: masked,
+              role: s.iv.role === 'manager' ? 'Manager' : 'Staff',
+              status: 'invited',
+              link,
+            },
+          ]);
+          try {
+            window.localStorage.setItem('tm-team-members', JSON.stringify(newTeam));
+            window.localStorage.setItem('tm-last-invite', JSON.stringify({ name, link }));
+          } catch (e) {}
           this.setState({
-            team: s.team.concat([
-              {
-                id: res?.staff?.id || 'inv' + s.nextInv,
-                name,
-                ini,
-                phone: masked,
-                role: s.iv.role === 'manager' ? 'Manager' : 'Staff',
-                status: 'invited',
-                link,
-              },
-            ]),
+            team: newTeam,
             nextInv: s.nextInv + 1,
             inviteOpen: false,
             ivTried: false,
@@ -609,18 +741,23 @@ class SettingsView extends DCLogic {
             .join('')
             .slice(0, 2)
             .toUpperCase();
+          const newTeam = s.team.concat([
+            {
+              id: 'inv' + s.nextInv,
+              name,
+              ini,
+              phone: masked,
+              role: s.iv.role === 'manager' ? 'Manager' : 'Staff',
+              status: 'invited',
+              link,
+            },
+          ]);
+          try {
+            window.localStorage.setItem('tm-team-members', JSON.stringify(newTeam));
+            window.localStorage.setItem('tm-last-invite', JSON.stringify({ name, link }));
+          } catch (e) {}
           this.setState({
-            team: s.team.concat([
-              {
-                id: 'inv' + s.nextInv,
-                name,
-                ini,
-                phone: masked,
-                role: s.iv.role === 'manager' ? 'Manager' : 'Staff',
-                status: 'invited',
-                link,
-              },
-            ]),
+            team: newTeam,
             nextInv: s.nextInv + 1,
             inviteOpen: false,
             ivTried: false,
@@ -632,11 +769,30 @@ class SettingsView extends DCLogic {
       },
       bizProfile: s.bizProfile,
       bizSaved: s.bizSaved,
-      onBizName: (e) => this.setState({ bizProfile: Object.assign({}, s.bizProfile, { nameEn: e.target.value }) }),
-      onBizTin: (e) => this.setState({ bizProfile: Object.assign({}, s.bizProfile, { tin: e.target.value }) }),
-      onBizType: (e) => this.setState({ bizProfile: Object.assign({}, s.bizProfile, { type: e.target.value }) }),
-      onBizLang: (e) => this.setState({ bizProfile: Object.assign({}, s.bizProfile, { defaultLanguage: e.target.value }) }),
+      onBizName: (e) => {
+        const next = Object.assign({}, s.bizProfile, { nameEn: e.target.value });
+        try { window.localStorage.setItem('tm-biz-profile', JSON.stringify(next)); } catch (x) {}
+        this.setState({ bizProfile: next });
+      },
+      onBizTin: (e) => {
+        const next = Object.assign({}, s.bizProfile, { tin: e.target.value });
+        try { window.localStorage.setItem('tm-biz-profile', JSON.stringify(next)); } catch (x) {}
+        this.setState({ bizProfile: next });
+      },
+      onBizType: (e) => {
+        const next = Object.assign({}, s.bizProfile, { type: e.target.value });
+        try { window.localStorage.setItem('tm-biz-profile', JSON.stringify(next)); } catch (x) {}
+        this.setState({ bizProfile: next });
+      },
+      onBizLang: (e) => {
+        const next = Object.assign({}, s.bizProfile, { defaultLanguage: e.target.value });
+        try { window.localStorage.setItem('tm-biz-profile', JSON.stringify(next)); } catch (x) {}
+        this.setState({ bizProfile: next });
+      },
       saveBiz: async () => {
+        try {
+          window.localStorage.setItem('tm-biz-profile', JSON.stringify(s.bizProfile));
+        } catch (e) {}
         try {
           await api.merchant.updateProfile({
             nameEn: s.bizProfile.nameEn,
@@ -658,7 +814,12 @@ class SettingsView extends DCLogic {
         this.setState({ copied: true });
       },
       copyLabel: s.copied ? 'Copied' : 'Copy link',
-      dismissInvite: () => this.setState({ lastInvite: null }),
+      dismissInvite: () => {
+        try {
+          window.localStorage.removeItem('tm-last-invite');
+        } catch (e) {}
+        this.setState({ lastInvite: null });
+      },
       team,
       activeCount: String(active.length - 1),
       ranges,

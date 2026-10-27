@@ -62,6 +62,31 @@ export default function StaffJoinFlow({ initialCode = '' }) {
       };
 
       setStoredToken(`staff-session-${Date.now()}`, 'staff', staffUser);
+
+      // Update team member in tm-team-members so Settings screen reflects active status
+      try {
+        const rawTeam = window.localStorage.getItem('tm-team-members');
+        if (rawTeam) {
+          const parsedTeam = JSON.parse(rawTeam);
+          if (Array.isArray(parsedTeam)) {
+            const updatedTeam = parsedTeam.map((m) => {
+              if (
+                (m.link && m.link.includes(token)) ||
+                (m.id && token.includes(m.id)) ||
+                (displayName.trim() && m.name?.toLowerCase() === displayName.trim().toLowerCase())
+              ) {
+                return Object.assign({}, m, {
+                  name: displayName.trim() || m.name,
+                  status: 'active',
+                });
+              }
+              return m;
+            });
+            window.localStorage.setItem('tm-team-members', JSON.stringify(updatedTeam));
+          }
+        }
+      } catch (x) {}
+
       setSuccess(true);
 
       setTimeout(() => {

@@ -20,7 +20,12 @@ class LandingView extends DCLogic {
       tint: 'auto',
       style: 'classic',
       cover: false,
+      coverImg: null,
+      coverFileName: '',
       logo: true,
+      logoImg: null,
+      logoFileName: '',
+      viewImgModal: null,
       saved: false,
       buttons: [
         {
@@ -41,6 +46,46 @@ class LandingView extends DCLogic {
         },
       ],
     };
+  }
+  componentDidMount() {
+    if (typeof window === 'undefined') return;
+    try {
+      const updates = {};
+      const savedCover = window.localStorage.getItem('tm-landing-cover');
+      if (savedCover) {
+        updates.cover = true;
+        updates.coverImg = savedCover;
+      }
+      const savedLogo = window.localStorage.getItem('tm-landing-logo') || window.localStorage.getItem('tm-logo');
+      if (savedLogo) {
+        updates.logo = true;
+        updates.logoImg = savedLogo;
+      }
+      const savedData = window.localStorage.getItem('tm-landing-data');
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        if (parsed && typeof parsed === 'object') {
+          if (parsed.title) updates.title = parsed.title;
+          if (parsed.tagline !== undefined) updates.tagline = parsed.tagline;
+          if (parsed.color) updates.color = parsed.color;
+          if (parsed.hexText) updates.hexText = parsed.hexText;
+          if (parsed.tint) updates.tint = parsed.tint;
+          if (parsed.style) updates.style = parsed.style;
+          if (parsed.cover !== undefined && !savedCover) updates.cover = parsed.cover;
+          if (parsed.logo !== undefined && !savedLogo) updates.logo = parsed.logo;
+          if (Array.isArray(parsed.buttons)) updates.buttons = parsed.buttons;
+        }
+      } else {
+        const bizProf = window.localStorage.getItem('tm-biz-profile');
+        if (bizProf) {
+          const parsed = JSON.parse(bizProf);
+          if (parsed?.nameEn) updates.title = parsed.nameEn;
+        }
+      }
+      if (Object.keys(updates).length > 0) {
+        this.setState(updates);
+      }
+    } catch (e) {}
   }
   lum(hex) {
     const h = hex.replace('#', '');
@@ -258,16 +303,68 @@ class LandingView extends DCLogic {
       ink,
       markRed: dark ? '#ff5a63' : '#e42330',
       cover: s.cover,
+      coverImg: s.coverImg,
+      coverFileName: s.coverFileName,
       coverBg: dark ? 'rgba(255,255,255,0.18)' : 'rgba(16,24,39,0.18)',
       coverThumbBg: s.cover ? '#c9cdd6' : '#f7f7f9',
-      coverBtn: s.cover ? 'Remove' : 'Upload image',
+      coverBtn: s.cover && s.coverImg ? 'Change' : 'Upload image',
+      onCoverUpload: (e) => {
+        const file = e.target?.files?.[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const dataUrl = ev.target?.result;
+            if (dataUrl) {
+              set({ cover: true, coverImg: dataUrl, coverFileName: file.name });
+              try {
+                window.localStorage.setItem('tm-landing-cover', dataUrl);
+              } catch (x) {}
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      },
+      removeCover: () => {
+        set({ cover: false, coverImg: null, coverFileName: '' });
+        try {
+          window.localStorage.removeItem('tm-landing-cover');
+        } catch (x) {}
+      },
       toggleCover: () => set({ cover: !s.cover }),
       logo: s.logo,
+      logoImg: s.logoImg,
+      logoFileName: s.logoFileName,
       initial: shownTitle.charAt(0).toUpperCase(),
       logoThumbBg: s.logo ? s.color : '#f7f7f9',
-      logoThumbText: s.logo ? shownTitle.charAt(0).toUpperCase() : '',
-      logoBtn: s.logo ? 'Remove' : 'Upload image',
+      logoThumbText: s.logo && !s.logoImg ? shownTitle.charAt(0).toUpperCase() : '',
+      logoBtn: s.logo && s.logoImg ? 'Change' : 'Upload image',
+      onLogoUpload: (e) => {
+        const file = e.target?.files?.[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const dataUrl = ev.target?.result;
+            if (dataUrl) {
+              set({ logo: true, logoImg: dataUrl, logoFileName: file.name });
+              try {
+                window.localStorage.setItem('tm-landing-logo', dataUrl);
+                window.localStorage.setItem('tm-logo', dataUrl);
+              } catch (x) {}
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      },
+      removeLogo: () => {
+        set({ logo: false, logoImg: null, logoFileName: '' });
+        try {
+          window.localStorage.removeItem('tm-landing-logo');
+        } catch (x) {}
+      },
       toggleLogo: () => set({ logo: !s.logo }),
+      viewImgModal: s.viewImgModal,
+      viewImage: (which) => this.setState({ viewImgModal: which }),
+      closeImgModal: () => this.setState({ viewImgModal: null }),
       logoRing: dark ? 'rgba(255,255,255,0.25)' : 'rgba(16,24,39,0.12)',
       logoLift: s.cover ? '-40px' : '0',
       headPad: s.cover ? '0 20px 12px' : '44px 20px 12px',
@@ -284,7 +381,29 @@ class LandingView extends DCLogic {
             },
           ]),
         }),
-      save: () => this.setState({ saved: true }),
+      save: () => {
+        try {
+          const toSave = {
+            title: s.title,
+            tagline: s.tagline,
+            color: s.color,
+            hexText: s.hexText,
+            tint: s.tint,
+            style: s.style,
+            cover: s.cover,
+            logo: s.logo,
+            buttons: s.buttons,
+          };
+          window.localStorage.setItem('tm-landing-data', JSON.stringify(toSave));
+          if (s.coverImg) {
+            window.localStorage.setItem('tm-landing-cover', s.coverImg);
+          }
+          if (s.logoImg) {
+            window.localStorage.setItem('tm-landing-logo', s.logoImg);
+          }
+        } catch (e) {}
+        this.setState({ saved: true });
+      },
       savedNote: s.saved ? 'Saved. Live on your QR now.' : 'Unsaved changes',
     };
   }
@@ -720,37 +839,129 @@ LandingView.prototype.__template = function (__v) {
                     borderTop: '1px solid #e3e5ec',
                   }}
                 >
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      width: '72px',
-                      height: '48px',
-                      borderRadius: '8px',
-                      flex: 'none',
-                      background: `${__t(__v?.coverThumbBg)}`,
-                      border: '1px dashed #d9dce3',
-                    }}
-                  />{' '}
+                  <input
+                    type="file"
+                    id="landing-cover-input"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={__v?.onCoverUpload}
+                  />
+                  {__b(__v?.coverImg) ? (
+                    <img
+                      src={__v?.coverImg}
+                      alt="Cover preview"
+                      onClick={() => __v?.viewImage('cover')}
+                      title="Click to view full size"
+                      style={{
+                        width: '72px',
+                        height: '48px',
+                        borderRadius: '8px',
+                        objectFit: 'cover',
+                        cursor: 'pointer',
+                        flex: 'none',
+                        border: '1px solid #d9dce3',
+                      }}
+                    />
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: '72px',
+                        height: '48px',
+                        borderRadius: '8px',
+                        flex: 'none',
+                        background: `${__t(__v?.coverThumbBg)}`,
+                        border: '1px dashed #d9dce3',
+                      }}
+                    />
+                  )}{' '}
                   <span style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column' }}>
                     <strong>{'Cover photo'}</strong>
                     <span style={{ fontSize: '14px', color: '#5b6475' }}>
-                      {'Wide photo of your counter or product, 1200 × 600 px.'}
+                      {__v?.coverImg
+                        ? __v?.coverFileName || 'Cover image uploaded and saved'
+                        : 'Wide photo of your counter or product, 1200 × 600 px.'}
                     </span>
                   </span>{' '}
-                  <button
-                    type="button"
-                    onClick={__v?.toggleCover}
-                    style={{
-                      border: '1px solid #e3e5ec',
-                      background: '#ffffff',
-                      color: '#101827',
-                      fontWeight: '700',
-                      borderRadius: '12px',
-                      padding: '8px 14px',
-                      minHeight: '44px',
-                      cursor: 'pointer',
-                    }}
-                  >{`${__t(__v?.coverBtn)}`}</button>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {__b(__v?.coverImg) ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => __v?.viewImage('cover')}
+                          style={{
+                            border: '1px solid #e3e5ec',
+                            background: '#ffffff',
+                            color: '#101827',
+                            fontWeight: '600',
+                            fontSize: '13px',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {'View'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (typeof document !== 'undefined') {
+                              document.getElementById('landing-cover-input')?.click();
+                            }
+                          }}
+                          style={{
+                            border: '1px solid #4661ad',
+                            background: '#ffffff',
+                            color: '#4661ad',
+                            fontWeight: '600',
+                            fontSize: '13px',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {'Change'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={__v?.removeCover}
+                          style={{
+                            border: '1px solid #fecaca',
+                            background: '#fef2f2',
+                            color: '#b91c1c',
+                            fontWeight: '600',
+                            fontSize: '13px',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {'Remove'}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (typeof document !== 'undefined') {
+                            document.getElementById('landing-cover-input')?.click();
+                          }
+                        }}
+                        style={{
+                          border: '1px solid #e3e5ec',
+                          background: '#ffffff',
+                          color: '#101827',
+                          fontWeight: '700',
+                          borderRadius: '12px',
+                          padding: '8px 14px',
+                          minHeight: '44px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {'Upload image'}
+                      </button>
+                    )}
+                  </div>
                 </div>{' '}
                 <div
                   style={{
@@ -761,40 +972,134 @@ LandingView.prototype.__template = function (__v) {
                     borderTop: '1px solid #e3e5ec',
                   }}
                 >
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      width: '48px',
-                      height: '48px',
-                      borderRadius: '999px',
-                      flex: 'none',
-                      background: `${__t(__v?.logoThumbBg)}`,
-                      color: '#ffffff',
-                      fontWeight: '800',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: '1px dashed #d9dce3',
-                    }}
-                  >{`${__t(__v?.logoThumbText)}`}</span>{' '}
+                  <input
+                    type="file"
+                    id="landing-logo-input"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={__v?.onLogoUpload}
+                  />
+                  {__b(__v?.logoImg) ? (
+                    <img
+                      src={__v?.logoImg}
+                      alt="Logo preview"
+                      onClick={() => __v?.viewImage('logo')}
+                      title="Click to view full size"
+                      style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '999px',
+                        objectFit: 'cover',
+                        cursor: 'pointer',
+                        flex: 'none',
+                        border: '1px solid #d9dce3',
+                      }}
+                    />
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '999px',
+                        flex: 'none',
+                        background: `${__t(__v?.logoThumbBg)}`,
+                        color: '#ffffff',
+                        fontWeight: '800',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '1px dashed #d9dce3',
+                      }}
+                    >{`${__t(__v?.logoThumbText)}`}</span>
+                  )}{' '}
                   <span style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column' }}>
                     <strong>{'Logo'}</strong>
-                    <span style={{ fontSize: '14px', color: '#5b6475' }}>{'Square, 512 px or larger.'}</span>
+                    <span style={{ fontSize: '14px', color: '#5b6475' }}>
+                      {__v?.logoImg
+                        ? __v?.logoFileName || 'Logo image uploaded and saved'
+                        : 'Square, 512 px or larger.'}
+                    </span>
                   </span>{' '}
-                  <button
-                    type="button"
-                    onClick={__v?.toggleLogo}
-                    style={{
-                      border: '1px solid #e3e5ec',
-                      background: '#ffffff',
-                      color: '#101827',
-                      fontWeight: '700',
-                      borderRadius: '12px',
-                      padding: '8px 14px',
-                      minHeight: '44px',
-                      cursor: 'pointer',
-                    }}
-                  >{`${__t(__v?.logoBtn)}`}</button>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {__b(__v?.logoImg) ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => __v?.viewImage('logo')}
+                          style={{
+                            border: '1px solid #e3e5ec',
+                            background: '#ffffff',
+                            color: '#101827',
+                            fontWeight: '600',
+                            fontSize: '13px',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {'View'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (typeof document !== 'undefined') {
+                              document.getElementById('landing-logo-input')?.click();
+                            }
+                          }}
+                          style={{
+                            border: '1px solid #4661ad',
+                            background: '#ffffff',
+                            color: '#4661ad',
+                            fontWeight: '600',
+                            fontSize: '13px',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {'Change'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={__v?.removeLogo}
+                          style={{
+                            border: '1px solid #fecaca',
+                            background: '#fef2f2',
+                            color: '#b91c1c',
+                            fontWeight: '600',
+                            fontSize: '13px',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {'Remove'}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (typeof document !== 'undefined') {
+                            document.getElementById('landing-logo-input')?.click();
+                          }
+                        }}
+                        style={{
+                          border: '1px solid #e3e5ec',
+                          background: '#ffffff',
+                          color: '#101827',
+                          fontWeight: '700',
+                          borderRadius: '12px',
+                          padding: '8px 14px',
+                          minHeight: '44px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {'Upload image'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </section>{' '}
               <section
@@ -1123,7 +1428,9 @@ LandingView.prototype.__template = function (__v) {
                       <div
                         style={{
                           height: '130px',
-                          background: `${__t(__v?.coverBg)}`,
+                          background: __v?.coverImg
+                            ? `url(${__v.coverImg}) center / cover no-repeat`
+                            : `${__t(__v?.coverBg)}`,
                           display: 'flex',
                           alignItems: 'flex-end',
                           justifyContent: 'flex-start',
@@ -1131,19 +1438,21 @@ LandingView.prototype.__template = function (__v) {
                           boxSizing: 'border-box',
                         }}
                       >
-                        <span
-                          style={{
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            letterSpacing: '0.08em',
-                            color: '#ffffff',
-                            background: 'rgba(16,24,39,0.55)',
-                            borderRadius: '999px',
-                            padding: '2px 8px',
-                          }}
-                        >
-                          {'COVER PHOTO'}
-                        </span>
+                        {!__v?.coverImg ? (
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              letterSpacing: '0.08em',
+                              color: '#ffffff',
+                              background: 'rgba(16,24,39,0.55)',
+                              borderRadius: '999px',
+                              padding: '2px 8px',
+                            }}
+                          >
+                            {'COVER PHOTO'}
+                          </span>
+                        ) : null}
                       </div>
                     </>
                   ) : null}{' '}
@@ -1159,23 +1468,40 @@ LandingView.prototype.__template = function (__v) {
                   >
                     {__b(__v?.logo) ? (
                       <>
-                        <span
-                          style={{
-                            width: '56px',
-                            height: '56px',
-                            borderRadius: '999px',
-                            background: '#ffffff',
-                            color: `${__t(__v?.color)}`,
-                            fontWeight: '800',
-                            fontSize: '24px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            marginBottom: '4px',
-                            boxShadow: `0 0 0 3px ${__t(__v?.logoRing)}`,
-                            marginTop: `${__t(__v?.logoLift)}`,
-                          }}
-                        >{`${__t(__v?.initial)}`}</span>
+                        {__v?.logoImg ? (
+                          <img
+                            src={__v?.logoImg}
+                            alt="Logo"
+                            style={{
+                              width: '56px',
+                              height: '56px',
+                              borderRadius: '999px',
+                              objectFit: 'cover',
+                              marginBottom: '4px',
+                              boxShadow: `0 0 0 3px ${__t(__v?.logoRing)}`,
+                              marginTop: `${__t(__v?.logoLift)}`,
+                              background: '#ffffff',
+                            }}
+                          />
+                        ) : (
+                          <span
+                            style={{
+                              width: '56px',
+                              height: '56px',
+                              borderRadius: '999px',
+                              background: '#ffffff',
+                              color: `${__t(__v?.color)}`,
+                              fontWeight: '800',
+                              fontSize: '24px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              marginBottom: '4px',
+                              boxShadow: `0 0 0 3px ${__t(__v?.logoRing)}`,
+                              marginTop: `${__t(__v?.logoLift)}`,
+                            }}
+                          >{`${__t(__v?.initial)}`}</span>
+                        )}
                       </>
                     ) : null}{' '}
                     <span
@@ -1327,6 +1653,107 @@ LandingView.prototype.__template = function (__v) {
           </div>
         </main>
       </div>
+      {__b(__v?.viewImgModal) ? (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(16,24,39,0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+            backdropFilter: 'blur(4px)',
+          }}
+          onClick={__v?.closeImgModal}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              padding: '24px',
+              maxWidth: '520px',
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              alignItems: 'center',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span style={{ fontWeight: '700', fontSize: '18px' }}>
+                {__v?.viewImgModal === 'cover' ? 'Saved Cover Photo' : 'Saved Business Logo'}
+              </span>
+              <button
+                type="button"
+                onClick={__v?.closeImgModal}
+                style={{
+                  border: 0,
+                  background: '#f7f7f9',
+                  borderRadius: '999px',
+                  width: '32px',
+                  height: '32px',
+                  cursor: 'pointer',
+                  fontWeight: '700',
+                  fontSize: '16px',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <img
+              src={__v?.viewImgModal === 'cover' ? __v?.coverImg : __v?.logoImg}
+              alt="Full Preview"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '340px',
+                borderRadius: '12px',
+                border: '1px solid #e3e5ec',
+                objectFit: 'contain',
+              }}
+            />
+            <div style={{ display: 'flex', gap: '10px', width: '100%', justifyContent: 'flex-end' }}>
+              <a
+                href={__v?.viewImgModal === 'cover' ? __v?.coverImg : __v?.logoImg}
+                download={__v?.viewImgModal === 'cover' ? 'cover-photo.png' : 'brand-logo.png'}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  background: '#4661ad',
+                  color: '#ffffff',
+                  fontWeight: '600',
+                  textDecoration: 'none',
+                  fontSize: '14px',
+                }}
+              >
+                Download File
+              </a>
+              <button
+                type="button"
+                onClick={__v?.closeImgModal}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  background: '#f7f7f9',
+                  color: '#101827',
+                  fontWeight: '600',
+                  border: '1px solid #e3e5ec',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 };

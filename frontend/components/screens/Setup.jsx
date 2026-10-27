@@ -23,23 +23,65 @@ class SetupView extends DCLogic {
       locOpen: false,
       mapDrag: false,
       myLoc: false,
+      logo: null,
+      logoFileName: '',
+      viewLogoModal: false,
     };
   }
   componentDidMount() {
     if (typeof window !== 'undefined') {
       try {
+        const updates = {};
+        const savedLogo = window.localStorage.getItem('tm-logo');
+        if (savedLogo) {
+          updates.logo = savedLogo;
+        }
+        const savedSetup = window.localStorage.getItem('tm-setup-data');
+        if (savedSetup) {
+          const parsed = JSON.parse(savedSetup);
+          if (parsed && typeof parsed === 'object') {
+            if (parsed.name) updates.name = parsed.name;
+            if (parsed.type) updates.type = parsed.type;
+            if (parsed.accent) updates.accent = parsed.accent;
+            if (parsed.count) updates.count = parsed.count;
+            if (parsed.reward) updates.reward = parsed.reward;
+            if (parsed.lat) updates.lat = parsed.lat;
+            if (parsed.lng) updates.lng = parsed.lng;
+            if (parsed.step) updates.step = parsed.step;
+          }
+        }
         const saved = window.localStorage.getItem('tc_registered_merchant');
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (parsed.name) {
-            this.setState({
-              name: parsed.name,
-              type: parsed.type || this.state.type,
-            });
-          }
+          if (parsed.name) updates.name = parsed.name;
+          if (parsed.type) updates.type = parsed.type;
+        }
+        if (Object.keys(updates).length > 0) {
+          this.setState(updates);
         }
       } catch (e) {}
     }
+  }
+  saveSetupProgress(partial = {}) {
+    if (typeof window === 'undefined') return;
+    try {
+      const current = {
+        name: this.state.name,
+        type: this.state.type,
+        accent: this.state.accent,
+        count: this.state.count,
+        reward: this.state.reward,
+        lat: this.state.lat,
+        lng: this.state.lng,
+        step: this.state.step,
+        ...partial,
+      };
+      window.localStorage.setItem('tm-setup-data', JSON.stringify(current));
+      window.localStorage.setItem(
+        'tc_registered_merchant',
+        JSON.stringify({ name: current.name, type: current.type, accent: current.accent }),
+      );
+    } catch (e) {}
   }
   places() {
     // Approximate centres, for the prototype map only
@@ -148,12 +190,28 @@ class SetupView extends DCLogic {
       hasBack: step > 1,
       isLast: step === 4,
       notLast: step < 4,
-      next: () => this.setState({ step: Math.min(4, step + 1) }),
-      back: () => this.setState({ step: Math.max(1, step - 1) }),
+      next: () => {
+        const nextStep = Math.min(4, step + 1);
+        this.saveSetupProgress({ step: nextStep });
+        this.setState({ step: nextStep });
+      },
+      back: () => {
+        const prevStep = Math.max(1, step - 1);
+        this.saveSetupProgress({ step: prevStep });
+        this.setState({ step: prevStep });
+      },
       name,
       reward: this.state.reward,
-      onName: (e) => this.setState({ name: e.target.value }),
-      onReward: (e) => this.setState({ reward: e.target.value }),
+      onName: (e) => {
+        const val = e.target.value;
+        this.saveSetupProgress({ name: val });
+        this.setState({ name: val });
+      },
+      onReward: (e) => {
+        const val = e.target.value;
+        this.saveSetupProgress({ reward: val });
+        this.setState({ reward: val });
+      },
       displayName: name || 'Your business',
       initial: (name || 'Y').trim().charAt(0).toUpperCase() || 'Y',
       accentHex: this.state.accent,
@@ -167,7 +225,40 @@ class SetupView extends DCLogic {
         ['#8a4b2a', 'Coffee brown'],
         ['#c2410c', 'Burnt orange'],
       ].map(([hex, label]) => ({ hex, label })),
-      setAccent: (hex) => this.setState({ accent: hex }),
+      setAccent: (hex) => {
+        this.saveSetupProgress({ accent: hex });
+        this.setState({ accent: hex });
+      },
+      logo: this.state.logo,
+      hasLogo: !!this.state.logo,
+      logoFileName: this.state.logoFileName,
+      viewLogoModal: this.state.viewLogoModal,
+      onLogoUpload: (e) => {
+        const file = e.target?.files?.[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const dataUrl = ev.target?.result;
+            if (dataUrl) {
+              this.setState({ logo: dataUrl, logoFileName: file.name });
+              try {
+                window.localStorage.setItem('tm-logo', dataUrl);
+              } catch (x) {}
+              this.saveSetupProgress({ logo: dataUrl });
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      },
+      removeLogo: () => {
+        this.setState({ logo: null, logoFileName: '' });
+        try {
+          window.localStorage.removeItem('tm-logo');
+        } catch (x) {}
+        this.saveSetupProgress({ logo: null });
+      },
+      viewLogo: () => this.setState({ viewLogoModal: true }),
+      closeLogoModal: () => this.setState({ viewLogoModal: false }),
       ...(() => {
         const st = this.state;
         const P = this.places();
@@ -886,39 +977,142 @@ SetupView.prototype.__template = function (__v) {
                   </div>{' '}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <span style={{ fontWeight: '700' }}>{'Logo'}</span>{' '}
-                    <button
-                      type="button"
-                      style={{
-                        border: '2px dashed #e3e5ec',
-                        borderRadius: '12px',
-                        background: '#f7f7f9',
-                        padding: '28px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '6px',
-                        cursor: 'pointer',
-                        color: '#101827',
-                      }}
-                    >
-                      <svg
-                        width="24"
-                        height="24"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="#5b6475"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
+                    <input
+                      type="file"
+                      id="setup-logo-input"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={__v?.onLogoUpload}
+                    />
+                    {!__v?.hasLogo ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (typeof document !== 'undefined') {
+                            document.getElementById('setup-logo-input')?.click();
+                          }
+                        }}
+                        style={{
+                          border: '2px dashed #4661ad',
+                          borderRadius: '12px',
+                          background: '#f0f3fa',
+                          padding: '28px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '6px',
+                          cursor: 'pointer',
+                          color: '#101827',
+                        }}
                       >
-                        <path d="M12 16V4M7 9l5-5 5 5M4 20h16" />
-                      </svg>{' '}
-                      <span style={{ fontWeight: '700' }}>{'Upload logo'}</span>
-                      <span style={{ fontSize: '14px', color: '#5b6475' }}>
-                        {'PNG or SVG, square, at least 512 px'}
-                      </span>
-                    </button>
+                        <svg
+                          width="24"
+                          height="24"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="#4661ad"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M12 16V4M7 9l5-5 5 5M4 20h16" />
+                        </svg>{' '}
+                        <span style={{ fontWeight: '700', color: '#4661ad' }}>{'Upload logo'}</span>
+                        <span style={{ fontSize: '14px', color: '#5b6475' }}>
+                          {'PNG, JPG or SVG, square, at least 512 px'}
+                        </span>
+                      </button>
+                    ) : (
+                      <div
+                        style={{
+                          border: '1px solid #e3e5ec',
+                          borderRadius: '12px',
+                          background: '#ffffff',
+                          padding: '16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '16px',
+                          boxShadow: '0 2px 6px rgba(16,24,39,0.04)',
+                        }}
+                      >
+                        <img
+                          src={__v?.logo}
+                          alt="Logo thumbnail"
+                          onClick={__v?.viewLogo}
+                          title="Click to view full size"
+                          style={{
+                            width: '56px',
+                            height: '56px',
+                            borderRadius: '12px',
+                            objectFit: 'cover',
+                            border: '1px solid #e3e5ec',
+                            cursor: 'pointer',
+                            flex: 'none',
+                          }}
+                        />
+                        <div style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                          <span style={{ fontWeight: '700', fontSize: '15px' }}>{'Logo saved'}</span>
+                          <span style={{ fontSize: '13px', color: '#5b6475', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {__v?.logoFileName || 'Saved in browser storage'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={__v?.viewLogo}
+                            style={{
+                              border: '1px solid #e3e5ec',
+                              background: '#ffffff',
+                              color: '#101827',
+                              fontWeight: '600',
+                              fontSize: '13px',
+                              borderRadius: '8px',
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {'View'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (typeof document !== 'undefined') {
+                                document.getElementById('setup-logo-input')?.click();
+                              }
+                            }}
+                            style={{
+                              border: '1px solid #4661ad',
+                              background: '#ffffff',
+                              color: '#4661ad',
+                              fontWeight: '600',
+                              fontSize: '13px',
+                              borderRadius: '8px',
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {'Change'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={__v?.removeLogo}
+                            style={{
+                              border: '1px solid #fecaca',
+                              background: '#fef2f2',
+                              color: '#b91c1c',
+                              fontWeight: '600',
+                              fontSize: '13px',
+                              borderRadius: '8px',
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {'Remove'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>{' '}
                   <fieldset style={{ border: '0', padding: '0', margin: '0' }}>
                     <legend style={{ fontWeight: '700', padding: '0', marginBottom: '10px' }}>
@@ -1412,21 +1606,38 @@ SetupView.prototype.__template = function (__v) {
               <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '0' }}>
-                    <span
-                      style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: '12px',
-                        background: `${__t(__v?.accentHex)}`,
-                        color: '#ffffff',
-                        fontWeight: '800',
-                        fontSize: '20px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flex: 'none',
-                      }}
-                    >{`${__t(__v?.initial)}`}</span>{' '}
+                    {__b(__v?.hasLogo) ? (
+                      <img
+                        src={__v?.logo}
+                        alt="Logo"
+                        onClick={__v?.viewLogo}
+                        style={{
+                          width: '44px',
+                          height: '44px',
+                          borderRadius: '12px',
+                          objectFit: 'cover',
+                          flex: 'none',
+                          cursor: 'pointer',
+                          border: '1px solid rgba(0,0,0,0.08)',
+                        }}
+                      />
+                    ) : (
+                      <span
+                        style={{
+                          width: '44px',
+                          height: '44px',
+                          borderRadius: '12px',
+                          background: `${__t(__v?.accentHex)}`,
+                          color: '#ffffff',
+                          fontWeight: '800',
+                          fontSize: '20px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flex: 'none',
+                        }}
+                      >{`${__t(__v?.initial)}`}</span>
+                    )}{' '}
                     <span
                       style={{
                         fontSize: '24px',
@@ -1551,6 +1762,105 @@ SetupView.prototype.__template = function (__v) {
           </aside>
         </main>
       </div>
+      {__b(__v?.viewLogoModal) ? (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(16,24,39,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+            backdropFilter: 'blur(4px)',
+          }}
+          onClick={__v?.closeLogoModal}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              padding: '24px',
+              maxWidth: '440px',
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              alignItems: 'center',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span style={{ fontWeight: '700', fontSize: '18px' }}>{'Your Uploaded Logo'}</span>
+              <button
+                type="button"
+                onClick={__v?.closeLogoModal}
+                style={{
+                  border: 0,
+                  background: '#f7f7f9',
+                  borderRadius: '999px',
+                  width: '32px',
+                  height: '32px',
+                  cursor: 'pointer',
+                  fontWeight: '700',
+                  fontSize: '16px',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <img
+              src={__v?.logo}
+              alt="Logo Full View"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '280px',
+                borderRadius: '12px',
+                border: '1px solid #e3e5ec',
+                objectFit: 'contain',
+              }}
+            />
+            <div style={{ display: 'flex', gap: '10px', width: '100%', justifyContent: 'flex-end' }}>
+              <a
+                href={__v?.logo}
+                download="brand-logo.png"
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  background: '#4661ad',
+                  color: '#ffffff',
+                  fontWeight: '600',
+                  textDecoration: 'none',
+                  fontSize: '14px',
+                }}
+              >
+                Download File
+              </a>
+              <button
+                type="button"
+                onClick={__v?.closeLogoModal}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  background: '#f7f7f9',
+                  color: '#101827',
+                  fontWeight: '600',
+                  border: '1px solid #e3e5ec',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 };
