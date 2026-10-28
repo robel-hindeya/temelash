@@ -121,6 +121,10 @@ export const merchant = {
   activateStaff(id) {
     return request(`/merchant/staff/${id}/activate`, { method: 'POST' }, 'owner');
   },
+  // New one-time invite link for a member who has not joined yet (the old link stops working).
+  reissueInvitation(id) {
+    return request(`/merchant/staff/${id}/invitation`, { method: 'POST' }, 'owner');
+  },
 
   // Customers
   getCustomers(params = {}) {
@@ -132,6 +136,12 @@ export const merchant = {
   },
   deactivateMembership(membershipId) {
     return request(`/merchant/memberships/${membershipId}/deactivate`, { method: 'POST' }, 'owner');
+  },
+  reactivateMembership(membershipId) {
+    return request(`/merchant/memberships/${membershipId}/reactivate`, { method: 'POST' }, 'owner');
+  },
+  withdrawCustomerMarketing(customerId) {
+    return request(`/merchant/customers/${customerId}/consents/marketing/withdraw`, { method: 'POST' }, 'owner');
   },
 
   // Analytics

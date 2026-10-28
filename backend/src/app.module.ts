@@ -32,6 +32,7 @@ import { MerchantsModule } from './modules/merchants';
 import { StaffModule } from './modules/staff';
 import { TelegramModule } from './modules/telegram';
 import { NotificationsModule } from './modules/notifications';
+import { PlatformAdminModule } from './modules/platform-admin';
 
 import { AppController } from './app.controller';
 
@@ -76,6 +77,7 @@ import { AppController } from './app.controller';
     CustomersModule,
     TelegramModule,
     NotificationsModule,
+    PlatformAdminModule,
     MembershipsModule,
     RewardsModule,
     StampsModule,

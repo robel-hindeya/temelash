@@ -100,34 +100,6 @@ export default function renderAnalytics(__v) {
                   </React.Fragment>
                 ))}
               </div>{' '}
-              <label
-                htmlFor="an-loc"
-                style={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)' }}
-              >
-                {'Branch'}
-              </label>{' '}
-              <select
-                id="an-loc"
-                value={__v?.selectedBranch || ''}
-                onChange={__v?.onBranchChange}
-                style={{
-                  border: '1px solid #e3e5ec',
-                  borderRadius: '12px',
-                  padding: '10px 14px',
-                  minHeight: '48px',
-                  background: '#ffffff',
-                  color: '#101827',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                }}
-              >
-                <option value="">{'All branches'}</option>
-                {(__v?.branches || []).map((b, idx) => (
-                  <option key={idx} value={b.branchId || b.nameEn}>
-                    {b.nameEn ? `${b.nameEn} branch` : b.name}
-                  </option>
-                ))}
-              </select>
             </div>
           </div>{' '}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '16px' }}>
@@ -310,7 +282,7 @@ export default function renderAnalytics(__v) {
               <h2 style={{ margin: '0', fontSize: '20px', lineHeight: '26px', fontWeight: '700' }}>{'Busiest days'}</h2>{' '}
               <div
                 role="img"
-                aria-label="Stamps by weekday, busiest on Saturday"
+                aria-label={__v?.daysAlt}
                 style={{
                   height: '160px',
                   display: 'flex',
@@ -384,7 +356,7 @@ export default function renderAnalytics(__v) {
               </h2>{' '}
               <div
                 role="img"
-                aria-label="Stamps by hour, peaks at 8am and 1pm"
+                aria-label={__v?.hoursAlt}
                 style={{
                   height: '160px',
                   display: 'flex',

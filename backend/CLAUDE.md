@@ -17,7 +17,8 @@ NestJS 11, Prisma 6, PostgreSQL. Global prefix `/api/v1`. Design notes per topic
 | `merchants` | merchant profile, public directory, platform merchant admin | `merchant/profile`, `platform/merchants` |
 | `branches`, `staff` | branches; staff, roles, invitations | `merchant/branches`, `merchant/staff`, `auth/invitations` |
 | `auth` | login, tokens, permissions guard, password hashing | `auth/*`, `platform/users` |
-| `analytics`, `fraud`, `privacy`, `audit`, `audit-viewer` | reporting, fraud flags, export/anonymise, audit log | `merchant/analytics`, `merchant/fraud`, `merchant/*` |
+| `platform-admin` | business applications (public form → approve creates the merchant + owner invitation, or reject), platform overview numbers | `merchant-applications`, `platform/overview`, `platform/applications/*` |
+| `analytics`, `fraud`, `privacy`, `audit`, `audit-viewer` | reporting (overview includes stamps by day / weekday / hour), fraud flags, export/anonymise, audit log | `merchant/analytics`, `merchant/fraud`, `merchant/*` |
 | `wallet`, `jobs`, `tenancy`, `health` | wallet passes, outbox worker, tenant scoping, health | `wallet/*`, `platform/outbox`, `health` |
 
 Each module: `api/` (controllers + DTOs) → `application/` (services) → `domain/` (pure rules, `*.spec.ts`)
@@ -49,6 +50,8 @@ audit with `AuditService.record`. Schema change: edit `prisma/schema.prisma`, ad
 - Unit: `npx jest --selectProjects unit` (no database).
 - E2E: needs Postgres and a gitignored `.env.test` pointing at a `*_test` database; then
   `node scripts/test-db.mjs deploy` and `npx jest --selectProjects e2e --runInBand <file>`.
-- Known: 13 tests in `test/e2e/enrollment.e2e-spec.ts` fail on `main` because enrollment matches an
+- Config reads `.env.test` and then `.env`, so a real `TELEGRAM_BOT_TOKEN` in `.env` makes scanner,
+  rewards, wallet and notification tests fail: run with `TELEGRAM_BOT_TOKEN= TELEGRAM_WEBHOOK_SECRET=`.
+- Known: 20 e2e tests fail on `main`; 13 of them in `test/e2e/enrollment.e2e-spec.ts` fail on `main` because enrollment matches an
   existing customer by email and those tests reuse one email.
 - Typecheck `npx tsc --noEmit -p tsconfig.json`; lint `npx eslint <paths>`.

@@ -10,56 +10,42 @@ const __CSS =
 class AnalyticsView extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = {
-      range: '30',
-      overview: null,
-      staffList: [],
-      branches: [],
-      customers: [],
-      selectedBranch: '',
-      loading: true,
-    };
+    this.state = { range: '30', overview: null, staffList: [], loading: true, error: '' };
   }
 
-  async componentDidMount() {
-    try {
-      const [overviewRes, staffRes, branchRes, custRes] = await Promise.allSettled([
-        api.merchant.getAnalyticsOverview(),
-        api.merchant.getStaffAnalytics(),
-        api.merchant.getBranchAnalytics(),
-        api.merchant.getCustomers({ limit: 100 }),
-      ]);
-      const updates = { loading: false };
-      if (overviewRes.status === 'fulfilled' && overviewRes.value) {
-        updates.overview = overviewRes.value;
-      }
-      if (staffRes.status === 'fulfilled' && staffRes.value?.items) {
-        updates.staffList = staffRes.value.items;
-      }
-      if (branchRes.status === 'fulfilled' && branchRes.value?.items) {
-        updates.branches = branchRes.value.items;
-      }
-      if (custRes.status === 'fulfilled' && custRes.value?.items) {
-        updates.customers = custRes.value.items;
-      }
-      this.setState(updates);
-    } catch (e) {
-      console.warn('Analytics failed to load live data:', e);
-      this.setState({ loading: false });
-    }
+  componentDidMount() {
+    this.load(this.state.range);
+  }
+
+  // Everything on this screen comes from the backend for the chosen range (days up to and including today).
+  async load(range) {
+    this.setState({ loading: true, error: '' });
+    const from = new Date(Date.now() - (Number(range) - 1) * 86400000).toISOString().slice(0, 10);
+    const [overviewRes, staffRes] = await Promise.allSettled([
+      api.merchant.getAnalyticsOverview({ from }),
+      api.merchant.getStaffAnalytics({ from, limit: '100' }),
+    ]);
+    if (this.state.range !== range) return;
+    this.setState({
+      loading: false,
+      overview: overviewRes.status === 'fulfilled' ? overviewRes.value : null,
+      staffList: staffRes.status === 'fulfilled' ? staffRes.value?.items || [] : [],
+      error: overviewRes.status === 'rejected' ? overviewRes.reason?.message || 'Could not load analytics.' : '',
+    });
   }
 
   renderVals() {
     const r = this.state.range;
+    const days = Number(r);
     const od = this.state.overview || {};
-    const customers = this.state.customers || [];
     const staffList = this.state.staffList || [];
-    const totalCustomers = od.totalCustomers ?? customers.length;
     const stampsCount = od.stampsIssued?.count ?? 0;
     const rewardsCount = od.rewardsRedeemed ?? 0;
     const rewardsUnlocked = od.rewardsUnlocked ?? 0;
-    const activeMembers = od.activeMembers ?? customers.filter((c) => (c.stamps || 0) > 0).length;
-    const retRate = totalCustomers > 0 ? Math.round((activeMembers / totalCustomers) * 100) : 0;
+    const activeMembers = od.activeMembers ?? 0;
+    const returning = od.returningCustomers ?? 0;
+    const newMembers = od.newMembers ?? 0;
+    const retRate = activeMembers > 0 ? Math.round((returning / activeMembers) * 100) : 0;
 
     const ranges = [
       ['7', '7 days'],
@@ -70,81 +56,55 @@ class AnalyticsView extends DCLogic {
       pressed: id === r ? 'true' : 'false',
       bg: id === r ? '#101827' : 'transparent',
       color: id === r ? '#ffffff' : '#101827',
-      pick: () => this.setState({ range: id }),
+      pick: () => {
+        this.setState({ range: id });
+        this.load(id);
+      },
     }));
 
-    // Dynamic visits data derived from real timestamps
-    const now = new Date();
-    let xLabels = [];
-    let vValues = [];
-    let chartTitle = 'Stamps per day';
-
-    if (r === '7') {
-      chartTitle = 'Stamps per day';
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(now.getTime() - i * 86400000);
-        const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()];
-        const matched = customers.filter(
-          (c) => c.joinedAt && new Date(c.joinedAt).toDateString() === d.toDateString()
-        ).length;
-        const count = matched + (i === 0 ? stampsCount : 0);
-        xLabels.push(dayName);
-        vValues.push(count);
-      }
-    } else if (r === '30') {
-      chartTitle = 'Stamps per week';
-      for (let i = 4; i >= 0; i--) {
-        const d = new Date(now.getTime() - i * 7 * 86400000);
-        const dateStr = d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
-        const matched = customers.filter((c) => {
-          if (!c.joinedAt) return false;
-          const cd = new Date(c.joinedAt);
-          const diffDays = (now.getTime() - cd.getTime()) / 86400000;
-          return diffDays >= i * 7 && diffDays < (i + 1) * 7;
-        }).length;
-        const count = matched + (i === 0 ? stampsCount : 0);
-        xLabels.push(dateStr);
-        vValues.push(count);
-      }
+    // Stamps per day (7 days) or per week (30 and 90 days), with zeros where nothing happened.
+    const perDay = new Map((od.stampsByDay || []).map((d) => [d.day, d.count]));
+    const isoDay = (t) => new Date(t).toISOString().slice(0, 10);
+    const now = Date.now();
+    const dayList = [];
+    for (let i = days - 1; i >= 0; i--) dayList.push(isoDay(now - i * 86400000));
+    const xLabels = [];
+    const vValues = [];
+    const chartTitle = days === 7 ? 'Stamps per day' : 'Stamps per week';
+    const utc = (d, opts) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { ...opts, timeZone: 'UTC' });
+    if (days === 7) {
+      dayList.forEach((d) => {
+        xLabels.push(utc(d, { weekday: 'short' }));
+        vValues.push(perDay.get(d) || 0);
+      });
     } else {
-      chartTitle = 'Stamps per week';
-      for (let i = 11; i >= 0; i--) {
-        const d = new Date(now.getTime() - i * 7 * 86400000);
-        const dateStr = d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
-        const matched = customers.filter((c) => {
-          if (!c.joinedAt) return false;
-          const cd = new Date(c.joinedAt);
-          const diffDays = (now.getTime() - cd.getTime()) / 86400000;
-          return diffDays >= i * 7 && diffDays < (i + 1) * 7;
-        }).length;
-        const count = matched + (i === 0 ? stampsCount : 0);
-        xLabels.push(dateStr);
-        vValues.push(count);
+      for (let i = 0; i < dayList.length; i += 7) {
+        const week = dayList.slice(i, i + 7);
+        xLabels.push(utc(week[0], { day: 'numeric', month: 'short' }));
+        vValues.push(week.reduce((a, d) => a + (perDay.get(d) || 0), 0));
       }
     }
-
     const maxVisit = Math.max.apply(null, [1, ...vValues]) * 1.2;
     const visits = vValues.map((v, i) => ({
       v: v.toLocaleString('en-US'),
       x: xLabels[i],
-      h: Math.max(8, Math.round((v / maxVisit) * 100)) + '%',
+      h: Math.max(v > 0 ? 8 : 2, Math.round((v / maxVisit) * 100)) + '%',
       tip: `${xLabels[i]}: ${v} stamps`,
       label: true,
     }));
 
     const kp = [
-      ['STAMPS', stampsCount.toLocaleString('en-US'), 'Verified on cryptographic ledger'],
-      ['NEW CARDS', String(totalCustomers), `Saved in last ${r} days`],
-      ['RETURN RATE', `${retRate}%`, 'Active customers visiting regularly'],
+      ['STAMPS', stampsCount.toLocaleString('en-US'), `${od.stampsIssued?.reversed ?? 0} undone`],
+      ['NEW CARDS', String(newMembers), `Joined in the last ${r} days`],
+      ['CAME BACK', `${retRate}%`, `${returning} of ${activeMembers} visitors had been before`],
       ['REWARDS REDEEMED', String(rewardsCount), `of ${rewardsUnlocked} unlocked`],
     ].map(([label, value, note]) => ({ label, value, note }));
 
-    // Funnel based on real customers & ledger events from PostgreSQL
-    const scansCount = Math.max(od.qrScanned ?? 0, totalCustomers);
+    const scansCount = od.qrScanned ?? newMembers;
     const fdef = [
       ['Scanned your QR', scansCount],
-      ['Saved the card', totalCustomers],
-      ['Came back at least once', activeMembers],
+      ['Saved the card', newMembers],
+      ['Came back at least once', returning],
       ['Unlocked a reward', rewardsUnlocked],
       ['Redeemed it', rewardsCount],
     ];
@@ -157,59 +117,45 @@ class AnalyticsView extends DCLogic {
       tip: `${label}: ${v}`,
     }));
 
-    // Days of week distribution
+    // Weekdays Monday first; the backend counts 0 = Sunday.
     const dx = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const dv = [0, 0, 0, 0, 0, 0, 0];
-    customers.forEach((c) => {
-      if (c.joinedAt) {
-        const idx = (new Date(c.joinedAt).getDay() + 6) % 7;
-        dv[idx]++;
-      }
-    });
-    const todayIdx = (new Date().getDay() + 6) % 7;
-    dv[todayIdx] += stampsCount;
+    const wk = od.stampsByWeekday || [];
+    const dv = [1, 2, 3, 4, 5, 6, 0].map((i) => wk[i] || 0);
     const dmax = Math.max.apply(null, [1, ...dv]) * 1.25;
-    const days = dv.map((v, i) => ({
+    const dayBars = dv.map((v, i) => ({
       v: v.toLocaleString('en-US'),
       x: dx[i],
-      h: Math.max(8, Math.round((v / dmax) * 100)) + '%',
+      h: Math.max(v > 0 ? 8 : 2, Math.round((v / dmax) * 100)) + '%',
       tip: `${dx[i]}: ${v} stamps`,
     }));
+    const busiestDay = dv.some((v) => v > 0) ? dx[dv.indexOf(Math.max(...dv))] : null;
 
-    // Hours distribution (7am to 8pm)
-    const hx = ['7', '8', '9', '10', '11', '12', '1', '2', '3', '4', '5', '6', '7', '8'];
-    const hv = new Array(14).fill(0);
-    customers.forEach((c) => {
-      if (c.joinedAt) {
-        const h = new Date(c.joinedAt).getHours();
-        if (h >= 7 && h <= 20) hv[h - 7]++;
-      }
-    });
-    const curH = new Date().getHours();
-    if (curH >= 7 && curH <= 20) hv[curH - 7] += stampsCount;
-    const hmax = Math.max.apply(null, [1, ...hv]) * 1.25;
-    const hours = hv.map((v, i) => ({
+    // 7am to 8pm, widened when stamps fall outside those hours.
+    const hb = od.stampsByHour || [];
+    const withData = [];
+    for (let h = 0; h < 24; h++) if (hb[h] > 0) withData.push(h);
+    const firstH = Math.min(7, ...withData);
+    const lastH = Math.max(20, ...withData);
+    const hourName = (h) => `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'am' : 'pm'}`;
+    const hv = [];
+    for (let h = firstH; h <= lastH; h++) hv.push([h, hb[h] || 0]);
+    const hmax = Math.max.apply(null, [1, ...hv.map((x) => x[1])]) * 1.25;
+    const hours = hv.map(([h, v]) => ({
       v: String(v),
-      x: hx[i],
-      h: Math.max(8, Math.round((v / hmax) * 100)) + '%',
-      tip: `${hx[i]}${i < 5 ? 'am' : 'pm'}: ${v} stamps`,
+      x: String(h % 12 === 0 ? 12 : h % 12),
+      h: Math.max(v > 0 ? 8 : 2, Math.round((v / hmax) * 100)) + '%',
+      tip: `${hourName(h)}: ${v} stamps`,
     }));
+    const peak = hv.reduce((a, x) => (x[1] > a[1] ? x : a), [null, 0]);
 
-    // Real staff analytics from database
-    const S = staffList.length > 0
-      ? staffList.map((st) => [st.displayName || 'Staff', st.stamps || 0])
-      : [
-          ['Bole Staff', stampsCount],
-          ['Sample Owner', 0],
-          ['Piassa Staff', 0],
-        ];
+    const S = staffList.map((st) => [st.displayName || 'Staff', st.stamps || 0]);
     const totStaff = S.reduce((a, x) => a + x[1], 0);
     const topStaff = Math.max.apply(null, [1, ...S.map((x) => x[1])]);
     const staff = S.map(([name, v]) => ({
       name,
       v: v.toLocaleString('en-US'),
       pct: totStaff > 0 ? Math.round((v / totStaff) * 100) + '%' : '0%',
-      w: Math.max(6, Math.round((v / topStaff) * 100)) + '%',
+      w: Math.max(v > 0 ? 6 : 0, Math.round((v / topStaff) * 100)) + '%',
       tip: `${name}: ${v.toLocaleString('en-US')} stamps in the last ${r} days`,
     }));
 
@@ -218,15 +164,14 @@ class AnalyticsView extends DCLogic {
       kpis: kp,
       visits,
       funnel,
-      days,
+      days: dayBars,
       hours,
       staff,
-      branches: this.state.branches,
-      selectedBranch: this.state.selectedBranch,
-      onBranchChange: (e) => this.setState({ selectedBranch: e.target.value }),
+      daysAlt: busiestDay ? `Stamps by weekday, busiest on ${busiestDay}` : 'Stamps by weekday: none yet',
+      hoursAlt: peak[0] !== null ? `Stamps by hour, busiest at ${hourName(peak[0])}` : 'Stamps by hour: none yet',
       visitsTitle: `${chartTitle} · last ${r} days`,
-      visitsAlt: `${chartTitle} over the last ${r} days, verified on ledger`,
-      rangeNote: `Last ${r} days`,
+      visitsAlt: `${chartTitle} over the last ${r} days`,
+      rangeNote: this.state.loading ? 'Loading…' : this.state.error || `Last ${r} days`,
     };
   }
 }

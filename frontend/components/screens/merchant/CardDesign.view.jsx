@@ -108,7 +108,7 @@ export default function renderCardDesign(__v) {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#101827' }}>
-                    {__v?.name || 'Coffee Stamp Card'}
+                    {__v?.name || 'Stamp card'}
                   </h2>
                   <span
                     style={{
@@ -137,10 +137,10 @@ export default function renderCardDesign(__v) {
                       border: '1px solid #bfdbfe',
                     }}
                   >
-                    Card ID: {__v?.selectedCardId || 'UXwJ9RwdyHs'}
+                    {__v?.programLine}
                   </span>
                   <span style={{ fontSize: '13px', color: '#64748b' }}>
-                    Scan QR to enroll & stamp · 10 stamps
+                    Customers join by scanning your QR
                   </span>
                 </div>
               </div>
@@ -659,7 +659,7 @@ export default function renderCardDesign(__v) {
                     <br />
                     <span style={{ fontSize: '14px', color: '#5b6475' }}>
                       {
-                        'Adds a tick box: "Send me offers from Buna House by email". Only people who tick it get offer emails.'
+                        'Email offers are not available yet. Offers go out on Telegram to customers who agreed.'
                       }
                     </span>
                   </span>

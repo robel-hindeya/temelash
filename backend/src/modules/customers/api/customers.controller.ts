@@ -31,6 +31,11 @@ class MembershipSummaryDto {
   @ApiProperty({ format: 'uuid' }) programId!: string;
   @ApiProperty({ enum: ['ACTIVE', 'INACTIVE'] }) status!: string;
   @ApiProperty({ format: 'date-time' }) joinedAt!: Date;
+  @ApiProperty({ description: 'Stamps given on this card, not counting reversed ones.' })
+  stampsGiven!: number;
+  @ApiProperty({ description: 'Rewards redeemed on this card, not counting reversed ones.' })
+  rewardsRedeemed!: number;
+  @ApiProperty({ format: 'date-time', nullable: true }) lastStampAt!: Date | null;
 }
 
 export class CustomerDto {

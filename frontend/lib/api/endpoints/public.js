@@ -41,6 +41,13 @@ export const publicApi = {
       body: JSON.stringify(data),
     });
   },
+  /** "Register your business": a pending application an admin reviews. */
+  applyAsMerchant(data) {
+    return publicRequest('/merchant-applications', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
   withdrawMarketing(cardToken) {
     return publicRequest('/card/consent/marketing/withdraw', {
       method: 'POST',

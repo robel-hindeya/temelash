@@ -2,7 +2,7 @@
 /* Generated from the Temelash Card design (CardDesign.dc.html). */
 import DCLogic from '@/lib/DCLogic';
 import { withDCStyle } from '@/lib/dc-runtime';
-import api, { getOrAssignMerchantCode, getMerchantJoinUrl, updateMerchantLoyaltyCard } from '@/lib/api';
+import api, { getOrAssignMerchantCode, getMerchantJoinUrl } from '@/lib/api';
 import renderCardDesign from './CardDesign.view';
 
 const __CSS =
@@ -12,69 +12,37 @@ class CardDesignView extends DCLogic {
     super(props);
     this.state = {
       programId: null,
-      name: 'Coffee Stamp Card',
-      nameAm: 'የቡና ማህተም ካርድ',
+      name: '',
+      nameAm: '',
+      saveError: '',
       accent: '#8a4b2a',
       icon: 'check',
       tab: 'web',
-      email: 'optional',
-      birthday: 'optional',
+      email: 'off',
+      birthday: 'off',
       cover: false,
       saved: false,
       copied: false,
       qrModalOpen: false,
-      selectedCardId: 'UXwJ9RwdyHs',
     };
   }
 
   async componentDidMount() {
-    this.persist();
-    try {
-      const activeCard = getMerchantLoyaltyCard();
-      const selectedCardId = activeCard?.id || 'UXwJ9RwdyHs';
-
-      const [profRes, progRes] = await Promise.allSettled([
-        api.merchant.getProfile(),
-        api.merchant.getPrograms('ACTIVE'),
-      ]);
-      const updates = {
-        selectedCardId,
-        name: activeCard.name || this.state.name,
-        nameAm: activeCard.nameAm || this.state.nameAm,
-        accent: activeCard.accent || this.state.accent,
-        icon: activeCard.icon || this.state.icon,
-      };
-      if (profRes.status === 'fulfilled' && profRes.value) {
-        if (!activeCard.name) updates.name = profRes.value.nameEn || this.state.name;
-        if (!activeCard.nameAm) updates.nameAm = profRes.value.nameAm || this.state.nameAm;
-      }
-      if (progRes.status === 'fulfilled' && progRes.value?.length) {
-        const p = progRes.value[0];
-        updates.programId = p.id;
-        if (p.brandColor && !activeCard.accent) updates.accent = p.brandColor;
-        if (p.cardDisplay?.stampIcon && !activeCard.icon) updates.icon = p.cardDisplay.stampIcon;
-      }
-      this.setState(updates);
-    } catch (e) {
-      console.warn('Failed to load card design settings from database:', e);
-    }
-  }
-  componentDidUpdate() {
-    this.persist();
-  }
-  persist() {
-    // Shares sign-up settings with the customer flow screen
-    try {
-      window.localStorage.setItem(
-        'tm-card',
-        JSON.stringify({
-          name: this.state.name,
-          accent: this.state.accent,
-          email: this.state.email,
-          birthday: this.state.birthday,
-        }),
-      );
-    } catch (e) {}
+    const [profRes, progRes] = await Promise.allSettled([
+      api.merchant.getProfile(),
+      api.merchant.getPrograms('ACTIVE'),
+    ]);
+    const prof = profRes.status === 'fulfilled' ? profRes.value : null;
+    const p = progRes.status === 'fulfilled' && Array.isArray(progRes.value) ? progRes.value[0] : null;
+    this.setState({
+      programId: p?.id || null,
+      stampsRequired: p?.stampsRequired || null,
+      name: p?.cardDisplay?.title || prof?.nameEn || '',
+      nameAm: p?.nameAm || prof?.nameAm || '',
+      accent: p?.brandColor || this.state.accent,
+      icon: p?.cardDisplay?.stampIcon || this.state.icon,
+      saveError: p ? '' : 'Your card is not live yet. Finish setup first: this design is saved to the live card.',
+    });
   }
   renderVals() {
     const s = this.state;
@@ -112,10 +80,10 @@ class CardDesignView extends DCLogic {
     }));
     const iconPath = (iconDefs.find((x) => x[0] === s.icon) || iconDefs[0])[2];
     const fieldDefs = [
-      ['name', 'Name', 'So staff and messages can greet them.', true, 'Your first name'],
-      ['phone', 'Phone number', 'Finds their card if they lose their phone.', true, '+251 9__ ___ ___'],
-      ['email', 'Email', 'Reach Android, iPhone and web-card customers alike.', false, 'name@example.com'],
-      ['birthday', 'Birthday', 'Needed for the birthday treat.', false, 'Day and month'],
+      ['name', 'Name', 'So staff and messages can greet them.', 'required', 'Your first name'],
+      ['phone', 'Phone number', 'Finds their card if they lose their phone.', 'required', '+251 9__ ___ ___'],
+      ['email', 'Email', 'Not available yet.', 'off', 'name@example.com'],
+      ['birthday', 'Birthday', 'Not available yet.', 'off', 'Day and month'],
     ];
     const optsFor = (id, locked) =>
       [
@@ -123,7 +91,7 @@ class CardDesignView extends DCLogic {
         ['optional', 'Optional'],
         ['required', 'Required'],
       ].map(([v, label]) => {
-        const cur = locked ? 'required' : s[id];
+        const cur = locked || s[id];
         const on = v === cur;
         return {
           label,
@@ -139,16 +107,16 @@ class CardDesignView extends DCLogic {
       });
     const fields = fieldDefs.map(([id, label, note, locked]) => ({
       label,
-      note: locked ? note + ' Always asked.' : note,
+      note: locked === 'required' ? note + ' Always asked.' : note,
       opts: optsFor(id, locked),
     }));
     const joinFields = fieldDefs
-      .filter(([id, , , locked]) => locked || s[id] !== 'off')
+      .filter(([id, , , locked]) => (locked || s[id]) !== 'off')
       .map(([id, label, , locked, ph]) => ({
         label: id === 'birthday' ? 'Birthday · for your surprise' : label,
         ph,
         hasHint: id === 'birthday',
-        tag: locked || s[id] === 'required' ? '' : '(optional)',
+        tag: (locked || s[id]) === 'required' ? '' : '(optional)',
       }));
     const tabs = [
       ['web', 'Web card'],
@@ -163,9 +131,11 @@ class CardDesignView extends DCLogic {
       pick: () => this.setState({ tab: id }),
     }));
     const slots = [];
-    for (let i = 0; i < 10; i++) {
-      const earned = i < 7,
-        reward = i === 9;
+    // Preview: the real card length with a few stamps filled in.
+    const len = s.stampsRequired || 10;
+    for (let i = 0; i < len; i++) {
+      const earned = i < Math.floor(len * 0.7),
+        reward = i === len - 1;
       slots.push({
         earned,
         reward,
@@ -181,12 +151,11 @@ class CardDesignView extends DCLogic {
       join: 'What customers see after scanning your QR.',
     };
     const merchantCode = getOrAssignMerchantCode(s.name);
-    const activeCardId = s.selectedCardId || 'UXwJ9RwdyHs';
     // Every customer QR opens the landing page, where customers join or sign back in.
     const cardUrl = getMerchantJoinUrl();
     return {
       name: s.name || 'Your business',
-      nameAm: s.nameAm || 'ሳምፕል ካፌ',
+      nameAm: s.nameAm,
       accent: s.accent,
       accents,
       icons,
@@ -196,34 +165,20 @@ class CardDesignView extends DCLogic {
       initial: (s.name || 'Y').charAt(0).toUpperCase(),
       onName: (e) => this.setState({ name: e.target.value, saved: false }),
       onNameAm: (e) => this.setState({ nameAm: e.target.value, saved: false }),
-      savedNote: s.saved ? 'Saved to database. Live on cards.' : 'Unsaved changes',
-      selectedCardId: activeCardId,
+      programLine: s.stampsRequired ? s.stampsRequired + ' stamps per reward' : 'Not live yet',
+      savedNote: s.saveError || (s.saved ? 'Saved. Live on every card.' : 'Unsaved changes'),
       save: async () => {
+        if (!s.programId) return;
+        this.setState({ saveError: '' });
         try {
-          updateMerchantLoyaltyCard(activeCardId, {
-            name: s.name,
-            nameAm: s.nameAm,
-            accent: s.accent,
-            icon: s.icon,
+          await api.merchant.updateProgram(s.programId, {
+            nameAm: s.nameAm.trim() || null,
+            brandColor: s.accent,
+            cardDisplay: { title: s.name.trim() || undefined, stampIcon: s.icon },
           });
           this.setState({ saved: true });
-
-          await api.merchant.updateProfile({
-            nameEn: s.name,
-            nameAm: s.nameAm,
-          });
-          if (s.programId) {
-            await api.merchant.updateProgram(s.programId, {
-              brandColor: s.accent,
-              cardDisplay: {
-                title: s.name,
-                stampIcon: s.icon,
-              },
-            });
-          }
         } catch (e) {
-          console.warn('Error saving card design to database:', e);
-          this.setState({ saved: true });
+          this.setState({ saved: false, saveError: e.message || 'Could not save. Try again.' });
         }
       },
       isWeb: s.tab === 'web',

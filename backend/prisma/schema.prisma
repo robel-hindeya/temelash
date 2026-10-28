@@ -488,6 +488,29 @@ model NotificationDelivery {
   @@map("notification_deliveries")
 }
 
+/// A business asking to join the platform (the public "Register your business" form). A platform admin
+/// approves it, which creates the merchant and an owner invitation, or rejects it with a reason.
+model MerchantApplication {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessName     String    @map("business_name")
+  category         String?
+  city             String?
+  contactName      String    @map("contact_name")
+  email            String
+  phoneE164        String?   @map("phone_e164")
+  /// PENDING, APPROVED or REJECTED.
+  status           String    @default("PENDING")
+  rejectionReason  String?   @map("rejection_reason")
+  merchantId       String?   @map("merchant_id") @db.Uuid
+  decidedByUserId  String?   @map("decided_by_user_id") @db.Uuid
+  decidedAt        DateTime? @map("decided_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([status, createdAt])
+  @@index([email])
+  @@map("merchant_applications")
+}
+
 /// A promotional message a merchant sent to customers who opted in to offers.
 model Promotion {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid

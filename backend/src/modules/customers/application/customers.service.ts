@@ -25,7 +25,15 @@ export interface CustomerView {
   preferredLanguage: string;
   joinedAt: Date;
   marketingConsent: boolean;
-  memberships: CustomerRecord['memberships'];
+  memberships: Array<{
+    id: string;
+    programId: string;
+    status: string;
+    joinedAt: Date;
+    stampsGiven: number;
+    rewardsRedeemed: number;
+    lastStampAt: Date | null;
+  }>;
 }
 
 @Injectable()
@@ -110,7 +118,15 @@ export class CustomersService {
       preferredLanguage: r.preferredLanguage,
       joinedAt: r.createdAt,
       marketingConsent: isGranted(history.get(r.id) ?? [], 'MARKETING'),
-      memberships: r.memberships,
+      memberships: r.memberships.map((m) => ({
+        id: m.id,
+        programId: m.programId,
+        status: m.status,
+        joinedAt: m.joinedAt,
+        stampsGiven: m._count.stampEvents,
+        rewardsRedeemed: m._count.redemptionEvents,
+        lastStampAt: m.stampEvents[0]?.occurredAt ?? null,
+      })),
     }));
   }
 }

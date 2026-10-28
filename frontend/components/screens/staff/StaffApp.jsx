@@ -120,7 +120,7 @@ class StaffAppView extends DCLogic {
     this.state = {
       screen: 'scan',
       today: 0,
-      bizName: 'Sample Cafe',
+      bizName: '',
       staffSubtitle: 'Staff',
       phoneInput: '',
       cardTokenInput: '',
@@ -178,7 +178,7 @@ class StaffAppView extends DCLogic {
       ]);
       const updates = {};
       if (profRes.status === 'fulfilled' && profRes.value) {
-        updates.bizName = profRes.value.nameEn || 'Sample Cafe';
+        updates.bizName = profRes.value.nameEn || '';
       }
       if (meRes.status === 'fulfilled' && meRes.value) {
         updates.staffSubtitle = meRes.value.displayName || 'Staff';
@@ -521,8 +521,6 @@ class StaffAppView extends DCLogic {
       name,
       initials: name.slice(0, 2).toUpperCase(),
       phone: '',
-      visits: p.current ?? 0,
-      lastVisit: 'Today',
       stamps: p.current ?? 0,
       maxStamps: p.required || 10,
       rewardsAvailable: p.rewardsAvailable ?? 0,
@@ -755,10 +753,12 @@ class StaffAppView extends DCLogic {
       },
       custName: cust?.name || 'Customer',
       custCardName: cust?.cardName || 'Loyalty Card',
-      custCardId: cust?.cardId || 'UXwJ9RwdyHs',
+      custCardId: cust?.cardId || '',
       custUserId: cust?.userId || cust?.cardToken || '',
       custInitials: cust?.initials || 'CU',
-      custMeta: `${cust?.visits || 1} visits · last visit ${cust?.lastVisit || 'Today'}`,
+      custMeta: cust?.rewardsAvailable
+        ? `${cust.rewardsAvailable} reward${cust.rewardsAvailable === 1 ? '' : 's'} ready to redeem`
+        : `${currentSt} of ${maxSt} stamps`,
       custStampsFraction: `${currentSt}/${maxSt}`,
       rewardTitle: cust?.rewardTitle || this.state.rewardTitle || 'Reward',
       stampsToGo: Math.max(0, maxSt - currentSt),

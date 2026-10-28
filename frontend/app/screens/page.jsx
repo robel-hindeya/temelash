@@ -29,7 +29,7 @@ const GROUPS = [
   {
     title: 'Customer',
     items: [
-      ['Customer flow (scan to reward)', '/join'],
+      ['Join page (no shop)', '/join'],
       ['Web card', '/card'],
     ],
   },

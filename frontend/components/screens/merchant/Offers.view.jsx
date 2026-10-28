@@ -811,7 +811,7 @@ export default function renderOffers(__v) {
                         }}
                       >
                         <span style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                          <strong>{'Buna House'}</strong>
+                          <strong>{__t(__v?.businessName)}</strong>
                           <span style={{ color: '#5b6475', fontSize: '12px' }}>{'now'}</span>
                         </span>
                         <span
@@ -823,7 +823,7 @@ export default function renderOffers(__v) {
                       <div style={{ height: '8px', background: '#8a4b2a' }} />{' '}
                       <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <strong>{'Buna House'}</strong>
+                          <strong>{__t(__v?.businessName)}</strong>
                           <span style={{ fontWeight: '800', fontVariantNumeric: 'tabular-nums' }}>{'7/10'}</span>
                         </div>{' '}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, minmax(0, 1fr))', gap: '4px' }}>
@@ -868,12 +868,12 @@ export default function renderOffers(__v) {
                           title="Click to enlarge QR code"
                         >
                           <QRCodeDisplay
-                            value={__v?.cardUrl || 'https://frontend-phi-one-57.vercel.app/card?token=demo-card-liya-01'}
+                            value={__v?.cardUrl || ''}
                             size={72}
                             darkColor="#101827"
                           />
                           <span style={{ fontSize: '10px', color: '#5b6475', fontFamily: 'monospace', fontWeight: '700', marginTop: '2px' }}>
-                            {`${__t(__v?.memberCode || 'SAMPLE-8842')}`}
+                            {`${__t(__v?.memberCode || '')}`}
                           </span>
                         </div>
                       </div>
@@ -920,7 +920,7 @@ export default function renderOffers(__v) {
                         }}
                       >
                         <span style={{ width: '16px', height: '16px', borderRadius: '999px', background: '#8a4b2a' }} />
-                        {'Google Wallet · Buna House · now'}
+                        {`Google Wallet · ${__t(__v?.businessName)} · now`}
                       </span>{' '}
                       <span
                         style={{
@@ -960,7 +960,7 @@ export default function renderOffers(__v) {
                         >
                           {'B'}
                         </span>
-                        <strong>{'Buna House'}</strong>
+                        <strong>{__t(__v?.businessName)}</strong>
                       </div>{' '}
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span
@@ -1005,7 +1005,7 @@ export default function renderOffers(__v) {
                         title="Click to enlarge QR code"
                       >
                         <QRCodeDisplay
-                          value={__v?.cardUrl || 'https://frontend-phi-one-57.vercel.app/card?token=demo-card-liya-01'}
+                          value={__v?.cardUrl || ''}
                           size={46}
                           darkColor="#101827"
                         />
@@ -1014,7 +1014,7 @@ export default function renderOffers(__v) {
                             MEMBER QR CODE
                           </span>
                           <span style={{ fontSize: '13px', color: '#101827', fontWeight: '800', fontFamily: 'monospace' }}>
-                            {`${__t(__v?.memberCode || 'SAMPLE-8842')}`}
+                            {`${__t(__v?.memberCode || '')}`}
                           </span>
                         </div>
                       </div>
@@ -1257,7 +1257,7 @@ export default function renderOffers(__v) {
                             gap: '6px',
                           }}
                         >
-                          <span style={{ fontSize: '11px', color: '#5b6475' }}>{'Message from Buna House'}</span>{' '}
+                          <span style={{ fontSize: '11px', color: '#5b6475' }}>{`Message from ${__t(__v?.businessName)}`}</span>{' '}
                           <span
                             style={{
                               background: `${__t(__v?.bannerBg)}`,
@@ -1290,7 +1290,7 @@ export default function renderOffers(__v) {
                           title="Click to enlarge QR code or open live card"
                         >
                           <QRCodeDisplay
-                            value={__v?.cardUrl || 'https://frontend-phi-one-57.vercel.app/card?token=demo-card-liya-01'}
+                            value={__v?.cardUrl || ''}
                             size={100}
                             darkColor="#101827"
                           />
@@ -1304,7 +1304,7 @@ export default function renderOffers(__v) {
                               fontWeight: '700',
                             }}
                           >
-                            {`${__t(__v?.memberCode || 'SAMPLE-8842')}`}
+                            {`${__t(__v?.memberCode || '')}`}
                           </span>
                         </div>
                       </div>{' '}
@@ -1357,7 +1357,7 @@ export default function renderOffers(__v) {
                       }}
                     >
                       <span>
-                        <strong>{'Buna House'}</strong> <span style={{ color: '#5b6475' }}>{'via Temelash Card'}</span>
+                        <strong>{__t(__v?.businessName)}</strong> <span style={{ color: '#5b6475' }}>{'via Temelash Card'}</span>
                       </span>{' '}
                       <span style={{ color: '#5b6475' }}>{'To: liya.m@[email]'}</span>{' '}
                       <strong style={{ fontSize: '16px' }}>{`${__t(__v?.subject)}`}</strong>
@@ -1393,7 +1393,7 @@ export default function renderOffers(__v) {
                         {'Open my card'}
                       </span>{' '}
                       <span style={{ fontSize: '12px', lineHeight: '16px', color: '#5b6475' }}>
-                        {"You get this because you joined Buna House's card. Unsubscribe."}
+                        {`You get this because you joined ${__t(__v?.businessName)}'s card. Unsubscribe.`}
                       </span>
                     </div>
                   </div>
@@ -1557,7 +1557,7 @@ export default function renderOffers(__v) {
               }}
             >
               <QRCodeDisplay
-                value={__v?.cardUrl || 'https://frontend-phi-one-57.vercel.app/card?token=demo-card-liya-01'}
+                value={__v?.cardUrl || ''}
                 size={180}
                 darkColor="#101827"
               />
@@ -1575,7 +1575,7 @@ export default function renderOffers(__v) {
                 letterSpacing: '0.04em',
               }}
             >
-              {`${__t(__v?.memberCode || 'SAMPLE-8842')}`}
+              {`${__t(__v?.memberCode || '')}`}
             </span>
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px', width: '100%' }}>
               <a

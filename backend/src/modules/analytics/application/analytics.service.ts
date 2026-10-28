@@ -61,7 +61,7 @@ export class AnalyticsService {
 
   async overview(actor: MerchantActor, q: RangeQuery) {
     const { scope, timeZone } = await this.scope(actor, q);
-    const [newMembers, visits, returning, unlocked, redeemed, gaps, adoption, qrScans] =
+    const [newMembers, visits, returning, unlocked, redeemed, gaps, adoption, qrScans, timeline] =
       await Promise.all([
         this.repository.newMembers(scope),
         this.repository.visits(scope),
@@ -71,6 +71,7 @@ export class AnalyticsService {
         this.repository.visitGaps(scope),
         this.repository.walletAdoption(actor.merchantId, q.programId),
         this.repository.qrScans(scope),
+        this.repository.stampTimeline(scope, timeZone),
       ]);
     return {
       range: this.describe(scope, timeZone),
@@ -87,6 +88,9 @@ export class AnalyticsService {
         : null,
       timeBetweenVisits: gaps,
       totalCustomers: adoption.activeMemberships,
+      stampsByDay: timeline.days,
+      stampsByWeekday: timeline.weekdays,
+      stampsByHour: timeline.hours,
     };
   }
 

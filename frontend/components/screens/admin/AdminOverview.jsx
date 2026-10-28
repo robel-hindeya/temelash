@@ -12,132 +12,63 @@ class AdminOverviewView extends DCLogic {
     super(props);
     this.state = {
       filter: 'all',
-      done: {},
-      merchants: [],
-      outbox: null,
-      loading: true,
+      overview: null,
+      applications: [],
+      error: '',
     };
   }
-
   async componentDidMount() {
-    try {
-      const [merchantsRes, outboxRes] = await Promise.allSettled([
-        api.platform.getMerchants(),
-        api.platform.getOutboxStatus(),
-      ]);
-      const updates = { loading: false };
-      if (merchantsRes.status === 'fulfilled' && Array.isArray(merchantsRes.value)) {
-        updates.merchants = merchantsRes.value;
-      }
-      if (outboxRes.status === 'fulfilled' && outboxRes.value) {
-        updates.outbox = outboxRes.value;
-      }
-      this.setState(updates);
-    } catch (e) {
-      console.warn('AdminOverview platform fetch note:', e);
-      this.setState({ loading: false });
-    }
+    const [ov, apps] = await Promise.allSettled([
+      api.platform.getOverview(),
+      api.platform.getApplications('PENDING'),
+    ]);
+    this.setState({
+      overview: ov.status === 'fulfilled' ? ov.value : null,
+      applications: apps.status === 'fulfilled' && Array.isArray(apps.value) ? apps.value : [],
+      error: ov.status === 'rejected' ? ov.reason?.message || 'Could not load platform data.' : '',
+    });
   }
   renderVals() {
     const s = this.state;
+    const o = s.overview;
     const I = {
       app: 'M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
-      trial: 'M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',
-      pay: 'M2 6h20v12H2zM2 10h20M6 15h4',
-      order: 'M5 7h14l-1 13H6zM9 7V5a3 3 0 0 1 6 0v2',
-      ticket: 'M4 5h16v11H8l-4 4z',
+      sys: 'M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
     };
     const T = {
       app: { tag: 'APPLICATION', color: '#4661ad' },
-      trial: { tag: 'TRIAL ENDING', color: '#5b6475' },
-      pay: { tag: 'PAYMENT', color: '#c81d29' },
-      order: { tag: 'SHOP ORDER', color: '#101827' },
-      ticket: { tag: 'SUPPORT', color: '#4661ad' },
+      sys: { tag: 'SYSTEM', color: '#c81d29' },
     };
-    const items = [
-      {
-        id: 'a1',
-        type: 'app',
-        title: 'Sheba Beauty · Salon · Sarbet',
-        detail: 'Trade licence and TIN uploaded. Location pinned. Waiting 1 day.',
-        primaryLabel: 'Approve',
-        result: 'Approved · welcome message sent',
-        secLabel: 'Review',
-        secHref: '/admin/applications',
-      },
-      {
-        id: 'a2',
-        type: 'app',
-        title: 'Entoto Spa · Spa · Megenagna',
-        detail: 'Licence photo is blurry. Owner asked to re-upload yesterday.',
-        primaryLabel: 'Send reminder',
-        result: 'Reminder sent to owner',
-        secLabel: 'Review',
-        secHref: '/admin/applications',
-      },
-      {
-        id: 't1',
-        type: 'trial',
-        title: 'Selam Salon',
-        detail: 'Trial ends in 2 days. 86 card holders, no plan chosen.',
-        primaryLabel: 'Extend 7 days',
-        result: 'Trial extended to 30 Oct',
-        secLabel: 'Open',
-        secHref: '/admin/businesses',
-      },
-      {
-        id: 'p1',
-        type: 'pay',
-        title: 'Abyssinia Car Wash',
-        detail: 'Monthly payment by Telebirr failed twice. Card stays live for 7 more days.',
-        primaryLabel: 'Retry payment',
-        result: 'Payment received · ETB [amount]',
-        secLabel: 'Billing',
-        secHref: '/admin/billing',
-      },
-      {
-        id: 'p2',
-        type: 'pay',
-        title: 'Lime Spa',
-        detail: 'Says they paid the yearly plan by bank transfer. Check the statement.',
-        primaryLabel: 'Confirm received',
-        result: 'Marked paid · yearly plan active',
-        secLabel: 'Billing',
-        secHref: '/admin/billing',
-      },
-      {
-        id: 'o1',
-        type: 'order',
-        title: 'Order #1043 · Buna House',
-        detail: '2 × counter stand on wood block · Bole · cash on delivery',
-        primaryLabel: 'Start printing',
-        result: 'Moved to Printing',
-        secLabel: 'Orders',
-        secHref: '/admin/orders',
-      },
-      {
-        id: 's1',
-        type: 'ticket',
-        title: 'Arada Coffee: “Staff can’t sign in to the app”',
-        detail: 'Opened 40 min ago on Telegram. No reply yet.',
-        primaryLabel: 'Assign to me',
-        result: 'Assigned to you',
-        secLabel: 'Open ticket',
-        secHref: '/admin/support',
-      },
-    ];
+    const go = (href) => () => {
+      window.location.href = href;
+    };
+    const days = (iso) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+    // Real things that need an admin: pending business applications and background jobs that gave up.
+    const items = s.applications.map((a) => ({
+      id: a.id,
+      type: 'app',
+      title: [a.businessName, a.category, a.city].filter(Boolean).join(' · '),
+      detail: `${a.contactName} · ${a.email}${a.phoneE164 ? ' · ' + a.phoneE164 : ''} · waiting ${days(a.createdAt)} day(s)`,
+      primaryLabel: 'Review',
+      href: '/admin/applications',
+    }));
+    if (o && o.outbox.dead > 0) {
+      items.push({
+        id: 'dead-jobs',
+        type: 'sys',
+        title: `${o.outbox.dead} background job(s) failed for good`,
+        detail: 'Messages or wallet updates that could not be delivered after every retry.',
+        primaryLabel: 'Details',
+        href: '/admin/analytics',
+      });
+    }
     const f = s.filter;
-    const counts = { all: items.filter((i) => !s.done[i.id]).length };
-    ['app', 'trial', 'pay', 'order', 'ticket'].forEach((t) => {
-      counts[t] = items.filter((i) => i.type === t && !s.done[i.id]).length;
-    });
+    const counts = { all: items.length, app: 0, sys: 0 };
+    items.forEach((i) => (counts[i.type] += 1));
     const filters = [
       ['all', 'All'],
       ['app', 'Applications'],
-      ['trial', 'Trials'],
-      ['pay', 'Payments'],
-      ['order', 'Orders'],
-      ['ticket', 'Support'],
+      ['sys', 'System'],
     ].map(([id, label]) => ({
       label,
       n: String(counts[id]),
@@ -149,75 +80,77 @@ class AdminOverviewView extends DCLogic {
     }));
     const queue = items
       .filter((i) => f === 'all' || i.type === f)
-      .map((i) => {
-        const d = !!s.done[i.id];
-        return {
-          title: i.title,
-          detail: i.detail,
-          tag: T[i.type].tag,
-          tagColor: T[i.type].color,
-          icon: I[i.type],
-          iconColor: T[i.type].color,
-          open: !d,
-          done: d,
-          opacity: d ? '0.7' : '1',
-          result: i.result,
-          primaryLabel: i.primaryLabel,
-          primary: () => this.setState({ done: Object.assign({}, s.done, { [i.id]: true }) }),
-          undo: () => {
-            const n = Object.assign({}, s.done);
-            delete n[i.id];
-            this.setState({ done: n });
-          },
-          hasSecondary: !!i.secLabel,
-          secLabel: i.secLabel,
-          secHref: i.secHref,
-          secAct: null,
-        };
-      });
-    const doneN = Object.keys(s.done).length;
-    const wv = [6, 9, 7, 11, 10, 13, 12, 15];
-    const wx = ['26 Aug', '2 Sep', '9 Sep', '16 Sep', '23 Sep', '30 Sep', '7 Oct', '14 Oct'];
-    const wmax = 18;
-    const dv = [4120, 4010, 4380, 4290, 4650, 6210, 5300];
-    const dx = ['Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue', 'Wed'];
-    const dxx = ['Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue', 'Wed'];
-    const dmax = 7400;
-    const activeCount = s.merchants.length ? s.merchants.filter((m) => m.status === 'ACTIVE').length : 1;
-    const totalCount = s.merchants.length || 1;
+      .map((i) => ({
+        title: i.title,
+        detail: i.detail,
+        tag: T[i.type].tag,
+        tagColor: T[i.type].color,
+        icon: I[i.type],
+        iconColor: T[i.type].color,
+        open: true,
+        done: false,
+        opacity: '1',
+        result: '',
+        primaryLabel: i.primaryLabel,
+        primary: go(i.href),
+        undo: () => {},
+        hasSecondary: false,
+        secLabel: '',
+        secHref: i.href,
+        secAct: null,
+      }));
+
+    const fmtDay = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' });
+    const fmtWeek = (iso) =>
+      new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    const weeks = (o && o.newMerchantsByWeek) || [];
+    const daysSeries = (o && o.stampsByDay) || [];
+    const wmax = Math.max(1, ...weeks.map((w) => w.count));
+    const dmax = Math.max(1, ...daysSeries.map((d) => d.count));
+    const svc = (name, on, onText, offText) => ({
+      name,
+      state: on ? onText : offText,
+      dot: on ? '#4661ad' : '#c9cdd6',
+      color: '#5b6475',
+    });
+    const n = (v) => (o ? Number(v).toLocaleString('en-US') : '…');
+
     return {
-      doneText: doneN ? doneN + ' done so far today' : 'Here’s what needs you',
+      todayText: new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }),
+      doneText: s.error ? s.error : !o ? 'Loading…' : items.length ? items.length + ' item(s) need you' : 'Nothing needs you right now',
       kpis: [
-        { label: 'ACTIVE BUSINESSES', value: String(activeCount), note: 'Live database merchants', href: '/admin/businesses' },
-        { label: 'TOTAL MERCHANTS', value: String(totalCount), note: 'Platform registered', href: '/admin/businesses' },
-        { label: 'CARD HOLDERS', value: '4', note: 'Active cafe members', href: '/admin/analytics' },
-        { label: 'OUTBOX EVENTS', value: s.outbox?.pendingCount != null ? String(s.outbox.pendingCount) : '0 pending', note: 'Events worker healthy', href: '/admin/analytics' },
-        { label: 'PLATFORM STATUS', value: 'ONLINE', note: 'NestJS port 3000', href: '/admin/billing' },
-        { label: 'DATABASE', value: 'LIVE DB', note: 'PostgreSQL 5432', href: '/admin/support' },
+        { label: 'ACTIVE BUSINESSES', value: n(o?.merchants.active), note: o ? `${o.merchants.total} in total, ${o.merchants.suspended} suspended` : '', href: '/admin/businesses' },
+        { label: 'PENDING APPLICATIONS', value: n(o?.pendingApplications), note: 'Waiting for review', href: '/admin/applications' },
+        { label: 'CARD HOLDERS', value: n(o?.customers.cards), note: o ? `${o.customers.total} customers` : '', href: '/admin/analytics' },
+        { label: 'ON TELEGRAM', value: n(o?.customers.telegram), note: 'Customers using the Telegram card', href: '/admin/analytics' },
+        { label: 'STAMPS TODAY', value: n(o?.today.stamps), note: o ? `${o.today.redemptions} rewards redeemed today` : '', href: '/admin/analytics' },
+        { label: 'BACKGROUND JOBS', value: n(o ? o.outbox.pending + o.outbox.failed : 0), note: o ? (o.outbox.dead ? `${o.outbox.dead} failed for good` : 'None failed') : '', href: '/admin/analytics' },
       ],
       filters,
       queue,
       queueEmpty: queue.length === 0,
-      weekBars: wv.map((v, i) => ({
-        v: String(v),
-        x: wx[i],
-        h: Math.round((v / wmax) * 100) + '%',
-        tip: 'Week of ' + wx[i] + ': ' + v + ' new businesses',
+      weekBars: weeks.map((w) => ({
+        v: String(w.count),
+        x: fmtWeek(w.week),
+        h: Math.round((w.count / wmax) * 100) + '%',
+        tip: 'Week of ' + fmtWeek(w.week) + ': ' + w.count + ' new businesses',
       })),
-      dayBars: dv.map((v, i) => ({
-        v: v.toLocaleString('en-US'),
-        x: dxx[i],
-        h: Math.round((v / dmax) * 100) + '%',
-        tip: dx[i] + ': ' + v.toLocaleString('en-US') + ' stamps',
+      dayBars: daysSeries.map((d) => ({
+        v: d.count.toLocaleString('en-US'),
+        x: fmtDay(d.day),
+        h: Math.round((d.count / dmax) * 100) + '%',
+        tip: fmtDay(d.day) + ': ' + d.count.toLocaleString('en-US') + ' stamps',
       })),
-      services: [
-        { name: 'Apple Wallet passes', state: 'Working · updates in under 1 min', dot: '#4661ad', color: '#5b6475' },
-        { name: 'Google Wallet passes', state: 'Working', dot: '#4661ad', color: '#5b6475' },
-        { name: 'Web cards', state: 'Working', dot: '#4661ad', color: '#5b6475' },
-        { name: 'Telebirr payments', state: 'Slow · 2 failures in the last hour', dot: '#c81d29', color: '#c81d29' },
-        { name: 'CBE Birr payments', state: 'Working', dot: '#4661ad', color: '#5b6475' },
-        { name: 'Email & SMS', state: 'Not live yet (coming soon)', dot: '#c9cdd6', color: '#5b6475' },
-      ],
+      services: o
+        ? [
+            svc('Web cards', true, 'Working', ''),
+            svc('Telegram bot and messages', o.services.telegram, 'Configured', 'Not set up'),
+            svc('Apple Wallet passes', o.services.appleWallet, 'Configured', 'Not set up'),
+            svc('Google Wallet passes', o.services.googleWallet, 'Configured', 'Not set up'),
+            svc('Payments (Telebirr, CBE Birr)', false, '', 'Not connected yet'),
+            svc('Email and SMS', false, '', 'Not connected yet'),
+          ]
+        : [],
     };
   }
 }

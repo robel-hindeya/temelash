@@ -70,6 +70,42 @@ export class AnalyticsRepository {
     return { stamps: n(r?.stamps), reversed: n(r?.reversed), activeMembers: n(r?.active) };
   }
 
+  /**
+   * Stamps (not reversed) counted by local day, weekday (0 = Sunday) and hour in the merchant's time zone,
+   * for the dashboard charts. Days without stamps are left out.
+   */
+  async stampTimeline(
+    s: Scope,
+    timeZone: string,
+  ): Promise<{ days: Array<{ day: string; count: number }>; weekdays: number[]; hours: number[] }> {
+    const rows = await this.prisma.$queryRaw<Array<{ day: string; dow: number; hour: number; n: bigint }>>`
+      SELECT to_char(t.local, 'YYYY-MM-DD') AS day,
+             extract(dow FROM t.local)::int AS dow,
+             extract(hour FROM t.local)::int AS hour,
+             count(*) AS n
+      FROM (
+        SELECT s.occurred_at AT TIME ZONE ${timeZone} AS local
+        FROM stamp_events s
+        LEFT JOIN reversal_events rv ON rv.stamp_event_id = s.id
+        WHERE s.merchant_id = ${s.merchantId}::uuid
+          AND s.occurred_at >= ${s.from} AND s.occurred_at < ${s.to}
+          AND rv.id IS NULL
+          ${this.program('s', s.programId)}
+      ) t
+      GROUP BY 1, 2, 3`;
+    const byDay = new Map<string, number>();
+    const weekdays = new Array<number>(7).fill(0);
+    const hours = new Array<number>(24).fill(0);
+    for (const r of rows) {
+      const c = n(r.n);
+      byDay.set(r.day, (byDay.get(r.day) ?? 0) + c);
+      weekdays[r.dow] = (weekdays[r.dow] ?? 0) + c;
+      hours[r.hour] = (hours[r.hour] ?? 0) + c;
+    }
+    const days = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, count]) => ({ day, count }));
+    return { days, weekdays, hours };
+  }
+
   /** Customers with a qualifying visit in the range AND an earlier one (the building block of the north-star). */
   async returningCustomers(s: Scope): Promise<number> {
     const rows = await this.prisma.$queryRaw<Array<{ n: bigint }>>`

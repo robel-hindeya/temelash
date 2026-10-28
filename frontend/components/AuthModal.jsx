@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import api, { setStoredToken, DEMO_ACCOUNTS, SHOW_DEMO_LOGINS } from '@/lib/api';
+import api, { DEMO_ACCOUNTS, SHOW_DEMO_LOGINS } from '@/lib/api';
 
 export default function AuthModal({
   isOpen,
@@ -26,7 +26,6 @@ export default function AuthModal({
   const [contactName, setContactName] = useState('');
   const [phone, setPhone] = useState('');
   const [regEmail, setRegEmail] = useState('');
-  const [regPassword, setRegPassword] = useState('');
   const [city, setCity] = useState('Bole, Addis Ababa');
 
   useEffect(() => {
@@ -105,6 +104,8 @@ export default function AuthModal({
     }
   };
 
+  // "Register your business" sends an application; a platform admin approves it and the owner then
+  // gets an invitation link to set their password. Nothing is signed in here.
   const handleRegisterSubmit = async (e) => {
     e?.preventDefault();
     setError('');
@@ -114,56 +115,30 @@ export default function AuthModal({
       setError('Please enter your business name.');
       return;
     }
-    if (!regEmail.trim()) {
-      setError('Please enter your email address.');
+    if (!contactName.trim()) {
+      setError('Please enter your name.');
       return;
     }
-    if (!regPassword || regPassword.length < 6) {
-      setError('Password must be at least 6 characters long.');
+    if (!regEmail.trim()) {
+      setError('Please enter your email address.');
       return;
     }
 
     setLoading(true);
     try {
-      // Try to create merchant in backend
-      const slug = businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `merchant-${Date.now()}`;
-      try {
-        await api.platform.createMerchant({
-          nameEn: businessName.trim(),
-          slug: `${slug}-${Math.floor(100 + Math.random() * 900)}`,
-          defaultLanguage: 'EN',
-        });
-      } catch (err) {
-        console.warn('Backend merchant create skipped or offline, proceeding with local registration:', err);
-      }
-
-      // Save new merchant registration info into localStorage so Setup wizard picks it up
-      const merchantInfo = {
-        name: businessName.trim(),
-        type: category,
-        contactName: contactName.trim() || 'Owner',
-        phone: phone.trim(),
+      await api.public.applyAsMerchant({
+        businessName: businessName.trim(),
+        category: category || undefined,
+        city: city.trim() || undefined,
+        contactName: contactName.trim(),
         email: regEmail.trim(),
-        city: city.trim(),
-      };
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem('tc_registered_merchant', JSON.stringify(merchantInfo));
-        // Also save owner token
-        setStoredToken(`reg-tok-${Date.now()}`, 'owner', {
-          email: regEmail.trim(),
-          displayName: contactName.trim() || businessName.trim(),
-          businessName: businessName.trim(),
-          role: 'OWNER',
-        });
-      }
-
-      setSuccessMsg(`Merchant account for "${businessName}" created successfully! Opening setup wizard...`);
-      setTimeout(() => {
-        onClose?.();
-        router.push('/business/setup');
-      }, 800);
+        phone: phone.trim() || undefined,
+      });
+      setSuccessMsg(
+        `Thanks! We received the application for "${businessName.trim()}". We will review it and send you a link to set up your account.`,
+      );
     } catch (err) {
-      setError(err.message || 'Could not create merchant account. Please try again.');
+      setError(err.message || 'Could not send your application. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -304,7 +279,7 @@ export default function AuthModal({
               transition: 'all 0.15s ease',
             }}
           >
-            Create Merchant Account
+            Register your business
           </button>
         </div>
 
@@ -709,28 +684,10 @@ export default function AuthModal({
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#101827', marginBottom: '4px' }}>
-                  Password (min 6 characters) *
-                </label>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  value={regPassword}
-                  onChange={(e) => setRegPassword(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '11px 14px',
-                    borderRadius: '12px',
-                    border: '1px solid #d1d5db',
-                    fontSize: '14px',
-                    boxSizing: 'border-box',
-                    outline: 'none',
-                  }}
-                  required
-                />
-              </div>
-
+              <p style={{ margin: 0, fontSize: '13px', color: '#5b6475', lineHeight: '19px' }}>
+                We review every business before it goes live. Once approved, you get a link to set your
+                password and open your dashboard.
+              </p>
               <button
                 type="submit"
                 disabled={loading}
@@ -752,7 +709,7 @@ export default function AuthModal({
                   boxShadow: '0 4px 12px rgba(228, 35, 48, 0.25)',
                 }}
               >
-                {loading ? 'Creating merchant account...' : 'Create Merchant Account & Continue →'}
+                {loading ? 'Sending application...' : 'Apply to join →'}
               </button>
 
               <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#5b6475', textAlign: 'center' }}>
