@@ -17,6 +17,9 @@ export interface CustomerRecord {
     programId: string;
     status: MembershipStatus;
     joinedAt: Date;
+    /** Stamps and redemptions on this card, not counting reversed ones. */
+    _count: { stampEvents: number; redemptionEvents: number };
+    stampEvents: Array<{ occurredAt: Date }>;
   }>;
 }
 
@@ -30,7 +33,20 @@ const select = {
   createdAt: true,
   memberships: {
     orderBy: { joinedAt: 'asc' },
-    select: { id: true, programId: true, status: true, joinedAt: true },
+    select: {
+      id: true,
+      programId: true,
+      status: true,
+      joinedAt: true,
+      _count: {
+        select: {
+          stampEvents: { where: { reversal: { is: null } } },
+          redemptionEvents: { where: { reversal: { is: null } } },
+        },
+      },
+      // The latest stamp only, for "last visit".
+      stampEvents: { orderBy: { occurredAt: 'desc' }, take: 1, select: { occurredAt: true } },
+    },
   },
 } satisfies Prisma.CustomerSelect;
 

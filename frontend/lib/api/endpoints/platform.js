@@ -20,7 +20,22 @@ export const platform = {
       body: JSON.stringify({ status }),
     }, 'admin');
   },
-  getOutboxStatus() {
-    return request('/platform/outbox/status', { method: 'GET' }, 'admin');
+  /** Totals, today's activity, 7-day stamps, 8-week new businesses, service status. */
+  getOverview() {
+    return request('/platform/overview', { method: 'GET' }, 'admin');
+  },
+  getApplications(status) {
+    const q = status ? `?status=${status}` : '';
+    return request(`/platform/applications${q}`, { method: 'GET' }, 'admin');
+  },
+  /** Creates the business + owner invitation; returns { invitationToken, ownerEmail, expiresInDays }. */
+  approveApplication(id) {
+    return request(`/platform/applications/${id}/approve`, { method: 'POST' }, 'admin');
+  },
+  rejectApplication(id, reason) {
+    return request(`/platform/applications/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }, 'admin');
   },
 };

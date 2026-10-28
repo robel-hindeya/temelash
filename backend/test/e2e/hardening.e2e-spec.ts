@@ -42,6 +42,8 @@ const PUBLIC_ROUTES = [
   'POST /api/v1/join/:joinReference/sign-in',
   'POST /api/v1/join/:joinReference/telegram/session',
   'POST /api/v1/join/:joinReference/telegram/join',
+  // Public "Register your business" form: creates a pending application only
+  'POST /api/v1/merchant-applications',
   // Telegram bot webhook: authenticated by the webhook secret header
   'POST /api/v1/telegram/webhook',
   'POST /api/v1/card/consent/marketing/withdraw',

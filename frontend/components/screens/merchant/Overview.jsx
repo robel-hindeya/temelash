@@ -1,248 +1,217 @@
-import DCLogic from '@/lib/DCLogic';
-import { withDCStyle } from '@/lib/dc-runtime';
+'use client';
+import React, { useEffect, useState } from 'react';
 import api from '@/lib/api';
-import renderOverview from './Overview.view';
+import MerchantPage from './MerchantPage';
 
-const __CSS =
-  'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-topbar{display:flex !important}.tm-side{display:none !important}.tm-side.is-open{display:flex !important;min-height:0 !important;height:auto !important;border-right:0 !important;border-bottom:1px solid #e3e5ec !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}.tm-split{border-left:0 !important;padding-left:0 !important;border-top:1px solid #e3e5ec;padding-top:16px}.tm-hide-sm{display:none !important}.tm-table{min-width:480px !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #4661ad;outline-offset:2px}\n.bar:hover{background:#101827 !important}\n.crow:hover{background:#f7f7f9}';
-class OverviewView extends DCLogic {
-  constructor(props) {
-    super(props);
-    this.state = {
-      open: null,
-      group: false,
-      sent: {},
-      tpl: {},
-      drafts: {},
-      groupMsg: '{first name}, you’re 1 stamp from a free macchiato. See you this week!',
-      loading: true,
-      profile: null,
-      branchName: 'Bole branch',
-      overviewData: null,
-      customers: [],
-    };
-  }
+// The merchant's home: real setup progress, the last 30 days in numbers, stamps per day over two weeks,
+// newest customers and who is one stamp from a reward.
+const card = { background: '#ffffff', border: '1px solid #e3e5ec', borderRadius: '16px', padding: '20px' };
+const btn = (primary) => ({
+  border: primary ? 'none' : '1px solid #e3e5ec',
+  background: primary ? '#e42330' : '#ffffff',
+  color: primary ? '#ffffff' : '#101827',
+  fontWeight: 700,
+  borderRadius: '12px',
+  padding: '10px 18px',
+  minHeight: '44px',
+  textDecoration: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+});
+const isoDay = (t) => new Date(t).toISOString().slice(0, 10);
+const utc = (d, opts) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { ...opts, timeZone: 'UTC' });
 
-  async componentDidMount() {
-    try {
-      const [profileRes, branchesRes, overviewRes, custRes] = await Promise.allSettled([
-        api.merchant.getProfile(),
-        api.merchant.getBranches(),
-        api.merchant.getAnalyticsOverview(),
-        api.merchant.getCustomers({ limit: 15 }),
-      ]);
+export default function Overview() {
+  const [d, setD] = useState(null);
 
-      const updates = { loading: false };
-      if (profileRes.status === 'fulfilled') updates.profile = profileRes.value;
-      if (branchesRes.status === 'fulfilled' && branchesRes.value?.length) {
-        updates.branchName = branchesRes.value[0].nameEn + ' branch';
-      }
-      if (overviewRes.status === 'fulfilled') updates.overviewData = overviewRes.value;
-      if (custRes.status === 'fulfilled' && custRes.value?.items) {
-        updates.customers = custRes.value.items;
-      }
-      this.setState(updates);
-    } catch (e) {
-      console.warn('Overview failed to load live data:', e);
-      this.setState({ loading: false });
-    }
-  }
-  tplText(id, first) {
-    const t = {
-      reminder: [
-        first + ', you’re 1 stamp from a free macchiato. See you this week!',
-        first + '፣ ነፃ ማኪያቶ ለማግኘት 1 ማህተም ብቻ ቀርቶዎታል።',
-      ],
-      double: [
-        first + ', your next visit earns 2 stamps, so your free macchiato is waiting. Valid until Sunday.',
-        first + '፣ በሚቀጥለው ጉብኝትዎ 2 ማህተም ያገኛሉ። እስከ እሁድ።',
-      ],
-      thanks: [
-        first + ', thank you for coming back so often. Your free macchiato is one visit away.',
-        first + '፣ ስለሚመለሱ እናመሰግናለን። ነፃ ማኪያቶዎ አንድ ጉብኝት ብቻ ቀርቶታል።',
-      ],
-    };
-    return t[id];
-  }
-  renderVals() {
-    const s = this.state;
-    const od = s.overviewData || {};
-    const customers = s.customers || [];
-    const totalCustomers = od.totalCustomers ?? customers.length;
-    const stampsCount = od.stampsIssued?.count ?? 0;
-    const rewardsCount = od.rewardsRedeemed ?? 0;
-    const newMembersCount = od.newMembers ?? customers.length;
-    const retPct = totalCustomers > 0 ? Math.round((newMembersCount / totalCustomers) * 100) : 0;
-
-    // Calculate dynamic 14-day timeline based on current date
-    const now = new Date();
-    const bars = [];
-    let maxVal = 1;
-    const dayCounts = [];
-
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date(now.getTime() - i * 86400000);
-      const dateStr = d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
-      const dayChar = ['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()];
-      const dayFull = d.toLocaleDateString('en-US', { weekday: 'long' });
-      // Count customers that joined on this date
-      const matched = customers.filter((c) => {
-        if (!c.joinedAt) return false;
-        const cd = new Date(c.joinedAt);
-        return cd.toDateString() === d.toDateString();
-      }).length;
-      // If it's today and stamps were issued, add stamps count
-      const count = i === 0 ? Math.max(matched, stampsCount) : matched;
-      if (count > maxVal) maxVal = count;
-      dayCounts.push({ v: count, d: dayChar, dayFull, dateStr, tip: `${dateStr}: ${count} activity` });
-    }
-
-    const lastWeekItems = dayCounts.slice(0, 7);
-    const thisWeekItems = dayCounts.slice(7);
-    const thisWeekCount = thisWeekItems.reduce((acc, item) => acc + item.v, 0);
-    const lastWeekCount = lastWeekItems.reduce((acc, item) => acc + item.v, 0);
-    const thisWeekSub = lastWeekCount > 0 ? `vs ${lastWeekCount} the week before` : 'vs 0 the week before';
-
-    const busiest = dayCounts.reduce((prev, curr) => (curr.v > prev.v ? curr : prev), dayCounts[13]);
-    const busiestDay = busiest.v > 0 ? busiest.dayFull : 'Today';
-    const busiestSub = busiest.v > 0
-      ? `${busiest.v} ${busiest.v === 1 ? 'stamp' : 'stamps'} on ${busiest.dateStr}`
-      : 'No stamps recorded yet';
-
-    const avg = thisWeekCount > 0 ? (thisWeekCount / 7).toFixed(1) : '0';
-    const dailyAvg = `${avg} stamps`;
-
-    const renderedBars = dayCounts.map((dc) => ({
-      v: String(dc.v),
-      d: dc.d,
-      h: Math.max(8, Math.round((dc.v / Math.max(1, maxVal)) * 100)) + '%',
-      tip: dc.tip,
-      peak: dc.v > 0,
-    }));
-
-    const types = {
-      stamp: { bg: '#f7f7f9', fg: '#101827' },
-      reward: { bg: '#fba919', fg: '#101827' },
-      joined: { bg: '#f7f7f9', fg: '#4661ad' },
-    };
-
-    const kpis = [
-      { label: 'CARD HOLDERS', value: String(totalCustomers), note: `+${newMembersCount} enrolled` },
-      { label: 'STAMPS ISSUED', value: String(stampsCount), note: 'Verified on ledger' },
-      { label: 'REWARDS REDEEMED', value: String(rewardsCount), note: 'Earned & redeemed' },
-      { label: 'CAME BACK', value: `${retPct}%`, note: 'of new customers' },
-    ];
-
-    const people = customers.slice(0, 4).map((c) => {
-      const fn = c.firstName || 'Customer';
-      const ini = fn.slice(0, 2).toUpperCase();
-      const last = c.joinedAt
-        ? new Date(c.joinedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        : 'recently';
-      return [ini, fn, fn, last];
+  useEffect(() => {
+    const from30 = isoDay(Date.now() - 29 * 86400000);
+    const from14 = isoDay(Date.now() - 13 * 86400000);
+    Promise.allSettled([
+      api.merchant.getProfile(),
+      api.merchant.getPrograms('ACTIVE'),
+      api.merchant.getStaff(),
+      api.merchant.getPromotions(),
+      api.merchant.getAnalyticsOverview({ from: from30 }),
+      api.merchant.getAnalyticsOverview({ from: from14 }),
+      api.merchant.getCustomers({ limit: '100' }),
+    ]).then((r) => {
+      const v = (i) => (r[i].status === 'fulfilled' ? r[i].value : null);
+      setD({
+        profile: v(0),
+        program: Array.isArray(v(1)) ? v(1)[0] || null : null,
+        staff: Array.isArray(v(2)) ? v(2) : [],
+        promotions: v(3),
+        month: v(4),
+        twoWeeks: v(5),
+        customers: v(6)?.items || [],
+        error: r[4].status === 'rejected' ? r[4].reason?.message || 'Could not load your numbers.' : '',
+      });
     });
+  }, []);
 
-    const activity = customers.slice(0, 5).map((c, i) => {
-      const fn = c.firstName || 'Customer';
-      const time = c.joinedAt
-        ? new Date(c.joinedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : 'recently';
-      const st = c.stamps || 1;
-      return {
-        time,
-        name: fn,
-        what: i === 0 ? 'Joined loyalty program' : 'Card stamp verified',
-        card: `${st}/10`,
-        staff: 'Bole Staff',
-        bg: i === 0 ? '#4661ad' : '#f7f7f9',
-        fg: i === 0 ? '#ffffff' : '#101827',
-      };
-    });
-
-    const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
-    const headerSubtitle = `${todayStr} · ${s.branchName}`;
-    const tplDefs = [
-      ['reminder', 'Reminder'],
-      ['double', 'Double stamp'],
-      ['thanks', 'Thank you'],
-    ];
-    const close = people.map(([ini, name, first, last], i) => {
-      const isOpen = s.open === i;
-      const tplId = s.tpl[i] || 'reminder';
-      const base = this.tplText(tplId, first);
-      const d = s.drafts[i] || {};
-      const en = d.en !== undefined ? d.en : base[0];
-      const am = d.am !== undefined ? d.am : base[1];
-      const sent = !!s.sent[i];
-      return {
-        ini,
-        name,
-        first,
-        isOpen,
-        expanded: isOpen ? 'true' : 'false',
-        sub: sent ? 'Reminder sent just now' : 'Last visit ' + last,
-        subColor: sent ? '#4661ad' : '#5b6475',
-        rowBg: isOpen ? '#f7f7f9' : 'transparent',
-        chevron: isOpen ? 'M7 14l5-5 5 5' : 'M7 10l5 5 5-5',
-        toggle: () => this.setState({ open: isOpen ? null : i, group: false }),
-        enId: 'ov-en-' + i,
-        amId: 'ov-am-' + i,
-        en,
-        am,
-        onEn: (e) =>
-          this.setState({ drafts: Object.assign({}, s.drafts, { [i]: Object.assign({}, d, { en: e.target.value }) }) }),
-        onAm: (e) =>
-          this.setState({ drafts: Object.assign({}, s.drafts, { [i]: Object.assign({}, d, { am: e.target.value }) }) }),
-        tpls: tplDefs.map(([id, label]) => ({
-          label,
-          pressed: id === tplId ? 'true' : 'false',
-          bg: id === tplId ? '#101827' : '#ffffff',
-          color: id === tplId ? '#ffffff' : '#101827',
-          border: id === tplId ? '#101827' : '#e3e5ec',
-          pick: () =>
-            this.setState({
-              tpl: Object.assign({}, s.tpl, { [i]: id }),
-              drafts: Object.assign({}, s.drafts, { [i]: {} }),
-            }),
-        })),
-        send: () => this.setState({ sent: Object.assign({}, s.sent, { [i]: true }), open: null }),
-      };
-    });
-    const unsent = people.filter((p, i) => !s.sent[i]).length;
-    return {
-      bars: renderedBars,
-      activity,
-      close,
-      kpis,
-      headerSubtitle,
-      thisWeekTotal: String(thisWeekCount),
-      thisWeekSub,
-      busiestDay,
-      busiestSub,
-      dailyAvg,
-      groupOpen: s.group && unsent > 0,
-      groupMsg: s.groupMsg,
-      groupPreview: s.groupMsg.replace(/\{first name\}/g, 'Liya'),
-      onGroup: (e) => this.setState({ groupMsg: e.target.value }),
-      openGroup: () => this.setState({ group: true, open: null }),
-      closeGroup: () => this.setState({ group: false }),
-      sendGroup: () => {
-        const all = {};
-        people.forEach((p, i) => {
-          all[i] = true;
-        });
-        this.setState({ sent: all, group: false });
-      },
-      unsentCount: String(unsent),
-      showGroupBtn: unsent > 0 && !s.group,
-      groupBtnLabel: unsent === 4 ? 'Remind all 4' : 'Remind the other ' + unsent,
-      allSent: unsent === 0,
-    };
+  if (!d) {
+    return (
+      <MerchantPage active="overview" title="Overview">
+        <p style={{ margin: 0, color: '#5b6475' }}>Loading…</p>
+      </MerchantPage>
+    );
   }
+
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
+  const m = d.month || {};
+  const active = m.activeMembers ?? 0;
+  const returning = m.returningCustomers ?? 0;
+  const need = d.program?.stampsRequired || null;
+
+  const steps = [
+    ['Set up your card and reward', !!d.program, '/business/setup'],
+    ['Put your QR code on the counter', null, '/business/shop'],
+    ['Invite your staff', d.staff.some((s) => s.roleKey !== 'OWNER'), '/business/settings'],
+    ['Send your first offer', (d.promotions?.recent?.length ?? 0) > 0, '/business/offers'],
+  ];
+  const done = steps.filter((s) => s[1]).length;
+
+  // Stamps per day over the last 14 days, zeros where nothing happened.
+  const perDay = new Map((d.twoWeeks?.stampsByDay || []).map((x) => [x.day, x.count]));
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const day = isoDay(Date.now() - i * 86400000);
+    days.push({ day, v: perDay.get(day) || 0 });
+  }
+  const max = Math.max(1, ...days.map((x) => x.v));
+  const thisWeek = days.slice(7).reduce((a, x) => a + x.v, 0);
+  const lastWeek = days.slice(0, 7).reduce((a, x) => a + x.v, 0);
+  const busiest = days.reduce((a, x) => (x.v > a.v ? x : a), days[days.length - 1]);
+
+  const membership = (c) => c.memberships?.find((x) => x.programId === d.program?.id);
+  const close = need
+    ? d.customers.filter((c) => {
+        const mem = membership(c);
+        return mem && mem.status === 'ACTIVE' && mem.stampsGiven % need === need - 1;
+      })
+    : [];
+
+  const kpis = [
+    ['CARD HOLDERS', m.totalCustomers ?? 0, `${m.newMembers ?? 0} joined in 30 days`],
+    ['STAMPS', m.stampsIssued?.count ?? 0, 'Last 30 days'],
+    ['REWARDS REDEEMED', m.rewardsRedeemed ?? 0, `of ${m.rewardsUnlocked ?? 0} unlocked`],
+    ['CAME BACK', active ? `${Math.round((returning / active) * 100)}%` : '0%', `${returning} of ${active} visitors had been before`],
+  ];
+
+  return (
+    <MerchantPage active="overview" title="Overview" subtitle={[today, d.profile?.nameEn].filter(Boolean).join(' · ')}>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <a href="/business/shop" style={btn(false)}>
+          Your QR code
+        </a>
+        <a href="/business/offers" style={btn(true)}>
+          Send an offer
+        </a>
+      </div>
+      {d.error ? <p role="alert" style={{ margin: 0, color: '#c81d29', fontWeight: 600 }}>{d.error}</p> : null}
+
+      {done < steps.filter((s) => s[1] !== null).length ? (
+        <section style={{ ...card, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <h2 style={{ margin: 0, fontSize: '18px' }}>Finish setting up</h2>
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {steps.map(([text, ok, href]) => (
+              <li key={text} style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <span aria-hidden="true" style={{ width: '22px', textAlign: 'center', fontWeight: 800, color: ok ? '#1d6b3a' : '#5b6475' }}>
+                  {ok ? '✓' : '○'}
+                </span>
+                {ok ? <span style={{ color: '#5b6475' }}>{text}</span> : <a href={href}>{text}</a>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '12px' }}>
+        {kpis.map(([label, value, note]) => (
+          <div key={label} style={{ ...card, padding: '16px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', color: '#5b6475' }}>{label}</div>
+            <div style={{ fontSize: '28px', fontWeight: 800 }}>{typeof value === 'number' ? value.toLocaleString('en-US') : value}</div>
+            <div style={{ fontSize: '14px', color: '#5b6475' }}>{note}</div>
+          </div>
+        ))}
+      </div>
+
+      <section style={card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
+          <h2 style={{ margin: 0, fontSize: '20px' }}>Stamps per day · last 14 days</h2>
+          <a href="/business/analytics">Open analytics</a>
+        </div>
+        <div role="img" aria-label={`Stamps per day over the last 14 days, ${thisWeek} this week`} style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', height: '150px' }}>
+          {days.map((x) => (
+            <div key={x.day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', gap: '4px', height: '100%' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700 }}>{x.v || ''}</span>
+              <div title={`${utc(x.day, { day: 'numeric', month: 'short' })}: ${x.v} stamps`} style={{ width: '100%', height: `${Math.max(2, (x.v / max) * 110)}px`, background: '#4661ad', borderRadius: '6px 6px 0 0' }} />
+              <span style={{ fontSize: '11px', color: '#5b6475' }}>{utc(x.day, { weekday: 'narrow' })}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginTop: '14px' }}>
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#5b6475' }}>THIS WEEK</div>
+            <strong>{thisWeek}</strong> <span style={{ color: '#5b6475' }}>{`vs ${lastWeek} the week before`}</span>
+          </div>
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#5b6475' }}>BUSIEST DAY</div>
+            <strong>{busiest.v ? utc(busiest.day, { weekday: 'long', day: 'numeric', month: 'short' }) : 'No stamps yet'}</strong>
+            {busiest.v ? <span style={{ color: '#5b6475' }}>{` · ${busiest.v} stamps`}</span> : null}
+          </div>
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#5b6475' }}>DAILY AVERAGE</div>
+            <strong>{(thisWeek / 7).toFixed(1)}</strong> <span style={{ color: '#5b6475' }}>stamps this week</span>
+          </div>
+        </div>
+      </section>
+
+      <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <section style={{ ...card, flex: '1 1 320px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '8px' }}>
+            <h2 style={{ margin: 0, fontSize: '20px' }}>Newest customers</h2>
+            <a href="/business/customers">All customers</a>
+          </div>
+          {d.customers.length === 0 ? <p style={{ margin: 0, color: '#5b6475' }}>No customers yet.</p> : null}
+          {d.customers.slice(0, 6).map((c) => {
+            const mem = membership(c);
+            return (
+              <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', borderTop: '1px solid #e3e5ec', padding: '10px 0' }}>
+                <strong>{c.firstName || 'Customer'}</strong>
+                <span style={{ color: '#5b6475', fontSize: '14px' }}>
+                  {[mem && need ? `${mem.stampsGiven % need}/${need}` : null, `joined ${new Date(c.joinedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}`]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </div>
+            );
+          })}
+        </section>
+
+        <section style={{ ...card, flex: '1 1 320px' }}>
+          <h2 style={{ margin: '0 0 8px', fontSize: '20px' }}>One stamp from a reward</h2>
+          {close.length === 0 ? (
+            <p style={{ margin: 0, color: '#5b6475' }}>Nobody right now.</p>
+          ) : (
+            <>
+              {close.slice(0, 8).map((c) => (
+                <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', borderTop: '1px solid #e3e5ec', padding: '10px 0' }}>
+                  <strong>{c.firstName || 'Customer'}</strong>
+                  <span style={{ color: '#5b6475', fontSize: '14px' }}>
+                    {membership(c)?.lastStampAt ? `last visit ${new Date(membership(c).lastStampAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}` : ''}
+                  </span>
+                </div>
+              ))}
+              <p style={{ margin: '8px 0 0', fontSize: '14px', color: '#5b6475' }}>
+                Messages to single customers are not available yet. An offer from <a href="/business/offers">Offers</a> reaches
+                everyone who agreed to hear from you on Telegram.
+              </p>
+            </>
+          )}
+        </section>
+      </div>
+    </MerchantPage>
+  );
 }
-
-OverviewView.defaultProps = {};
-
-OverviewView.prototype.__template = renderOverview;
-
-export default withDCStyle(OverviewView, 'Overview', __CSS);

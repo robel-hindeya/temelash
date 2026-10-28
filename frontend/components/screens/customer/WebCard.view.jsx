@@ -628,7 +628,7 @@ export default function renderWebCard(__v) {
                   ☕
                 </div>
                 <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#101827' }}>
-                  {__v?.programTitle || 'Coffee Stamp Card'}
+                  {__v?.programTitle || 'Stamp card'}
                 </h2>
                 <p style={{ margin: 0, fontSize: '13px', color: '#64748b', lineHeight: '18px' }}>
                   {__v?.authTab === 'signin'

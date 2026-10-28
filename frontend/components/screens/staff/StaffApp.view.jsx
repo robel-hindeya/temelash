@@ -51,7 +51,7 @@ export default function renderStaffApp(__v) {
             />
           </svg>{' '}
           <span style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', lineHeight: '18px' }}>
-            <strong>{`${__t(__v?.bizName || 'Sample Cafe')}`}</strong>
+            <strong>{`${__t(__v?.bizName)}`}</strong>
             <span style={{ fontSize: '14px', color: '#5b6475' }}>{`${__t(__v?.staffSubtitle || 'Staff')}`}</span>
           </span>{' '}
           <span
@@ -904,8 +904,8 @@ export default function renderStaffApp(__v) {
                   {`${__t(__v?.custInitials || 'AB')}`}
                 </span>{' '}
                 <span style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: '24px', lineHeight: '30px', fontWeight: '700' }}>{`${__t(__v?.custName || 'Abebe Bikila')}`}</span>
-                  <span style={{ color: '#5b6475' }}>{`${__t(__v?.custMeta || '9 visits · last visit Today')}`}</span>
+                  <span style={{ fontSize: '24px', lineHeight: '30px', fontWeight: '700' }}>{`${__t(__v?.custName || 'Customer')}`}</span>
+                  <span style={{ color: '#5b6475' }}>{`${__t(__v?.custMeta)}`}</span>
                 </span>
               </div>{' '}
               <div
@@ -939,7 +939,7 @@ export default function renderStaffApp(__v) {
                       fontVariantNumeric: 'tabular-nums',
                     }}
                   >
-                    {`${__t(__v?.custStampsFraction || '9/10')}`}
+                    {`${__t(__v?.custStampsFraction)}`}
                   </span>
                 </div>{' '}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '10px' }}>

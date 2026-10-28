@@ -2,7 +2,7 @@
 /* Generated from the Temelash Card design (Sidebar.dc.html). */
 import DCLogic from '@/lib/DCLogic';
 import { A, withDCStyle } from '@/lib/dc-runtime';
-import api from '@/lib/api';
+import api, { getCurrentRole, getStoredUser } from '@/lib/api';
 import renderSidebar from './Sidebar.view';
 
 const __CSS = 'body{margin:0}';
@@ -13,10 +13,9 @@ class SidebarView extends DCLogic {
       open: false,
       w: null,
       profile: false,
-      owner: 'Sample Owner',
-      businessName: 'Sample Cafe',
-      branchName: 'Bole branch',
-      plan: 'active',
+      owner: '',
+      businessName: '',
+      branchName: '',
     };
   }
   async componentDidMount() {
@@ -25,40 +24,21 @@ class SidebarView extends DCLogic {
     this.onResize();
 
     try {
-      // Check local storage so sidebar immediately shows saved business name and owner
-      try {
-        const localOwner = window.localStorage.getItem('tm-owner-name');
-        const localBiz = window.localStorage.getItem('tm-biz-profile');
-        const localBranches = window.localStorage.getItem('tm-branches-list');
-        const initialUpdates = {};
-        if (localOwner) initialUpdates.owner = localOwner;
-        if (localBiz) {
-          const parsed = JSON.parse(localBiz);
-          if (parsed?.nameEn) initialUpdates.businessName = parsed.nameEn;
-        }
-        if (localBranches) {
-          const parsed = JSON.parse(localBranches);
-          if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].name) {
-            initialUpdates.branchName = parsed[0].name;
-          }
-        }
-        if (Object.keys(initialUpdates).length > 0) this.setState(initialUpdates);
-      } catch (x) {}
+      // Owner name from the signed-in account (the token's /auth/me carries no display name).
+      const user = getStoredUser('owner');
+      if (user?.displayName || user?.email) this.setState({ owner: user.displayName || user.email });
 
-      const [profile, branches, me] = await Promise.allSettled([
+      const [profile, branches] = await Promise.allSettled([
         api.merchant.getProfile(),
         api.merchant.getBranches(),
-        api.auth.getMe('owner'),
       ]);
       const updates = {};
       if (profile.status === 'fulfilled' && profile.value?.nameEn) {
         updates.businessName = profile.value.nameEn;
       }
       if (branches.status === 'fulfilled' && branches.value?.length) {
-        updates.branchName = branches.value[0].nameEn + ' branch';
-      }
-      if (me.status === 'fulfilled' && me.value?.displayName) {
-        updates.owner = me.value.displayName;
+        updates.branchName =
+          branches.value.length === 1 ? branches.value[0].nameEn : `${branches.value.length} branches`;
       }
       if (Object.keys(updates).length) this.setState(updates);
     } catch (e) {
@@ -113,7 +93,7 @@ class SidebarView extends DCLogic {
         '/business/rewards',
         'M3 8h18v4H3zM5 12v9h14v-9M12 8v13M12 8c-2-4-6-4-6-1.5S9 8 12 8zm0 0c2-4 6-4 6-1.5S15 8 12 8z',
       ),
-      mk('qr', 'Shop', '/business/shop', 'M5 7h14l-1 13H6zM9 7V5a3 3 0 0 1 6 0v2'),
+      mk('qr', 'QR code', '/business/shop', 'M5 7h14l-1 13H6zM9 7V5a3 3 0 0 1 6 0v2'),
     ];
     const business = [
       mk(
@@ -139,21 +119,13 @@ class SidebarView extends DCLogic {
       this.setState({ profile: false, open: false });
     };
     const owner = (this.state.owner || '').trim();
-    let userRole = 'Owner';
-    try {
-      const curRole = api?.auth?.getCurrentRole ? api.auth.getCurrentRole() : null;
-      if (curRole === 'manager') userRole = 'Manager';
-      else if (typeof window !== 'undefined') {
-        const storedRole = window.sessionStorage.getItem('tc_role') || window.localStorage.getItem('tc_role');
-        if (storedRole?.toLowerCase() === 'manager') userRole = 'Manager';
-      }
-    } catch (e) {}
-    const paid = this.state.plan === 'monthly' || this.state.plan === 'yearly' || this.state.plan === 'active';
+    const userRole = getCurrentRole() === 'manager' ? 'Manager' : 'Owner';
     return {
       userRole,
-      planLabel: paid ? 'YOUR PLAN' : 'FREE TRIAL',
-      planText: paid ? (this.state.plan === 'yearly' ? 'Yearly · active' : 'Monthly · active') : 'Active plan',
-      planLink: paid ? 'Manage plan' : 'Choose a plan',
+      // Billing is not built yet: say so instead of showing a plan.
+      planLabel: 'YOUR PLAN',
+      planText: 'No billing yet',
+      planLink: 'Details',
       goBilling: setTab('billing'),
       goProfile: setTab('profile'),
       profileOpen: this.state.profile,
@@ -161,7 +133,7 @@ class SidebarView extends DCLogic {
       profileBorder: this.state.profile ? '#4661ad' : 'transparent',
       profileChevron: this.state.profile ? 'M7 10l5 5 5-5' : 'M7 14l5-5 5 5',
       toggleProfile: () => this.setState({ profile: !this.state.profile }),
-      ownerName: owner || '[Owner name]',
+      ownerName: owner || 'Your account',
       ownerIni: owner
         ? owner
             .split(/\s+/)
@@ -170,9 +142,9 @@ class SidebarView extends DCLogic {
             .slice(0, 2)
             .toUpperCase()
         : 'OW',
-      businessName: this.state.businessName || 'Sample Cafe',
-      branchName: this.state.branchName || 'Bole branch',
-      initial: (this.state.businessName || 'S').trim().charAt(0).toUpperCase(),
+      businessName: this.state.businessName || '…',
+      branchName: this.state.branchName || 'No branch yet',
+      initial: (this.state.businessName || '·').trim().charAt(0).toUpperCase(),
       topDisplay: mobile ? 'flex' : 'none',
       navDisplay: !mobile || open ? 'flex' : 'none',
       navMinH: mobile ? '0' : '640px',

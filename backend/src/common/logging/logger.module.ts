@@ -25,12 +25,23 @@ export const REDACT_PATHS = [
   '*.pushToken',
 ];
 
+function hasPinoPretty(): boolean {
+  try {
+    require.resolve('pino-pretty');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 @Module({
   imports: [
     LoggerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env, true>) => {
-        const isDev = config.get('NODE_ENV', { infer: true }) === 'development';
+        // Pretty logs only in development, and only when pino-pretty is installed (it is a dev
+        // dependency): a mis-set NODE_ENV in production must never stop the app from starting.
+        const isDev = config.get('NODE_ENV', { infer: true }) === 'development' && hasPinoPretty();
         return {
           pinoHttp: {
             level: config.get('LOG_LEVEL', { infer: true }),

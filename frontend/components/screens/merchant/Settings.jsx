@@ -1,892 +1,592 @@
 'use client';
-/* Generated from the Temelash Card design (Settings.dc.html). */
-import DCLogic from '@/lib/DCLogic';
-import { withDCStyle } from '@/lib/dc-runtime';
-import api, { getAppOrigin } from '@/lib/api';
-import renderSettings from './Settings.view';
+import React, { useCallback, useEffect, useState } from 'react';
+import api, { getAppOrigin, getStoredUser } from '@/lib/api';
+import MerchantPage, { NotAvailableYet } from './MerchantPage';
 
-const __CSS =
-  'body{margin:0;background:#f7f7f9}\n.tm-sidewrap > *{flex:1 1 auto;min-width:0;width:100%;display:block}\n@media (max-width:1023px){.tm-sidewrap{flex:1 1 100% !important}.tm-main{padding:24px 24px 40px !important}}\n@media (max-width:640px){.tm-main{padding:16px 16px 32px !important;gap:16px !important}.tm-main h1{font-size:24px !important;line-height:30px !important}.tm-main section{padding:16px !important}.tm-hide-sm{display:none !important}}\na{color:#4661ad}a:hover{color:#101827}\ninput,select,textarea,button{font:inherit}\na:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #4661ad;outline-offset:2px}\n.bar:hover{background:#101827 !important}\n.srow:hover{background:#f7f7f9}';
-class SettingsView extends DCLogic {
-  constructor(props) {
-    super(props);
-    this.state = {
-      tab: 'staff',
-      loading: true,
-      inviteOpen: false,
-      iv: { name: '', phone: '', role: 'staff' },
-      ivTried: false,
-      lastInvite: null,
-      copied: false,
-      nextInv: 1,
-      team: [
-        { id: 'owner', name: 'Sample Cafe Owner', ini: 'SC', phone: '+251 91 100 0001', role: 'Owner', status: 'active' },
-        { id: 'manager', name: 'Dawit Manager', ini: 'DM', phone: '+251 91 100 0003', role: 'Manager', status: 'active' },
-        { id: 'bole', name: 'Bole Staff', ini: 'BS', phone: '+251 91 100 0002', role: 'Staff', status: 'active' },
-      ],
-      range: 'day',
-      date: '2026-10-21',
-      sel: 'all',
-      branches: [{ id: 'bole', name: 'Bole branch', address: 'Bole Road, Addis Ababa', phone: '+251 91 100 0001', hours: 'Mon–Sat 7:00–21:00' }],
-      bEdit: null,
-      bConfirm: null,
-      bd: {},
-      bdErr: false,
-      nextB: 2,
-      branchNote: '',
-      plan: 'trial',
-      selPlan: 'monthly',
-      bStep: 'pick',
-      pay: 'telebirr',
-      bizProfile: { nameEn: 'Sample Cafe', nameAm: 'ሳምፕል ካፌ', defaultLanguage: 'EN', tin: '0012345678', type: 'Café' },
-      bizSaved: false,
-      pf: { name: 'Sample Cafe Owner', phone: '+251 91 100 0001', email: 'owner@sample-cafe.test' },
-      pfSaved: false,
-      pinReset: false,
-    };
-  }
-  componentWillUnmount() {
-    if (this.onTabEvt) window.removeEventListener('tm-settings-tab', this.onTabEvt);
-  }
-  async componentDidMount() {
-    this.onTabEvt = (e) => {
-      try {
-        window.sessionStorage.removeItem('tm-settings-tab');
-      } catch (x) {}
-      this.setState({ tab: e.detail });
-    };
-    window.addEventListener('tm-settings-tab', this.onTabEvt);
+// Staff and settings, all from the backend: team and invitations, stamping activity per person, business
+// profile, branches and the signed-in account. Billing is not built yet.
+const TABS = [
+  ['staff', 'Staff'],
+  ['biz', 'Business'],
+  ['branches', 'Branches'],
+  ['billing', 'Plan and billing'],
+  ['profile', 'My profile'],
+];
+const ROLE_LABEL = { OWNER: 'Owner', MANAGER: 'Manager', STAFF: 'Staff' };
+const ROLE_CAN = {
+  OWNER: 'Full access, including business settings',
+  MANAGER: 'Business dashboard: overview, customers, offers and staff',
+  STAFF: 'Staff scanner: adds stamps and redeems rewards',
+};
+
+const card = { background: '#ffffff', border: '1px solid #e3e5ec', borderRadius: '16px', padding: '20px' };
+const input = { border: '1px solid #e3e5ec', borderRadius: '10px', padding: '10px 12px', fontSize: '15px', font: 'inherit', width: '100%', boxSizing: 'border-box' };
+const label = { display: 'flex', flexDirection: 'column', gap: '4px', fontWeight: 700, fontSize: '14px' };
+const btn = (primary) => ({
+  border: primary ? 'none' : '1px solid #e3e5ec',
+  background: primary ? '#e42330' : '#ffffff',
+  color: primary ? '#ffffff' : '#101827',
+  fontWeight: 700,
+  borderRadius: '12px',
+  padding: '10px 18px',
+  minHeight: '44px',
+  cursor: 'pointer',
+});
+const pill = (on) => ({
+  border: '1px solid ' + (on ? '#101827' : '#e3e5ec'),
+  background: on ? '#101827' : '#ffffff',
+  color: on ? '#ffffff' : '#101827',
+  borderRadius: '999px',
+  padding: '6px 14px',
+  fontWeight: 700,
+  cursor: 'pointer',
+});
+
+function Note({ text, error }) {
+  if (!text) return null;
+  return (
+    <p role={error ? 'alert' : 'status'} style={{ margin: 0, color: error ? '#c81d29' : '#1d6b3a', fontWeight: 600 }}>
+      {text}
+    </p>
+  );
+}
+
+function inviteLink(token, email, role) {
+  const params = new URLSearchParams({ email });
+  if (role === 'MANAGER') params.set('role', 'manager');
+  return `${getAppOrigin()}/staff/join/${token}?${params.toString()}`;
+}
+
+function InviteBox({ invite, onDone }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <section role="status" style={{ ...card, borderColor: '#4661ad' }}>
+      <h2 style={{ margin: '0 0 6px', fontSize: '18px' }}>{`Invite link for ${invite.name}`}</h2>
+      <p style={{ margin: '0 0 12px', color: '#374151' }}>
+        {`Send it to ${invite.email} (Telegram, SMS or email). It works once and is shown only now; you can make a new one later from the team list.`}
+      </p>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <input readOnly value={invite.link} aria-label="Invite link" style={{ ...input, flex: '1 1 320px', width: 'auto' }} />
+        <button type="button" style={btn(true)} onClick={() => navigator.clipboard?.writeText(invite.link).then(() => setCopied(true), () => {})}>
+          {copied ? 'Copied' : 'Copy link'}
+        </button>
+        <button type="button" style={btn(false)} onClick={onDone}>
+          Done
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function StaffTab({ branches }) {
+  const [team, setTeam] = useState(null);
+  const [error, setError] = useState('');
+  const [open, setOpen] = useState(false);
+  const [iv, setIv] = useState({ name: '', email: '', role: 'STAFF', branchId: '' });
+  const [busy, setBusy] = useState(false);
+  const [invite, setInvite] = useState(null);
+  const [range, setRange] = useState(7);
+  const [activity, setActivity] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const rows = await api.merchant.getStaff();
+      setTeam(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      setTeam([]);
+      setError(e.message || 'Could not load your team.');
+    }
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    setActivity(null);
+    const from = new Date(Date.now() - (range - 1) * 86400000).toISOString().slice(0, 10);
+    api.merchant
+      .getStaffAnalytics({ from, limit: '100' })
+      .then((res) => setActivity(res?.items || []))
+      .catch(() => setActivity([]));
+  }, [range]);
+
+  const act = async (fn, okText) => {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fn();
+      await load();
+      return res ?? okText ?? true;
+    } catch (e) {
+      setError(e.message || 'That did not work. Try again.');
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendInvite = async () => {
+    const name = iv.name.trim();
+    const email = iv.email.trim();
+    if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Enter their name and a valid email (they sign in with it).');
+      return;
+    }
+    const branchId = iv.branchId || branches[0]?.id;
+    if (iv.role === 'STAFF' && !branchId) {
+      setError('Add a branch first: staff work at a branch.');
+      return;
+    }
+    const res = await act(() =>
+      api.merchant.inviteStaff({ displayName: name, email, role: iv.role, branchIds: branchId ? [branchId] : [], preferredLanguage: 'EN' }),
+    );
+    const token = res?.invitation?.token;
+    if (token) {
+      setInvite({ name, email, link: inviteLink(token, email, iv.role) });
+      setIv({ name: '', email: '', role: 'STAFF', branchId: '' });
+      setOpen(false);
+    }
+  };
+
+  const newLink = async (m) => {
+    const res = await act(() => api.merchant.reissueInvitation(m.id));
+    if (res?.token) setInvite({ name: m.displayName, email: m.email, link: inviteLink(res.token, m.email, m.roleKey) });
+  };
+
+  const visible = (team || []).filter((m) => m.status !== 'DEACTIVATED');
+  const removed = (team || []).filter((m) => m.status === 'DEACTIVATED');
+
+  return (
+    <>
+      {invite ? <InviteBox invite={invite} onDone={() => setInvite(null)} /> : null}
+      <Note text={error} error />
+      <section style={{ ...card, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <h2 style={{ margin: 0, fontSize: '20px' }}>Your team</h2>
+          <button type="button" style={btn(!open)} aria-expanded={open} onClick={() => setOpen(!open)}>
+            {open ? 'Close' : 'Invite staff'}
+          </button>
+        </div>
+
+        {open ? (
+          <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', background: '#f7f7f9', borderRadius: '12px', padding: '16px' }}>
+            <label style={label}>
+              Name
+              <input style={input} value={iv.name} onChange={(e) => setIv({ ...iv, name: e.target.value })} />
+            </label>
+            <label style={label}>
+              Email (their sign-in)
+              <input type="email" style={input} value={iv.email} onChange={(e) => setIv({ ...iv, email: e.target.value })} />
+            </label>
+            <label style={label}>
+              Role
+              <select style={input} value={iv.role} onChange={(e) => setIv({ ...iv, role: e.target.value })}>
+                <option value="STAFF">Staff: {ROLE_CAN.STAFF}</option>
+                <option value="MANAGER">Manager: {ROLE_CAN.MANAGER}</option>
+              </select>
+            </label>
+            {branches.length > 1 ? (
+              <label style={label}>
+                Branch
+                <select style={input} value={iv.branchId || branches[0].id} onChange={(e) => setIv({ ...iv, branchId: e.target.value })}>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.nameEn}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <div style={{ alignSelf: 'end' }}>
+              <button type="button" style={btn(true)} disabled={busy} onClick={sendInvite}>
+                {busy ? 'Creating…' : 'Create invite link'}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {team === null ? <p style={{ margin: 0, color: '#5b6475' }}>Loading…</p> : null}
+        {visible.map((m) => (
+          <div key={m.id} style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', borderTop: '1px solid #e3e5ec', paddingTop: '12px' }}>
+            <div style={{ flex: '1 1 240px' }}>
+              <strong style={{ display: 'block' }}>{m.displayName || m.email}</strong>
+              <span style={{ fontSize: '14px', color: '#5b6475' }}>
+                {`${ROLE_LABEL[m.roleKey] || m.roleKey} · ${m.email} · ${m.status === 'INVITED' ? 'invited, not joined yet' : 'active'}`}
+              </span>
+              <span style={{ display: 'block', fontSize: '13px', color: '#5b6475' }}>{ROLE_CAN[m.roleKey]}</span>
+            </div>
+            {m.roleKey !== 'OWNER' ? (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {m.status === 'INVITED' ? (
+                  <button type="button" style={btn(false)} disabled={busy} onClick={() => newLink(m)}>
+                    New invite link
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  style={btn(false)}
+                  disabled={busy}
+                  onClick={() => act(() => api.merchant.changeStaffRole(m.id, m.roleKey === 'MANAGER' ? 'STAFF' : 'MANAGER'))}
+                >
+                  {m.roleKey === 'MANAGER' ? 'Make staff' : 'Make manager'}
+                </button>
+                <button type="button" style={btn(false)} disabled={busy} onClick={() => act(() => api.merchant.deactivateStaff(m.id))}>
+                  Remove access
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ))}
+        {removed.length ? (
+          <details>
+            <summary style={{ cursor: 'pointer', color: '#5b6475' }}>{`Removed (${removed.length})`}</summary>
+            {removed.map((m) => (
+              <div key={m.id} style={{ display: 'flex', gap: '12px', alignItems: 'center', padding: '8px 0' }}>
+                <span style={{ flex: 1 }}>{`${m.displayName || m.email} · ${m.email}`}</span>
+                <button type="button" style={btn(false)} disabled={busy} onClick={() => act(() => api.merchant.activateStaff(m.id))}>
+                  Give access back
+                </button>
+              </div>
+            ))}
+          </details>
+        ) : null}
+      </section>
+
+      <section style={{ ...card, overflowX: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '12px' }}>
+          <h2 style={{ margin: 0, fontSize: '20px' }}>Activity</h2>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {[1, 7, 30, 60].map((d) => (
+              <button key={d} type="button" aria-pressed={range === d} style={pill(range === d)} onClick={() => setRange(d)}>
+                {d === 1 ? 'Today' : `${d} days`}
+              </button>
+            ))}
+          </div>
+        </div>
+        {activity === null ? <p style={{ margin: 0, color: '#5b6475' }}>Loading…</p> : null}
+        {activity && activity.length === 0 ? <p style={{ margin: 0, color: '#5b6475' }}>No activity yet.</p> : null}
+        {activity && activity.length ? (
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '480px' }}>
+            <thead>
+              <tr style={{ textAlign: 'left', fontSize: '12px', letterSpacing: '0.08em', color: '#5b6475' }}>
+                {['PERSON', 'STAMPS GIVEN', 'CUSTOMERS', 'REWARDS REDEEMED', 'STAMPS UNDONE'].map((h) => (
+                  <th key={h} scope="col" style={{ padding: '8px 12px 8px 0' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {activity.map((r) => (
+                <tr key={r.staffId} style={{ borderTop: '1px solid #e3e5ec' }}>
+                  <td style={{ padding: '10px 12px 10px 0', fontWeight: 700 }}>{`${r.displayName} (${ROLE_LABEL[r.role] || r.role})`}</td>
+                  <td style={{ padding: '10px 12px 10px 0' }}>{r.stamps}</td>
+                  <td style={{ padding: '10px 12px 10px 0' }}>{r.uniqueCustomers}</td>
+                  <td style={{ padding: '10px 12px 10px 0' }}>{r.redemptions}</td>
+                  <td style={{ padding: '10px 0' }}>{r.stampsReversed}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : null}
+      </section>
+    </>
+  );
+}
+
+function BusinessTab({ profile, onSaved }) {
+  const [f, setF] = useState(null);
+  const [note, setNote] = useState({ text: '', error: false });
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (profile)
+      setF({
+        nameEn: profile.nameEn || '',
+        nameAm: profile.nameAm || '',
+        defaultLanguage: profile.defaultLanguage || 'EN',
+        supportEmail: profile.supportEmail || '',
+        supportPhone: profile.supportPhone || '',
+      });
+  }, [profile]);
+  if (!f) return <p style={{ margin: 0, color: '#5b6475' }}>Loading…</p>;
+
+  const save = async () => {
+    if (!f.nameEn.trim()) {
+      setNote({ text: 'Your business needs a name.', error: true });
+      return;
+    }
+    setBusy(true);
+    setNote({ text: '', error: false });
+    try {
+      const next = await api.merchant.updateProfile({
+        nameEn: f.nameEn.trim(),
+        nameAm: f.nameAm.trim() || null,
+        defaultLanguage: f.defaultLanguage,
+        supportEmail: f.supportEmail.trim() || null,
+        supportPhone: f.supportPhone.trim() || null,
+      });
+      onSaved(next);
+      setNote({ text: 'Saved.', error: false });
+    } catch (e) {
+      setNote({ text: e.message || 'Could not save.', error: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+
+  return (
+    <section style={{ ...card, display: 'grid', gap: '14px', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+      <label style={label}>
+        Business name (English)
+        <input style={input} value={f.nameEn} onChange={set('nameEn')} />
+      </label>
+      <label style={label}>
+        Business name (Amharic)
+        <input style={input} value={f.nameAm} onChange={set('nameAm')} />
+      </label>
+      <label style={label}>
+        Card language
+        <select style={input} value={f.defaultLanguage} onChange={set('defaultLanguage')}>
+          <option value="EN">English</option>
+          <option value="AM">Amharic</option>
+        </select>
+      </label>
+      <label style={label}>
+        Support email (shown to customers)
+        <input type="email" style={input} value={f.supportEmail} onChange={set('supportEmail')} />
+      </label>
+      <label style={label}>
+        Support phone (+251…)
+        <input type="tel" style={input} value={f.supportPhone} onChange={set('supportPhone')} />
+      </label>
+      <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <button type="button" style={btn(true)} disabled={busy} onClick={save}>
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+        <Note text={note.text} error={note.error} />
+      </div>
+    </section>
+  );
+}
+
+function BranchesTab({ branches, reload }) {
+  const [edit, setEdit] = useState(null); // 'new' | branch id
+  const [f, setF] = useState({ nameEn: '', addressText: '', city: '', phone: '' });
+  const [note, setNote] = useState({ text: '', error: false });
+  const [busy, setBusy] = useState(false);
+
+  const start = (b) => {
+    setNote({ text: '', error: false });
+    setEdit(b ? b.id : 'new');
+    setF({ nameEn: b?.nameEn || '', addressText: b?.addressText || '', city: b?.city || '', phone: b?.phoneE164 || '' });
+  };
+  const run = async (fn, okText) => {
+    setBusy(true);
+    setNote({ text: '', error: false });
+    try {
+      await fn();
+      await reload();
+      setEdit(null);
+      setNote({ text: okText, error: false });
+    } catch (e) {
+      setNote({ text: e.message || 'That did not work. Try again.', error: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const save = () => {
+    const name = f.nameEn.trim();
+    if (!name) {
+      setNote({ text: 'Give the branch a name.', error: true });
+      return;
+    }
+    const data = { nameEn: name, addressText: f.addressText.trim() || null, city: f.city.trim() || null, phone: f.phone.trim() || null };
+    return edit === 'new'
+      ? run(() => api.merchant.createBranch(data), `${name} added.`)
+      : run(() => api.merchant.updateBranch(edit, data), `${name} saved.`);
+  };
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const form = (
+    <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', background: '#f7f7f9', borderRadius: '12px', padding: '16px' }}>
+      <label style={label}>
+        Name
+        <input style={input} value={f.nameEn} onChange={set('nameEn')} />
+      </label>
+      <label style={label}>
+        Address
+        <input style={input} value={f.addressText} onChange={set('addressText')} />
+      </label>
+      <label style={label}>
+        City
+        <input style={input} value={f.city} onChange={set('city')} />
+      </label>
+      <label style={label}>
+        Phone (+251…)
+        <input type="tel" style={input} value={f.phone} onChange={set('phone')} />
+      </label>
+      <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '8px' }}>
+        <button type="button" style={btn(true)} disabled={busy} onClick={save}>
+          {busy ? 'Saving…' : edit === 'new' ? 'Add branch' : 'Save changes'}
+        </button>
+        <button type="button" style={btn(false)} onClick={() => setEdit(null)}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <section style={{ ...card, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <h2 style={{ margin: 0, fontSize: '20px' }}>Branches</h2>
+        {edit === null ? (
+          <button type="button" style={btn(true)} onClick={() => start(null)}>
+            Add branch
+          </button>
+        ) : null}
+      </div>
+      <Note text={note.text} error={note.error} />
+      {edit === 'new' ? form : null}
+      {branches.length === 0 && edit !== 'new' ? <p style={{ margin: 0, color: '#5b6475' }}>No branches yet.</p> : null}
+      {branches.map((b) => (
+        <div key={b.id} style={{ borderTop: '1px solid #e3e5ec', paddingTop: '12px' }}>
+          {edit === b.id ? (
+            form
+          ) : (
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ flex: '1 1 240px' }}>
+                <strong style={{ display: 'block' }}>{b.nameEn}</strong>
+                <span style={{ fontSize: '14px', color: b.status === 'ACTIVE' ? '#5b6475' : '#c81d29' }}>
+                  {[b.status === 'ACTIVE' ? null : 'Closed', b.addressText, b.city, b.phoneE164].filter(Boolean).join(' · ') || 'No address yet'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button type="button" style={btn(false)} onClick={() => start(b)}>
+                  Edit
+                </button>
+                {b.status === 'ACTIVE' ? (
+                  <button type="button" style={btn(false)} disabled={busy} onClick={() => run(() => api.merchant.deactivateBranch(b.id), `${b.nameEn} closed.`)}>
+                    Close branch
+                  </button>
+                ) : (
+                  <button type="button" style={btn(false)} disabled={busy} onClick={() => run(() => api.merchant.activateBranch(b.id), `${b.nameEn} reopened.`)}>
+                    Reopen
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function ProfileTab() {
+  const [me, setMe] = useState(null);
+  useEffect(() => {
+    const stored = getStoredUser('owner');
+    setMe(stored || {});
+    api.auth
+      .getMe('owner')
+      .then((m) => setMe((cur) => ({ ...m, ...cur, email: m?.email || cur?.email })))
+      .catch(() => {});
+  }, []);
+  if (!me) return <p style={{ margin: 0, color: '#5b6475' }}>Loading…</p>;
+  return (
+    <>
+      <section style={card}>
+        <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 16px' }}>
+          <dt style={{ color: '#5b6475' }}>Name</dt>
+          <dd style={{ margin: 0, fontWeight: 600 }}>{me.displayName || '—'}</dd>
+          <dt style={{ color: '#5b6475' }}>Email (sign-in)</dt>
+          <dd style={{ margin: 0, fontWeight: 600 }}>{me.email || '—'}</dd>
+        </dl>
+      </section>
+      <NotAvailableYet
+        what="Changing your name, email or password"
+        plan="Editing your own account is not available yet. To change it, contact Temelash support."
+      />
+    </>
+  );
+}
+
+export default function Settings() {
+  const [tab, setTab] = useState('staff');
+  const [profile, setProfile] = useState(null);
+  const [branches, setBranches] = useState([]);
+  const [error, setError] = useState('');
+
+  // The sidebar's account menu opens a tab here (Plan and billing, My profile).
+  useEffect(() => {
     try {
       const t = window.sessionStorage.getItem('tm-settings-tab');
       if (t) {
         window.sessionStorage.removeItem('tm-settings-tab');
-        this.setState({ tab: t });
+        setTab(t);
       }
-      const n = window.localStorage.getItem('tm-owner-name');
-      const p = window.localStorage.getItem('tm-plan');
-      const o = {};
-      if (n) o.pf = Object.assign({}, this.state.pf, { name: n });
-      if (p) {
-        o.plan = p;
-        o.selPlan = p;
-        o.bStep = 'done';
-      }
-
-      // Restore locally saved state so reload never deletes data
-      const localTeam = window.localStorage.getItem('tm-team-members');
-      const localBranches = window.localStorage.getItem('tm-branches-list');
-      const localBiz = window.localStorage.getItem('tm-biz-profile');
-      const localInvite = window.localStorage.getItem('tm-last-invite');
-      const localPf = window.localStorage.getItem('tm-owner-profile');
-
-      if (localTeam) {
-        try {
-          const parsed = JSON.parse(localTeam);
-          if (Array.isArray(parsed) && parsed.length > 0) o.team = parsed;
-        } catch (e) {}
-      }
-      if (localBranches) {
-        try {
-          const parsed = JSON.parse(localBranches);
-          if (Array.isArray(parsed) && parsed.length > 0) o.branches = parsed;
-        } catch (e) {}
-      }
-      if (localBiz) {
-        try {
-          const parsed = JSON.parse(localBiz);
-          if (parsed && typeof parsed === 'object') o.bizProfile = Object.assign({}, this.state.bizProfile, parsed);
-        } catch (e) {}
-      }
-      if (localInvite) {
-        try {
-          const parsed = JSON.parse(localInvite);
-          if (parsed && parsed.link) o.lastInvite = parsed;
-        } catch (e) {}
-      }
-      if (localPf) {
-        try {
-          const parsed = JSON.parse(localPf);
-          if (parsed && typeof parsed === 'object') o.pf = Object.assign({}, this.state.pf, parsed);
-        } catch (e) {}
-      }
-
-      if (Object.keys(o).length) this.setState(o);
     } catch (e) {}
-
-    await this.loadData();
-  }
-
-  async loadData() {
-    try {
-      const [staffRes, branchRes, profRes, meRes] = await Promise.allSettled([
-        api.merchant.getStaff(),
-        api.merchant.getBranches(),
-        api.merchant.getProfile(),
-        api.auth.getMe('owner'),
-      ]);
-      const updates = { loading: false };
-
-      // Branches: merge backend and local branches
-      let existingBranches = this.state.branches;
+    const onTab = (e) => {
       try {
-        const savedBranches = window.localStorage.getItem('tm-branches-list');
-        if (savedBranches) {
-          const parsed = JSON.parse(savedBranches);
-          if (Array.isArray(parsed) && parsed.length > 0) existingBranches = parsed;
-        }
-      } catch (e) {}
-
-      const backendBranches = branchRes.status === 'fulfilled' && Array.isArray(branchRes.value) ? branchRes.value : [];
-      let mergedBranches = [];
-      if (backendBranches.length > 0) {
-        mergedBranches = backendBranches.map((b) => ({
-          id: b.id,
-          name: b.nameEn || 'Main branch',
-          address: b.addressText || 'Addis Ababa',
-          phone: b.phoneE164 || '',
-          hours: 'Mon–Sat 7:00–21:00',
-        }));
-      }
-      existingBranches.forEach((b) => {
-        if (!mergedBranches.some((mb) => mb.id === b.id || mb.name === b.name)) {
-          mergedBranches.push(b);
-        }
-      });
-      if (mergedBranches.length > 0) {
-        updates.branches = mergedBranches;
-        try {
-          window.localStorage.setItem('tm-branches-list', JSON.stringify(mergedBranches));
-        } catch (e) {}
-      }
-
-      let ownerName = 'Sample Cafe Owner';
-      let ownerPhone = '+251 91 100 0001';
-      let ownerEmail = 'owner@sample-cafe.test';
-      if (meRes.status === 'fulfilled' && meRes.value) {
-        ownerName = meRes.value.displayName || meRes.value.email || ownerName;
-        ownerEmail = meRes.value.email || ownerEmail;
-      }
-
-      // Team members: ensure newly created and invited staff (e.g. hh-4811) are preserved across reloads
-      let existingTeam = this.state.team;
-      try {
-        const savedTeam = window.localStorage.getItem('tm-team-members');
-        if (savedTeam) {
-          const parsed = JSON.parse(savedTeam);
-          if (Array.isArray(parsed) && parsed.length > 0) existingTeam = parsed;
-        }
-      } catch (e) {}
-
-      const staffList = staffRes.status === 'fulfilled' && Array.isArray(staffRes.value) ? staffRes.value : [];
-      const team = [
-        {
-          id: 'owner',
-          name: ownerName,
-          ini: ownerName.slice(0, 2).toUpperCase(),
-          phone: ownerPhone,
-          role: 'Owner',
-          status: 'active',
-        },
-      ];
-      staffList.forEach((st) => {
-        const nm = st.displayName || (st.email ? st.email.split('@')[0] : 'Staff member');
-        team.push({
-          id: st.id,
-          name: nm,
-          ini: nm.slice(0, 2).toUpperCase(),
-          phone: st.email || '+251 91 000 0000',
-          role: st.roleKey === 'MANAGER' ? 'Manager' : 'Staff',
-          status: st.status === 'ACTIVE' ? 'active' : 'invited',
-        });
-      });
-
-      // Merge any local staff members that were invited or active
-      existingTeam.forEach((locMem) => {
-        if (locMem.id === 'owner') return;
-        const alreadyIn = team.some((t) => t.id === locMem.id || (t.name === locMem.name && locMem.name));
-        if (!alreadyIn) {
-          team.push(locMem);
-        }
-      });
-      updates.team = team;
-      try {
-        window.localStorage.setItem('tm-team-members', JSON.stringify(team));
-      } catch (e) {}
-
-      // Business Profile: merge with local biz profile
-      let existingBiz = this.state.bizProfile;
-      try {
-        const savedBiz = window.localStorage.getItem('tm-biz-profile');
-        if (savedBiz) {
-          const parsed = JSON.parse(savedBiz);
-          if (parsed && typeof parsed === 'object') existingBiz = Object.assign({}, existingBiz, parsed);
-        }
-      } catch (e) {}
-
-      let currentBiz = Object.assign({}, existingBiz);
-      if (profRes.status === 'fulfilled' && profRes.value) {
-        currentBiz = Object.assign(currentBiz, {
-          nameEn: profRes.value.nameEn || currentBiz.nameEn || 'Sample Cafe',
-          nameAm: profRes.value.nameAm || currentBiz.nameAm || '',
-          defaultLanguage: profRes.value.defaultLanguage || currentBiz.defaultLanguage || 'EN',
-          supportEmail: profRes.value.supportEmail || currentBiz.supportEmail || '',
-          supportPhone: profRes.value.supportPhone || currentBiz.supportPhone || '',
-        });
-      }
-      updates.bizProfile = currentBiz;
-      try {
-        window.localStorage.setItem('tm-biz-profile', JSON.stringify(currentBiz));
-      } catch (e) {}
-
-      updates.pf = { name: ownerName, phone: ownerPhone, email: ownerEmail };
-      this.setState(updates);
-    } catch (e) {
-      console.warn('Failed to load settings data from database:', e);
-      this.setState({ loading: false });
-    }
-  }
-  renderVals() {
-    const s = this.state;
-    const tabs = [
-      ['staff', 'Staff'],
-      ['biz', 'Business'],
-      ['branches', 'Branches'],
-      ['billing', 'Plan and billing'],
-      ['profile', 'My profile'],
-    ].map(([id, label]) => ({
-      label,
-      sel: id === s.tab ? 'true' : 'false',
-      color: id === s.tab ? '#101827' : '#5b6475',
-      line: id === s.tab ? '#e42330' : 'transparent',
-      pick: () => this.setState({ tab: id }),
-    }));
-
-    // ---- invite ----
-    const digits = (s.iv.phone || '').replace(/\D/g, '');
-    const ivErr = { name: s.ivTried && !(s.iv.name || '').trim(), phone: s.ivTried && digits.length < 9 };
-    ivErr.nameBorder = ivErr.name ? '#c81d29' : '#e3e5ec';
-    ivErr.phoneBorder = ivErr.phone ? '#c81d29' : '#e3e5ec';
-    const roleOpts = [
-      ['staff', 'Staff', 'Adds stamps and redeems rewards in the staff POS scanner terminal.'],
-      ['manager', 'Manager', 'Accesses the Business Dashboard: overview, analytics, customers, offers & staff.'],
-    ].map(([id, label, desc]) => ({
-      label,
-      desc,
-      checked: s.iv.role === id,
-      border: s.iv.role === id ? '#4661ad' : '#e3e5ec',
-      pick: () => this.setState({ iv: Object.assign({}, s.iv, { role: id }) }),
-    }));
-    const canDo = {
-      Owner: 'Full access to business & financial settings',
-      Manager: 'Full Business Dashboard: overview, analytics, customers, offers & staff',
-      Staff: 'Staff POS Scanner terminal (adds stamps & redeems)',
+        window.sessionStorage.removeItem('tm-settings-tab');
+      } catch (x) {}
+      setTab(e.detail);
     };
-    const lastActive = { owner: 'Active now', manager: 'Active 5 min ago', meron: 'Active 10 min ago', yonas: 'Active 1 hour ago', bole: 'Active 20 min ago' };
-    const team = s.team.map((m) => {
-      const isOwner = m.id === 'owner' || (m.role || '').toLowerCase() === 'owner';
-      const isManager = (m.role || '').toLowerCase() === 'manager';
-      const isStaff = !isOwner && !isManager;
-      const roleBadge = isOwner ? '⭐ Owner' : isManager ? '👑 Manager' : '👤 Staff';
-      const roleBg = isOwner ? '#fef3c7' : isManager ? '#eef2ff' : '#f1f5f9';
-      const roleFg = isOwner ? '#92400e' : isManager ? '#3730a3' : '#475569';
-      const roleBorder = isOwner ? '#fde68a' : isManager ? '#c7d2fe' : '#cbd5e1';
+    window.addEventListener('tm-settings-tab', onTab);
+    return () => window.removeEventListener('tm-settings-tab', onTab);
+  }, []);
 
-      return {
-        id: m.id,
-        name: m.id === 'owner' && (s.pf.name || '').trim() ? s.pf.name.trim() : m.name,
-        ini: m.ini,
-        phone: m.phone,
-        role: m.role,
-        isOwner,
-        isManager,
-        isStaff,
-        roleBadge,
-        roleBg,
-        roleFg,
-        roleBorder,
-        can: canDo[m.role] || (isManager ? canDo.Manager : canDo.Staff),
-        status: m.status === 'invited' ? 'Invite sent · waiting' : lastActive[m.id] || 'Active',
-        statusColor: m.status === 'invited' ? '#4661ad' : '#5b6475',
-        isInvited: m.status === 'invited',
-        isActiveStaff: m.status === 'active' && !isOwner,
-        toggleRole: async () => {
-          if (isOwner) return;
-          const newRole = isManager ? 'Staff' : 'Manager';
-          try {
-            if (!m.id.startsWith('inv')) {
-              await api.merchant.changeStaffRole(m.id, newRole.toUpperCase());
-            }
-          } catch (e) {
-            console.warn('API role change warning, updating locally:', e);
-          }
-          const nextTeam = s.team.map((x) => (x.id === m.id ? Object.assign({}, x, { role: newRole }) : x));
-          try {
-            window.localStorage.setItem('tm-team-members', JSON.stringify(nextTeam));
-          } catch (e) {}
-          this.setState({ team: nextTeam });
-        },
-        openDashboard: () => {
-          if (typeof window !== 'undefined') {
-            window.location.href = '/business';
-          }
-        },
-        openTerminal: () => {
-          if (typeof window !== 'undefined') {
-            window.location.href = '/staff';
-          }
-        },
-        resend: () => {
-          const origin = getAppOrigin();
-          const roleQuery = isManager ? '?role=manager' : '';
-          const baseLink = m.link || `${origin}/staff/join/${(m.name || 'staff').toLowerCase().replace(/[^a-z0-9]+/g, '')}-${m.id}`;
-          const link = baseLink.includes('?role=') ? baseLink : `${baseLink}${roleQuery}`;
-          if (typeof navigator !== 'undefined' && navigator.clipboard) {
-            navigator.clipboard.writeText(link).catch(() => {});
-          }
-          this.setState({ lastInvite: { name: m.name, link }, copied: true });
-        },
-        cancel: () => {
-          const nextTeam = s.team.filter((x) => x.id !== m.id);
-          const nextInvite = s.lastInvite && s.lastInvite.name === m.name ? null : s.lastInvite;
-          try {
-            window.localStorage.setItem('tm-team-members', JSON.stringify(nextTeam));
-            if (!nextInvite) window.localStorage.removeItem('tm-last-invite');
-          } catch (e) {}
-          this.setState({
-            team: nextTeam,
-            lastInvite: nextInvite,
-          });
-        },
-        view: () => this.setState({ sel: m.id }),
-      };
-    });
+  const loadBranches = useCallback(async () => {
+    const rows = await api.merchant.getBranches();
+    setBranches(Array.isArray(rows) ? rows : []);
+  }, []);
 
-    // ---- activity ----
-    const active = s.team.filter((m) => m.status === 'active');
-    const base = { owner: 9, meron: 24, yonas: 19 };
-    const TODAY = new Date('2026-10-21T00:00:00');
-    const dayDiff = (iso) => Math.round((TODAY - new Date(iso + 'T00:00:00')) / 86400000);
-    const fmt = (d) => {
-      const mons = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return d.getDate() + ' ' + mons[d.getMonth()];
-    };
-    const dayN = (id, off) => {
-      const d = new Date(TODAY.getTime() - off * 86400000);
-      const wd = d.getDay();
-      if (id === 'owner' && wd === 0) return 0;
-      if (id === 'yonas' && wd === 1) return 0; // Yonas's day off
-      const wk = wd === 6 ? 1.6 : wd === 0 ? 1.3 : 1;
-      const k = ((off * 37 + id.length * 17) % 10) / 10;
-      return Math.round((base[id] || 10) * (0.6 + k * 0.8) * wk);
-    };
-    const hours = ['7', '8', '9', '10', '11', '12', '1', '2', '3', '4', '5', '6', '7', '8'];
-    const hourShape = [0.03, 0.12, 0.14, 0.08, 0.05, 0.07, 0.12, 0.1, 0.05, 0.04, 0.06, 0.07, 0.05, 0.02];
-    const days = s.range === 'day' ? 1 : Number(s.range);
-    const startOff = s.range === 'day' ? Math.max(0, dayDiff(s.date)) : 0;
-    const offs = [];
-    for (let i = days - 1; i >= 0; i--) offs.push(startOff + i);
-    const future = s.range === 'day' && dayDiff(s.date) < 0;
-    const sumFor = (id) => (future ? 0 : offs.reduce((a, o) => a + dayN(id, o), 0));
-    const per = active.map((m) => ({ m, st: sumFor(m.id) }));
-    const totalSt = per.reduce((a, x) => a + x.st, 0);
-    const top = Math.max(1, ...per.map((x) => x.st));
-    const busyFor = (id) => {
-      if (s.range === 'day') {
-        const n = dayN(id, startOff);
-        if (!n || future) return '—';
-        return id === 'yonas' ? '1pm – 3pm' : id === 'owner' ? '5pm – 7pm' : '8am – 10am';
-      }
-      return id === 'yonas' ? 'Saturdays, afternoon' : id === 'owner' ? 'Evenings' : 'Weekday mornings';
-    };
-    const sel = s.sel === 'all' || active.some((m) => m.id === s.sel) ? s.sel : 'all';
-    const perStaff = per.map(({ m, st }) => ({
-      name: m.id === 'owner' && (s.pf.name || '').trim() ? s.pf.name.trim() : m.name,
-      ini: m.ini,
-      stamps: st.toLocaleString('en-US'),
-      w: Math.round((st / top) * 100) + '%',
-      rewards: String(Math.round(st / 10)),
-      joins: String(Math.round(st / 7)),
-      busy: busyFor(m.id),
-      pressed: sel === m.id ? 'true' : 'false',
-      rowBg: sel === m.id ? '#f7f7f9' : 'transparent',
-      dotBg: sel === m.id ? '#101827' : '#f7f7f9',
-      dotFg: sel === m.id ? '#ffffff' : '#101827',
-      pick: () => this.setState({ sel: sel === m.id ? 'all' : m.id }),
-    }));
-    const ids = sel === 'all' ? active.map((m) => m.id) : [sel];
-    let bars;
-    if (s.range === 'day') {
-      const dayTotal = future ? 0 : ids.reduce((a, id) => a + dayN(id, startOff), 0);
-      const vals = hourShape.map((f) => Math.round(dayTotal * f));
-      const mx = Math.max(1, ...vals);
-      bars = vals.map((v, i) => ({
-        v: String(v),
-        d: hours[i] + (i < 5 ? 'am' : 'pm'),
-        x: hours[i],
-        h: Math.round((v / (mx * 1.2)) * 100) + '%',
-        tip: hours[i] + (i < 5 ? 'am' : 'pm') + ': ' + v + ' stamps',
-      }));
-    } else {
-      const vals = offs.map((o) => ids.reduce((a, id) => a + dayN(id, o), 0));
-      const mx = Math.max(1, ...vals);
-      const every = days <= 7 ? 1 : days <= 30 ? 5 : 10;
-      bars = offs.map((o, i) => {
-        const d = new Date(TODAY.getTime() - o * 86400000);
-        return {
-          x:
-            (i % every === 0 || i === offs.length - 1) && days > 7
-              ? fmt(d)
-              : days <= 7
-                ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
-                : '',
-          v: String(vals[i]),
-          d: fmt(d),
-          h: Math.round((vals[i] / (mx * 1.2)) * 100) + '%',
-          tip: fmt(d) + ': ' + vals[i] + ' stamps',
-        };
-      });
-    }
-    const selName = sel === 'all' ? 'Whole team' : active.find((m) => m.id === sel).name;
-    const dateObj = new Date(s.date + 'T00:00:00');
-    const longDate =
-      ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dateObj.getDay()] +
-      ', ' +
-      fmt(dateObj);
-    const rangeText =
-      s.range === 'day'
-        ? dayDiff(s.date) === 0
-          ? 'Today, ' + longDate
-          : longDate
-        : 'Last ' + days + ' days, up to today';
-    const hasData = !future && bars.some((b) => b.h !== '0%');
-    const shift = (n) => {
-      const d = new Date(dateObj.getTime() + n * 86400000);
-      const p = (x) => String(x).padStart(2, '0');
-      const iso = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
-      if (dayDiff(iso) >= 0) this.setState({ date: iso });
-    };
-    const ranges = [
-      ['day', 'Day'],
-      ['7', '7 days'],
-      ['30', '30 days'],
-      ['60', '60 days'],
-    ].map(([id, label]) => ({
-      label,
-      pressed: id === s.range ? 'true' : 'false',
-      bg: id === s.range ? '#101827' : 'transparent',
-      color: id === s.range ? '#ffffff' : '#101827',
-      pick: () => this.setState({ range: id }),
-    }));
+  useEffect(() => {
+    api.merchant
+      .getProfile()
+      .then(setProfile)
+      .catch((e) => setError(e.message || 'Could not load your business.'));
+    loadBranches().catch(() => {});
+  }, [loadBranches]);
 
-    // ---- branches ----
-    const bdSet = (k) => (e) => this.setState({ bd: Object.assign({}, s.bd, { [k]: e.target.value }), bdErr: false });
-    const branchRows = s.branches.map((b, i) => ({
-      name: b.name,
-      line: [b.address || 'No address yet', i === 0 ? active.length - 1 + ' staff' : '0 staff', b.hours]
-        .filter(Boolean)
-        .join(' · '),
-      viewing: s.bEdit !== b.id && s.bConfirm !== b.id,
-      editing: s.bEdit === b.id,
-      confirming: s.bConfirm === b.id,
-      canDelete: s.branches.length > 1,
-      delLabel: 'Delete ' + b.name,
-      formTitle: 'Edit ' + b.name,
-      saveLabel: 'Save changes',
-      idName: 'br-name-' + b.id,
-      idAddr: 'br-addr-' + b.id,
-      idPhone: 'br-phone-' + b.id,
-      idHours: 'br-hours-' + b.id,
-      edit: () =>
-        this.setState({ bEdit: b.id, bConfirm: null, bd: Object.assign({}, b), bdErr: false, branchNote: '' }),
-      remove: () => this.setState({ bConfirm: b.id, bEdit: null, branchNote: '' }),
-      confirmDelete: async () => {
-        try {
-          await api.merchant.deactivateBranch(b.id);
-        } catch (err) {
-          console.warn('Deactivate branch error:', err);
-        }
-        const nextBranches = s.branches.filter((x) => x.id !== b.id);
-        try {
-          window.localStorage.setItem('tm-branches-list', JSON.stringify(nextBranches));
-        } catch (e) {}
-        this.setState({
-          branches: nextBranches,
-          bConfirm: null,
-          branchNote: b.name + ' deactivated in database.',
-        });
-      },
-    }));
-    if (s.bEdit === 'new')
-      branchRows.push({
-        name: '',
-        line: '',
-        viewing: false,
-        editing: true,
-        confirming: false,
-        canDelete: false,
-        delLabel: '',
-        formTitle: 'New branch',
-        saveLabel: 'Add branch',
-        idName: 'br-name-new',
-        idAddr: 'br-addr-new',
-        idPhone: 'br-phone-new',
-        idHours: 'br-hours-new',
-        edit: null,
-        remove: null,
-        confirmDelete: null,
-      });
+  const activeBranches = branches.filter((b) => b.status === 'ACTIVE');
 
-    // ---- billing ----
-    const P = {
-      monthly: {
-        name: 'Monthly',
-        price: '1,500 ETB / month',
-        note: 'Pay month by month. Cancel any time.',
-        badge: '',
-      },
-      yearly: {
-        name: 'Yearly',
-        price: '15,000 ETB / year',
-        note: 'Pay once a year and get 2 months free.',
-        badge: '2 MONTHS FREE',
-      },
-    };
-    const plans = Object.keys(P).map((id) => ({
-      name: P[id].name,
-      price: P[id].price,
-      note: P[id].note,
-      badge: P[id].badge,
-      hasBadge: !!P[id].badge,
-      pressed: s.selPlan === id ? 'true' : 'false',
-      border: s.selPlan === id ? '#4661ad' : '#e3e5ec',
-      pick: () => this.setState({ selPlan: id }),
-    }));
-    const payOpts = [
-      ['telebirr', 'Telebirr', 'Approve on your phone'],
-      ['cbe', 'CBE Birr', 'Approve on your phone'],
-      ['bank', 'Bank transfer', 'We send account details by SMS'],
-    ].map(([id, label, desc]) => ({
-      label,
-      desc,
-      checked: s.pay === id,
-      border: s.pay === id ? '#4661ad' : '#e3e5ec',
-      pick: () => this.setState({ pay: id }),
-    }));
-
-    // ---- profile ----
-    const pfName = (s.pf.name || '').trim();
-    const pfSet = (k) => (e) => this.setState({ pf: Object.assign({}, s.pf, { [k]: e.target.value }), pfSaved: false });
-
-    return {
-      branchRows,
-      bd: s.bd,
-      bdErr: s.bdErr,
-      bdBorder: s.bdErr ? '#c81d29' : '#e3e5ec',
-      branchNote: !!s.branchNote,
-      branchNoteText: s.branchNote,
-      canAddBranch: s.bEdit === null,
-      addBranch: () =>
-        this.setState({
-          bEdit: 'new',
-          bConfirm: null,
-          bd: { name: '', address: '', phone: '', hours: 'Mon–Sat 7:00–21:00' },
-          bdErr: false,
-          branchNote: '',
-        }),
-      onBdName: bdSet('name'),
-      onBdAddr: bdSet('address'),
-      onBdPhone: bdSet('phone'),
-      onBdHours: bdSet('hours'),
-      cancelBranch: () => this.setState({ bEdit: null, bConfirm: null, bdErr: false }),
-      saveBranch: async () => {
-        const name = (s.bd.name || '').trim();
-        if (!name) {
-          this.setState({ bdErr: true });
-          return;
-        }
-        if (s.bEdit === 'new') {
-          let newBranchList;
-          try {
-            const created = await api.merchant.createBranch({
-              nameEn: name,
-              addressText: s.bd.address || null,
-              phone: s.bd.phone || null,
-            });
-            newBranchList = s.branches.concat([
-              {
-                id: created?.id || s.nextB,
-                name: created?.nameEn || name,
-                address: created?.addressText || s.bd.address || '',
-                phone: created?.phoneE164 || s.bd.phone || '',
-                hours: s.bd.hours || 'Mon–Sat 7:00–21:00',
-              },
-            ]);
-            try {
-              window.localStorage.setItem('tm-branches-list', JSON.stringify(newBranchList));
-            } catch (e) {}
-            this.setState({
-              branches: newBranchList,
-              nextB: s.nextB + 1,
-              bEdit: null,
-              branchNote: name + ' added to database. Its QR is ready in the Shop.',
-            });
-          } catch (err) {
-            console.warn('Branch create error:', err);
-            newBranchList = s.branches.concat([Object.assign({}, s.bd, { id: s.nextB, name })]);
-            try {
-              window.localStorage.setItem('tm-branches-list', JSON.stringify(newBranchList));
-            } catch (e) {}
-            this.setState({
-              branches: newBranchList,
-              nextB: s.nextB + 1,
-              bEdit: null,
-              branchNote: name + ' added.',
-            });
-          }
-        } else {
-          try {
-            await api.merchant.updateBranch(s.bEdit, {
-              nameEn: name,
-              addressText: s.bd.address || null,
-              phone: s.bd.phone || null,
-            });
-          } catch (err) {
-            console.warn('Branch update error:', err);
-          }
-          const updatedBranches = s.branches.map((b) =>
-            b.id === s.bEdit ? Object.assign({}, s.bd, { id: b.id, name }) : b,
-          );
-          try {
-            window.localStorage.setItem('tm-branches-list', JSON.stringify(updatedBranches));
-          } catch (e) {}
-          this.setState({
-            branches: updatedBranches,
-            bEdit: null,
-            branchNote: name + ' saved to database.',
-          });
-        }
-      },
-      onTrial: s.plan === 'trial',
-      onPaid: s.plan !== 'trial',
-      planName: s.plan === 'trial' ? 'Free trial' : P[s.plan].name + ' plan',
-      planLine:
-        s.plan === 'trial'
-          ? '14 days left. Your card keeps working while you choose a plan.'
-          : P[s.plan].price + ' · renews automatically',
-      pickTitle: s.plan === 'trial' ? 'Choose a plan' : 'Change plan',
-      plans,
-      selPlanName: P[s.selPlan].name,
-      selPlanPrice: P[s.selPlan].price,
-      payOpts,
-      stepPick: s.bStep === 'pick',
-      stepPay: s.bStep === 'pay',
-      stepDone: s.bStep === 'done',
-      toPay: () => this.setState({ bStep: 'pay' }),
-      backToPlans: () => this.setState({ bStep: 'pick' }),
-      confirmPlan: () => {
-        try {
-          window.localStorage.setItem('tm-plan', s.selPlan);
-        } catch (e) {}
-        this.setState({ plan: s.selPlan, bStep: 'done' });
-      },
-      isProfile: s.tab === 'profile',
-      pf: s.pf,
-      pfShownName: pfName || '[Owner name]',
-      pfIni: pfName
-        ? pfName
-            .split(/\s+/)
-            .map((p) => p.charAt(0))
-            .join('')
-            .slice(0, 2)
-            .toUpperCase()
-        : 'OW',
-      onPfName: pfSet('name'),
-      onPfPhone: pfSet('phone'),
-      onPfEmail: pfSet('email'),
-      saveProfile: () => {
-        try {
-          window.localStorage.setItem('tm-owner-name', pfName);
-          window.localStorage.setItem('tm-owner-profile', JSON.stringify(s.pf));
-        } catch (e) {}
-        this.setState({ pfSaved: true });
-      },
-      pfSavedNote: s.pfSaved ? 'Saved. Your name shows in the sidebar and on staff activity.' : '',
-      pinNote: s.pinReset
-        ? 'We sent a code to your phone. Enter it in the staff app to set a new PIN.'
-        : 'Used to sign in to the staff app.',
-      resetPin: () => this.setState({ pinReset: true }),
-      tabs,
-      isStaff: s.tab === 'staff',
-      isBiz: s.tab === 'biz',
-      isBranches: s.tab === 'branches',
-      isBilling: s.tab === 'billing',
-      inviteOpen: s.inviteOpen,
-      inviteExpanded: s.inviteOpen ? 'true' : 'false',
-      inviteBtn: s.inviteOpen ? 'Close' : 'Invite staff',
-      toggleInvite: () => this.setState({ inviteOpen: !s.inviteOpen, ivTried: false }),
-      iv: s.iv,
-      ivErr,
-      inviteError: s.inviteError || '',
-      roleOpts,
-      onIvName: (e) => this.setState({ iv: Object.assign({}, s.iv, { name: e.target.value }) }),
-      onIvPhone: (e) => this.setState({ iv: Object.assign({}, s.iv, { phone: e.target.value }) }),
-      sendInvite: async () => {
-        if (!(s.iv.name || '').trim() || digits.length < 9) {
-          this.setState({ ivTried: true });
-          return;
-        }
-        this.setState({ inviteError: '' });
-        const name = s.iv.name.trim();
-        const roleKey = s.iv.role === 'manager' ? 'MANAGER' : 'STAFF';
-        const email = `${name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'staff'}${Date.now().toString().slice(-4)}@sample-cafe.test`;
-        const branchIds = s.branches.length > 0 ? [s.branches[0].id] : [];
-        try {
-          const res = await api.merchant.inviteStaff({
-            displayName: name,
-            email,
-            role: roleKey,
-            branchIds,
-            preferredLanguage: 'EN',
-          });
-          const origin = getAppOrigin();
-          const token = res?.invitation?.token;
-          if (!token) throw new Error('The invitation was created without a link. Try again.');
-          // The link carries the sign-in email so the new member knows how to log in later.
-          const params = new URLSearchParams({ email });
-          if (s.iv.role === 'manager') params.set('role', 'manager');
-          const link = `${origin}/staff/join/${token}?${params.toString()}`;
-          const masked = '+251 ' + digits.slice(-9, -7) + ' *** ' + digits.slice(-4);
-          const ini = name
-            .split(/\s+/)
-            .map((p) => p.charAt(0))
-            .join('')
-            .slice(0, 2)
-            .toUpperCase();
-          const newTeam = s.team.concat([
-            {
-              id: res?.staff?.id || 'inv' + s.nextInv,
-              name,
-              ini,
-              phone: masked,
-              role: s.iv.role === 'manager' ? 'Manager' : 'Staff',
-              status: 'invited',
-              link,
-            },
-          ]);
-          try {
-            window.localStorage.setItem('tm-team-members', JSON.stringify(newTeam));
-            window.localStorage.setItem('tm-last-invite', JSON.stringify({ name, link }));
-          } catch (e) {}
-          this.setState({
-            team: newTeam,
-            nextInv: s.nextInv + 1,
-            inviteOpen: false,
-            ivTried: false,
-            iv: { name: '', phone: '', role: 'staff' },
-            lastInvite: { name, link },
-            copied: false,
-          });
-        } catch (err) {
-          this.setState({ inviteError: err.message || 'Could not create the invitation. Please try again.' });
-        }
-      },
-      bizProfile: s.bizProfile,
-      bizSaved: s.bizSaved,
-      onBizName: (e) => {
-        const next = Object.assign({}, s.bizProfile, { nameEn: e.target.value });
-        try { window.localStorage.setItem('tm-biz-profile', JSON.stringify(next)); } catch (x) {}
-        this.setState({ bizProfile: next });
-      },
-      onBizTin: (e) => {
-        const next = Object.assign({}, s.bizProfile, { tin: e.target.value });
-        try { window.localStorage.setItem('tm-biz-profile', JSON.stringify(next)); } catch (x) {}
-        this.setState({ bizProfile: next });
-      },
-      onBizType: (e) => {
-        const next = Object.assign({}, s.bizProfile, { type: e.target.value });
-        try { window.localStorage.setItem('tm-biz-profile', JSON.stringify(next)); } catch (x) {}
-        this.setState({ bizProfile: next });
-      },
-      onBizLang: (e) => {
-        const next = Object.assign({}, s.bizProfile, { defaultLanguage: e.target.value });
-        try { window.localStorage.setItem('tm-biz-profile', JSON.stringify(next)); } catch (x) {}
-        this.setState({ bizProfile: next });
-      },
-      saveBiz: async () => {
-        try {
-          window.localStorage.setItem('tm-biz-profile', JSON.stringify(s.bizProfile));
-        } catch (e) {}
-        try {
-          await api.merchant.updateProfile({
-            nameEn: s.bizProfile.nameEn,
-            defaultLanguage: s.bizProfile.defaultLanguage,
-          });
-          this.setState({ bizSaved: true });
-          setTimeout(() => this.setState({ bizSaved: false }), 4000);
-        } catch (err) {
-          console.warn('Error updating business profile:', err);
-          this.setState({ bizSaved: true });
-        }
-      },
-      hasLastInvite: !!s.lastInvite,
-      lastInvite: s.lastInvite || { name: '', link: '' },
-      copyInvite: () => {
-        if (typeof navigator !== 'undefined' && navigator.clipboard && s.lastInvite?.link) {
-          navigator.clipboard.writeText(s.lastInvite.link).catch(() => {});
-        }
-        this.setState({ copied: true });
-      },
-      copyLabel: s.copied ? 'Copied' : 'Copy link',
-      dismissInvite: () => {
-        try {
-          window.localStorage.removeItem('tm-last-invite');
-        } catch (e) {}
-        this.setState({ lastInvite: null });
-      },
-      team,
-      activeCount: String(active.length - 1),
-      ranges,
-      isDay: s.range === 'day',
-      date: s.date,
-      onDate: (e) => {
-        if (e.target.value) this.setState({ date: e.target.value });
-      },
-      prevDay: () => shift(-1),
-      nextDay: () => shift(1),
-      nextDisabled: dayDiff(s.date) <= 0,
-      nextColor: dayDiff(s.date) <= 0 ? '#c9cdd6' : '#101827',
-      rangeText,
-      totals: [
-        { label: 'STAMPS GIVEN', value: totalSt.toLocaleString('en-US') },
-        { label: 'REWARDS REDEEMED', value: String(Math.round(totalSt / 10)) },
-        { label: 'NEW CARDS SIGNED UP', value: String(Math.round(totalSt / 7)) },
-      ],
-      perStaff,
-      busyHead: s.range === 'day' ? 'BUSIEST HOURS' : 'USUALLY BUSIEST',
-      chartTitle: selName + (s.range === 'day' ? ' · stamps by hour' : ' · stamps per day'),
-      chartNote:
-        sel === 'all' ? 'Tap a name above to see one person.' : 'Tap ' + selName + ' again to see the whole team.',
-      chartAlt:
-        selName +
-        ' stamps ' +
-        (s.range === 'day' ? 'by hour on ' + longDate : 'per day over the last ' + days + ' days'),
-      bars,
-      barGap: days > 30 ? '2px' : days > 7 ? '4px' : '8px',
-      hasData,
-      noData: !hasData,
-      showVals: days <= 30,
-      valSize: days > 7 ? '9px' : '11px',
-      isSixty: days === 60,
-      tableOpen: days === 60 && !!s.table,
-      tableExpanded: s.table ? 'true' : 'false',
-      tableLabel: s.table ? 'Hide the numbers' : 'Show the number for each day',
-      toggleTable: () => this.setState({ table: !s.table }),
-    };
-  }
+  return (
+    <MerchantPage active="settings" title="Staff and settings">
+      <div role="tablist" aria-label="Settings sections" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', borderBottom: '1px solid #e3e5ec' }}>
+        {TABS.map(([id, text]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            style={{
+              border: 0,
+              background: 'transparent',
+              padding: '12px 16px',
+              minHeight: '44px',
+              cursor: 'pointer',
+              fontWeight: 700,
+              color: tab === id ? '#101827' : '#5b6475',
+              borderBottom: `3px solid ${tab === id ? '#e42330' : 'transparent'}`,
+              marginBottom: '-1px',
+            }}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+      <Note text={error} error />
+      {tab === 'staff' ? <StaffTab branches={activeBranches} /> : null}
+      {tab === 'biz' ? <BusinessTab profile={profile} onSaved={(p) => p && setProfile(p)} /> : null}
+      {tab === 'branches' ? <BranchesTab branches={branches} reload={loadBranches} /> : null}
+      {tab === 'billing' ? (
+        <NotAvailableYet
+          what="Plans and payments"
+          plan="Temelash does not charge for plans yet, so there is nothing to pay. Telebirr and CBE Birr billing will appear here when it launches."
+        />
+      ) : null}
+      {tab === 'profile' ? <ProfileTab /> : null}
+    </MerchantPage>
+  );
 }
-
-SettingsView.defaultProps = {};
-
-SettingsView.prototype.__template = renderSettings;
-
-export default withDCStyle(SettingsView, 'Settings', __CSS);

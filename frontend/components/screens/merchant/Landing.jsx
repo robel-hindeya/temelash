@@ -2,7 +2,7 @@
 /* Generated from the Temelash Card design (Landing.dc.html). */
 import DCLogic from '@/lib/DCLogic';
 import { withDCStyle } from '@/lib/dc-runtime';
-import { getAppOrigin, getMerchantJoinUrl, getOrAssignMerchantCode } from '@/lib/api';
+import api, { getAppOrigin, getMerchantJoinUrl, getOrAssignMerchantCode } from '@/lib/api';
 import renderLanding from './Landing.view';
 
 const __CSS =
@@ -11,8 +11,8 @@ class LandingView extends DCLogic {
   constructor(props) {
     super(props);
     this.state = {
-      title: 'Sample Cafe',
-      tagline: 'Fresh coffee, every visit',
+      title: '',
+      tagline: '',
       color: '#8a4b2a',
       hexText: '8A4B2A',
       tint: 'auto',
@@ -31,7 +31,7 @@ class LandingView extends DCLogic {
         {
           id: 'card',
           label: 'Get your stamp card',
-          sub: 'Free macchiato at 10 stamps',
+          sub: '',
           icon: 'M3 8h18v4H3zM5 12v9h14v-9M12 8v13M12 8c-2-4-6-4-6-1.5S9 8 12 8zm0 0c2-4 6-4 6-1.5S15 8 12 8z',
           on: true,
           locked: true,
@@ -49,6 +49,19 @@ class LandingView extends DCLogic {
   }
   componentDidMount() {
     if (typeof window === 'undefined') return;
+    // The real business name and reward fill the draft; the design itself is kept in this browser only.
+    Promise.allSettled([api.merchant.getProfile(), api.merchant.getPrograms('ACTIVE')]).then(([prof, progs]) => {
+      const biz = prof.status === 'fulfilled' ? prof.value : null;
+      const program = progs.status === 'fulfilled' && Array.isArray(progs.value) ? progs.value[0] : null;
+      this.setState((st) => ({
+        title: st.title || biz?.nameEn || '',
+        buttons: st.buttons.map((b) =>
+          b.id === 'card' && !b.sub && program?.reward
+            ? Object.assign({}, b, { sub: program.reward.nameEn + ' at ' + program.stampsRequired + ' stamps' })
+            : b,
+        ),
+      }));
+    });
     try {
       const updates = {};
       const savedCover = window.localStorage.getItem('tm-landing-cover');
@@ -74,12 +87,6 @@ class LandingView extends DCLogic {
           if (parsed.cover !== undefined && !savedCover) updates.cover = parsed.cover;
           if (parsed.logo !== undefined && !savedLogo) updates.logo = parsed.logo;
           if (Array.isArray(parsed.buttons)) updates.buttons = parsed.buttons;
-        }
-      } else {
-        const bizProf = window.localStorage.getItem('tm-biz-profile');
-        if (bizProf) {
-          const parsed = JSON.parse(bizProf);
-          if (parsed?.nameEn) updates.title = parsed.nameEn;
         }
       }
       if (Object.keys(updates).length > 0) {
@@ -266,7 +273,7 @@ class LandingView extends DCLogic {
     const merchantCode = getOrAssignMerchantCode(titleText);
     const origin = getAppOrigin();
     const liveLandingUrl = getMerchantJoinUrl();
-    const shownTitle = titleText || 'Sample Cafe';
+    const shownTitle = titleText || 'Your business';
     return {
       title: s.title,
       tagline: s.tagline,
@@ -420,7 +427,9 @@ class LandingView extends DCLogic {
         } catch (e) {}
         this.setState({ saved: true });
       },
-      savedNote: s.saved ? 'Saved. Live on your QR now.' : 'Unsaved changes',
+      savedNote: s.saved
+        ? 'Saved in this browser only. Publishing this design is not available yet: your QR page shows your business name, card colour and reward.'
+        : 'Draft: not on your public page yet.',
     };
   }
 }

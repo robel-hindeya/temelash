@@ -82,7 +82,6 @@ export function hasRolePermission(requiredRole = 'owner') {
     }
     if (s.getItem('tc_token_owner')) return true;
     if (s.getItem('tc_token_manager')) return true;
-    if (s.getItem('tc_registered_merchant')) return true;
     return false;
   }
 

@@ -23,7 +23,7 @@ class OffersView extends DCLogic {
       pickTime: '08:00',
       lang: 'en',
       sent: [],
-      businessName: 'Sample Cafe',
+      businessName: '',
       cardUrl: '',
       qrModalOpen: false,
       // Promotions over Telegram: { reach, nextAllowedAt, telegramEnabled, recent } from the backend.
@@ -42,21 +42,11 @@ class OffersView extends DCLogic {
 
   componentDidMount() {
     this.loadOverview();
-    try {
-      let bizName = 'Sample Cafe';
-      try {
-        const localBiz = window.localStorage.getItem('tm-biz-profile');
-        if (localBiz) {
-          const parsed = JSON.parse(localBiz);
-          if (parsed?.nameEn) bizName = parsed.nameEn;
-        }
-      } catch (e) {}
-
-      this.setState({
-        businessName: bizName,
-        cardUrl: getMerchantJoinUrl(),
-      });
-    } catch (e) {}
+    // The profile call also stores the join reference the QR link is built from.
+    api.merchant
+      .getProfile()
+      .then((p) => this.setState({ businessName: p?.nameEn || '', cardUrl: getMerchantJoinUrl() }))
+      .catch(() => this.setState({ cardUrl: getMerchantJoinUrl() }));
   }
   kindDefs() {
     return {
@@ -255,7 +245,7 @@ class OffersView extends DCLogic {
       })),
       cardUrl: this.state.cardUrl || getMerchantJoinUrl(),
       memberCode: getOrAssignUserCode(),
-      businessName: this.state.businessName || 'Sample Cafe',
+      businessName: this.state.businessName || 'Your business',
       qrModalOpen: s.qrModalOpen,
       openQrModal: () => this.setState({ qrModalOpen: true }),
       closeQrModal: () => this.setState({ qrModalOpen: false }),

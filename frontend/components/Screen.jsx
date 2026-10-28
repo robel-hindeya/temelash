@@ -16,7 +16,6 @@ const SCREENS = {
   Landing: dynamic(() => import('@/components/screens/merchant/Landing'), { ssr: false, loading: () => <Loading /> }),
   StaffApp: dynamic(() => import('@/components/screens/staff/StaffApp'), { ssr: false, loading: () => <Loading /> }),
   WebCard: dynamic(() => import('@/components/screens/customer/WebCard'), { ssr: false, loading: () => <Loading /> }),
-  CustomerFlow: dynamic(() => import('@/components/screens/customer/CustomerFlow'), { ssr: false, loading: () => <Loading /> }),
   AdminOverview: dynamic(() => import('@/components/screens/admin/AdminOverview'), {
     ssr: false,
     loading: () => <Loading />,
@@ -46,7 +45,7 @@ const SCREENS = {
   }),
 };
 
-const PHONE = new Set(['StaffApp', 'WebCard', 'CustomerFlow']);
+const PHONE = new Set(['StaffApp', 'WebCard']);
 
 function Loading() {
   return <div style={{ minHeight: '100vh', background: '#f7f7f9' }} />;

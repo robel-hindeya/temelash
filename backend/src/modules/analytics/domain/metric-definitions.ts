@@ -62,6 +62,12 @@ export const METRIC_DEFINITIONS = [
     definition: 'Stamps issued divided by active members. Null when there are no active members.',
   },
   {
+    key: 'stampsByDay',
+    name: 'Stamps over time',
+    definition:
+      'Non-reversed stamps in the range by local day (stampsByDay, days without stamps left out), by weekday (stampsByWeekday, 0 = Sunday) and by hour of day (stampsByHour, 0–23), all in the merchant’s time zone.',
+  },
+  {
     key: 'timeBetweenVisits',
     name: 'Time between visits',
     definition:

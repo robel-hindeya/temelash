@@ -2,26 +2,29 @@
 /* Generated from the Temelash Card design (AdminSidebar.dc.html). */
 import DCLogic from '@/lib/DCLogic';
 import { withDCStyle } from '@/lib/dc-runtime';
-import api from '@/lib/api';
+import api, { getStoredUser } from '@/lib/api';
 import renderAdminSidebar from './AdminSidebar.view';
 
 const __CSS = 'body{margin:0}';
 class AdminSidebarView extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { open: false, w: null, acct: false, adminName: 'Platform Admin', adminIni: 'PA' };
+    this.state = { open: false, w: null, acct: false, adminName: 'Platform Admin', adminIni: 'PA', pending: 0 };
   }
   async componentDidMount() {
     this.onResize = () => this.setState({ w: window.innerWidth });
     window.addEventListener('resize', this.onResize);
     this.onResize();
+    // Name from the signed-in account (the token's /auth/me carries no display name).
+    const user = getStoredUser('admin');
+    const name = user?.displayName || user?.email;
+    if (name) {
+      const ini = name.split(/[\s@.]+/).map((p) => p.charAt(0)).join('').slice(0, 2).toUpperCase() || 'PA';
+      this.setState({ adminName: name, adminIni: ini });
+    }
     try {
-      const me = await api.auth.getMe('admin');
-      if (me?.user?.displayName) {
-        const name = me.user.displayName;
-        const ini = name.split(/\s+/).map((p) => p.charAt(0)).join('').slice(0, 2).toUpperCase() || 'PA';
-        this.setState({ adminName: name, adminIni: ini });
-      }
+      const pending = await api.platform.getApplications('PENDING');
+      if (Array.isArray(pending)) this.setState({ pending: pending.length });
     } catch (e) {}
   }
   componentWillUnmount() {
@@ -61,12 +64,12 @@ class AdminSidebarView extends DCLogic {
             'Applications',
             '/admin/applications',
             'M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
-            3,
+            this.state.pending,
           ),
-          mk('billing', 'Subscriptions & billing', '/admin/billing', 'M2 6h20v12H2zM2 10h20M6 15h4'),
+          mk('billing', 'Billing (soon)', '/admin/billing', 'M2 6h20v12H2zM2 10h20M6 15h4'),
           mk(
             'broadcast',
-            'Announcements',
+            'Announcements (soon)',
             '/admin/announcements',
             'M4 10v4a1 1 0 0 0 1 1h2l6 4V5L7 9H5a1 1 0 0 0-1 1zM17 9a4 4 0 0 1 0 6',
           ),
@@ -75,11 +78,11 @@ class AdminSidebarView extends DCLogic {
       {
         title: 'OPERATIONS',
         items: [
-          mk('orders', 'Shop orders', '/admin/orders', 'M5 7h14l-1 13H6zM9 7V5a3 3 0 0 1 6 0v2', 4),
-          mk('support', 'Support inbox', '/admin/support', 'M4 5h16v11H8l-4 4z', 5),
+          mk('orders', 'Shop orders (soon)', '/admin/orders', 'M5 7h14l-1 13H6zM9 7V5a3 3 0 0 1 6 0v2'),
+          mk('support', 'Support inbox (soon)', '/admin/support', 'M4 5h16v11H8l-4 4z'),
           mk(
             'settings',
-            'Platform settings',
+            'Platform settings (soon)',
             '/admin/settings',
             'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4',
           ),

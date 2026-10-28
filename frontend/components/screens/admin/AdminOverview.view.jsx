@@ -50,22 +50,9 @@ export default function renderAdminOverview(__v) {
                 <h1 style={{ margin: '0', fontSize: '28px', lineHeight: '34px', fontWeight: '700' }}>
                   {'Today on Temelash'}
                 </h1>
-                <span
-                  style={{
-                    fontSize: '12px',
-                    lineHeight: '16px',
-                    fontWeight: '700',
-                    letterSpacing: '0.08em',
-                    color: '#5b6475',
-                    border: '1px solid #e3e5ec',
-                    borderRadius: '999px',
-                    padding: '2px 10px',
-                  }}
-                >
-                  {'SAMPLE DATA'}
-                </span>
+                
               </div>{' '}
-              <p style={{ margin: '0', color: '#5b6475' }}>{`Wednesday, 21 October · ${__t(__v?.doneText)}`}</p>
+              <p style={{ margin: '0', color: '#5b6475' }}>{`${__t(__v?.todayText)} · ${__t(__v?.doneText)}`}</p>
             </div>{' '}
             <A
               href="/admin/businesses"
@@ -349,7 +336,7 @@ export default function renderAdminOverview(__v) {
               </h2>{' '}
               <div
                 role="img"
-                aria-label="New businesses per week over 8 weeks, from 6 to 15"
+                aria-label="New businesses per week over the last 8 weeks"
                 style={{
                   height: '180px',
                   display: 'flex',
@@ -415,7 +402,7 @@ export default function renderAdminOverview(__v) {
               </h2>{' '}
               <div
                 role="img"
-                aria-label="Stamps per day across all businesses, highest on Saturday"
+                aria-label="Stamps per day across all businesses over the last 7 days"
                 style={{
                   height: '180px',
                   display: 'flex',
